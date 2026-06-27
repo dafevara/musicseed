@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: musicseed-db
+    environment:
+      POSTGRES_USER: musicseed
+      POSTGRES_PASSWORD: musicseed
+      POSTGRES_DB: musicseed
+    ports:
+      - "5432:5432"
+    volumes:
+      - musicseed_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U musicseed -d musicseed"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  musicseed_data:

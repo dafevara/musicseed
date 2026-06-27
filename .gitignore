@@ -1,0 +1,41 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.ruff_cache/
+
+# Virtual environments
+.venv
+
+# Local environment and config
+.env
+.env.*
+!.env.example
+config.yaml
+*.local.yaml
+
+# Local/generated MusicSeed state
+data/
+logs/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Secrets and private key material
+*.pem
+*.key
+*.p12
+*.pfx
+*secret*
+*credential*
+*token*
+
+# OS/editor-local files
+.DS_Store
+.python-version
+*.code-workspace
