@@ -59,11 +59,13 @@ musicseed/
 │       │   └── spotify.py         # Spotify API client
 │       ├── embeddings/
 │       │   ├── __init__.py
-│       │   └── essentia.py        # Audio embedding generator
+│       │   ├── essentia_embed.py  # Audio embedding generator
+│       │   └── pipeline.py        # Batch embedding pipeline
 │       ├── recommender/
 │       │   ├── __init__.py
 │       │   ├── scoring.py         # Recommendation scoring
-│       │   └── playlist.py        # Playlist generation
+│       │   ├── candidates.py      # Multi-signal candidate pool
+│       │   └── playlist.py        # Seed resolution + playlist generation
 │       └── clients/
 │           ├── __init__.py
 │           └── plex_api.py        # Plex API client
@@ -199,11 +201,11 @@ uv run musicseed status
 **Goal:** Generate vector embeddings for all tracks using Essentia MusiCNN
 
 #### 3.1 Essentia Integration
-- [ ] Add `essentia` to dependencies: `uv add essentia`
-- [ ] Create `src/musicseed/embeddings/essentia.py`:
+- [ ] Add Essentia to dependencies: `uv add essentia-tensorflow`
+- [ ] Create `src/musicseed/embeddings/essentia_embed.py`:
   - `EssentiaEmbedder` class
   - Load MusiCNN model (Apple Silicon native)
-  - Process audio file → 512-dim embedding
+  - Process audio file → 200-dim embedding (msd-musicnn-1 feature layer)
   - Handle various audio formats (FLAC, MP3, etc.)
 
 #### 3.2 Batch Pipeline
@@ -355,7 +357,7 @@ uv run musicseed recommend \
 | `src/musicseed/db/session.py` | Database connection management |
 | `src/musicseed/importers/plex.py` | Plex SQLite importer |
 | `src/musicseed/enrichers/spotify.py` | Spotify API client |
-| `src/musicseed/embeddings/essentia.py` | Audio embedding generator |
+| `src/musicseed/embeddings/essentia_embed.py` | Audio embedding generator |
 | `src/musicseed/recommender/scoring.py` | Recommendation scoring |
 | `src/musicseed/recommender/playlist.py` | Playlist generation |
 | `src/musicseed/clients/plex_api.py` | Plex API client |

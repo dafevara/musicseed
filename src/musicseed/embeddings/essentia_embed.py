@@ -1,23 +1,99 @@
 """Audio embedding generation using Essentia MusiCNN."""
 
+import os
+from contextlib import contextmanager
 from pathlib import Path
+from urllib.error import URLError
+from urllib.request import urlretrieve
 
 import numpy as np
 
+from musicseed.config import get_config
 from musicseed.logging_config import get_logger
 
 logger = get_logger("embeddings.essentia")
 
-# Embedding dimension for MusiCNN
-EMBEDDING_DIM = 512
+# Embedding dimension for the official Essentia MusiCNN feature layer.
+EMBEDDING_DIM = 200
+MUSICNN_MODEL_URL = "https://essentia.upf.edu/models/feature-extractors/musicnn/msd-musicnn-1.pb"
+MUSICNN_MODEL_FILENAME = "msd-musicnn-1.pb"
+
+
+class EssentiaModelError(RuntimeError):
+    """Raised when the Essentia TensorFlow model cannot be resolved."""
+
+
+def _default_model_path() -> Path:
+    """Return the default local cache path for the Essentia MusiCNN model."""
+    return Path.home() / ".cache" / "musicseed" / "models" / MUSICNN_MODEL_FILENAME
+
+
+@contextmanager
+def _suppress_native_output():
+    """Temporarily silence native Essentia/TensorFlow stdout and stderr noise."""
+    stdout_fd = os.dup(1)
+    stderr_fd = os.dup(2)
+    try:
+        with open(os.devnull, "w") as null:
+            os.dup2(null.fileno(), 1)
+            os.dup2(null.fileno(), 2)
+            yield
+    finally:
+        os.dup2(stdout_fd, 1)
+        os.dup2(stderr_fd, 2)
+        os.close(stdout_fd)
+        os.close(stderr_fd)
+
+
+def resolve_musicnn_model_path() -> Path:
+    """Resolve and optionally download the TensorFlow graph used by MusiCNN."""
+    config = get_config().embedding
+    if config.model_path:
+        model_path = Path(config.model_path).expanduser()
+    else:
+        model_path = _default_model_path()
+
+    if model_path.exists():
+        return model_path
+
+    if not config.auto_download_model:
+        raise EssentiaModelError(
+            "Essentia MusiCNN model file is missing. Set embedding.model_path in "
+            "config.yaml to a valid .pb file, or enable embedding.auto_download_model. "
+            f"Default cache path: {model_path}"
+        )
+
+    try:
+        model_path.parent.mkdir(parents=True, exist_ok=True)
+        temp_path = model_path.with_suffix(model_path.suffix + ".tmp")
+        logger.info(f"Downloading Essentia MusiCNN model to {model_path}")
+        urlretrieve(MUSICNN_MODEL_URL, temp_path)
+        temp_path.replace(model_path)
+    except (OSError, URLError) as e:
+        raise EssentiaModelError(
+            "Could not download the Essentia MusiCNN model. Download it manually from "
+            f"{MUSICNN_MODEL_URL} and set embedding.model_path to the downloaded file. "
+            f"Target path was: {model_path}"
+        ) from e
+
+    return model_path
+
+
+def validate_musicnn_model() -> Path:
+    """Resolve and load the MusiCNN model once to catch configuration errors early."""
+    model_path = resolve_musicnn_model_path()
+    embedder = EssentiaEmbedder(model_path)
+    embedder._ensure_loaded()
+    return model_path
 
 
 class EssentiaEmbedder:
     """Generate audio embeddings using Essentia's MusiCNN model."""
 
-    def __init__(self):
+    def __init__(self, model_path: str | Path | None = None):
         self._model = None
         self._extractor = None
+        self._model_path = Path(model_path).expanduser() if model_path else None
 
     def _ensure_loaded(self) -> None:
         """Lazy load the Essentia model."""
@@ -29,15 +105,16 @@ class EssentiaEmbedder:
 
             logger.info("Loading Essentia embedding model...")
 
-            # Use Discogs-EffNet which provides good music embeddings
-            # This model outputs 1280-dim embeddings, we'll use PCA or average pooling
-            # Actually, let's use MusiCNN which is more common
+            model_path = self._model_path or resolve_musicnn_model_path()
+            if not model_path.exists():
+                raise EssentiaModelError(f"Essentia model file does not exist: {model_path}")
 
-            # Use TensorflowPredictMusiCNN for 512-dim embeddings
-            self._extractor = TensorflowPredictMusiCNN(
-                graphFilename="",  # Use default model
-                output="model/dense/BiasAdd",  # 512-dim embedding layer
-            )
+            # The official msd-musicnn-1 graph exposes 200-dimensional features here.
+            with _suppress_native_output():
+                self._extractor = TensorflowPredictMusiCNN(
+                    graphFilename=str(model_path),
+                    output="model/dense/BiasAdd",
+                )
 
             logger.info("Essentia model loaded successfully")
 
@@ -47,6 +124,8 @@ class EssentiaEmbedder:
                 "Essentia is required for audio embeddings. "
                 "Install with: pip install essentia-tensorflow"
             ) from e
+        except EssentiaModelError:
+            raise
         except Exception as e:
             logger.error(f"Failed to load Essentia model: {e}")
             raise
@@ -58,7 +137,7 @@ class EssentiaEmbedder:
             file_path: Path to audio file (FLAC, MP3, WAV, etc.)
 
         Returns:
-            512-dimensional numpy array, or None if failed
+            200-dimensional numpy array, or None if failed
         """
         self._ensure_loaded()
 
@@ -79,7 +158,8 @@ class EssentiaEmbedder:
                 return None
 
             # Get embeddings - MusiCNN processes in frames
-            embeddings = self._extractor(audio)
+            with _suppress_native_output():
+                embeddings = np.asarray(self._extractor(audio), dtype=np.float32)
 
             # Average across time to get single embedding
             if len(embeddings.shape) > 1:
@@ -87,17 +167,12 @@ class EssentiaEmbedder:
             else:
                 embedding = embeddings
 
-            # Ensure correct dimension
             if embedding.shape[0] != EMBEDDING_DIM:
                 logger.warning(
-                    f"Unexpected embedding dimension: {embedding.shape[0]}, "
+                    f"Unexpected MusiCNN embedding dimension: {embedding.shape[0]}, "
                     f"expected {EMBEDDING_DIM}"
                 )
-                # Pad or truncate if needed
-                if embedding.shape[0] < EMBEDDING_DIM:
-                    embedding = np.pad(embedding, (0, EMBEDDING_DIM - embedding.shape[0]))
-                else:
-                    embedding = embedding[:EMBEDDING_DIM]
+                return None
 
             return embedding.astype(np.float32)
 
@@ -167,7 +242,7 @@ class SimpleAudioEmbedder:
             tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
             features.append(tempo)
 
-            # Pad or truncate to 512 dimensions
+            # Pad or truncate to the configured embedding dimension
             embedding = np.array(features, dtype=np.float32)
             if len(embedding) < EMBEDDING_DIM:
                 embedding = np.pad(embedding, (0, EMBEDDING_DIM - len(embedding)))
@@ -186,6 +261,9 @@ class SimpleAudioEmbedder:
             return None
 
 
+_EMBEDDERS: dict[str, EssentiaEmbedder | SimpleAudioEmbedder] = {}
+
+
 def get_embedder(model: str = "essentia") -> EssentiaEmbedder | SimpleAudioEmbedder:
     """Get an audio embedder instance.
 
@@ -195,17 +273,25 @@ def get_embedder(model: str = "essentia") -> EssentiaEmbedder | SimpleAudioEmbed
     Returns:
         Embedder instance
     """
+    if model in _EMBEDDERS:
+        return _EMBEDDERS[model]
+
     if model == "essentia":
         try:
             embedder = EssentiaEmbedder()
             # Test that it can load
             embedder._ensure_loaded()
+            _EMBEDDERS[model] = embedder
             return embedder
         except Exception as e:
             logger.warning(f"Essentia not available: {e}")
             logger.warning("Falling back to simple embedder")
-            return SimpleAudioEmbedder()
+            embedder = SimpleAudioEmbedder()
+            _EMBEDDERS[model] = embedder
+            return embedder
     elif model == "simple":
-        return SimpleAudioEmbedder()
+        embedder = SimpleAudioEmbedder()
+        _EMBEDDERS[model] = embedder
+        return embedder
     else:
         raise ValueError(f"Unknown embedding model: {model}")

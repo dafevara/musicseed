@@ -59,6 +59,8 @@ class EmbeddingConfig:
     model: str = "essentia"
     batch_size: int = 10
     workers: int = 4
+    model_path: str = ""
+    auto_download_model: bool = True
 
 
 @dataclass

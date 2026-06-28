@@ -62,10 +62,11 @@ def build_candidate_pool(
             query = query.filter(Track.year <= year_max)
         return query
 
-    if seed.embedding is not None:
+    if seed.embedding is not None and seed.embedding_model is not None:
         query = (
             session.query(Track.id)
             .filter(Track.embedding.isnot(None))
+            .filter(Track.embedding_model == seed.embedding_model)
             .order_by(Track.embedding.cosine_distance(seed.embedding.tolist()))
             .limit(candidate_limit)
         )

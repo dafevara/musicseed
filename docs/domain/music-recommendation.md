@@ -43,9 +43,14 @@ popularity is a 0-100 provider value. Scoring converts the best available value 
 
 ## Embeddings
 
-Embeddings represent audio similarity and are stored in pgvector as 512-dimensional vectors.
-Generation is expensive compared with metadata operations, so development runs should use
-`--limit`, `--workers 1`, and `--missing-only`.
+Embeddings represent audio similarity and are stored in pgvector as 200-dimensional vectors.
+Essentia MusiCNN writes native 200-dimensional feature vectors. Plex sonic analysis stores
+50-dimensional vectors in `com.plexapp.plugins.library.blobs.db`; MusicSeed pads those to 200
+dimensions and records `embedding_model = "plex-sonic-v7"` so recommendation queries only compare
+vectors from the same source.
+Generation is expensive compared with metadata operations, so development runs should use `--limit`,
+`--workers 1`, and `--missing-only`. Plex sonic import should be preferred when Plex has already
+analyzed the library.
 
 Use embeddings as one signal among several. A recommendation should still produce reasonable
 results when embeddings are incomplete by falling back to tags, era, popularity, and novelty.

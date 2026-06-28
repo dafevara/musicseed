@@ -29,7 +29,11 @@ Good recommendations should be:
 - Use Spotify as an optional fallback when credentials are configured.
 - Generate audio embeddings for sonic similarity.
 - Rank candidates from multiple signals instead of trusting one source.
-- Create or preview Plex playlists from CLI commands.
+- Preview recommendations from CLI commands, and (planned) write them to Plex as playlists.
+
+> Implementation status: recommendation preview is implemented. Writing playlists back to Plex is
+> not implemented yet — `recommend --playlist NAME` currently generates the list and prints a
+> notice that Plex playlist creation is pending. There is no `clients/plex_api.py` yet.
 
 ## Non-Goals
 
@@ -58,4 +62,5 @@ Good recommendations should be:
 5. Optionally enrich Spotify metadata.
 6. Generate embeddings.
 7. Run `recommend` with seed text or seed IDs.
-8. Review dry-run output before creating or updating a Plex playlist.
+8. Review the recommendation output. (Writing the result back to Plex as a playlist is planned but
+   not yet implemented; see Implementation status above.)

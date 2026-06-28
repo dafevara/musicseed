@@ -11,7 +11,7 @@ from sqlalchemy import or_
 from musicseed import __version__
 from musicseed.config import get_config, load_config, set_config
 from musicseed.db.session import create_indexes, ensure_schema, get_session, init_db
-from musicseed.importers.plex import import_from_plex
+from musicseed.importers.plex import import_from_plex, import_plex_sonic_embeddings
 from musicseed.logging_config import get_logger, parse_log_level, setup_logging
 
 app = typer.Typer(
@@ -327,6 +327,70 @@ def import_library(
         log = get_logger("cli")
         log.exception(f"Import failed: {e}")
         console.print(f"[red]✗ Import failed: {e}[/red]")
+        console.print("[dim]Check logs/latest.log for details[/dim]")
+        raise typer.Exit(1)
+
+
+@app.command("import-plex-sonic")
+def import_plex_sonic(
+    plex_db: Annotated[
+        Optional[Path],
+        typer.Option("--plex-db", help="Path to Plex SQLite database"),
+    ] = None,
+    blobs_db: Annotated[
+        Optional[Path],
+        typer.Option("--blobs-db", help="Path to Plex blobs SQLite database"),
+    ] = None,
+    library: Annotated[
+        str,
+        typer.Option("--library", "-l", help="Plex library name to import"),
+    ] = None,
+    overwrite: Annotated[
+        bool,
+        typer.Option("--overwrite", help="Replace existing MusicSeed embeddings"),
+    ] = False,
+) -> None:
+    """Import Plex sonic analysis vectors."""
+    config = get_config()
+
+    db_path = plex_db or config.plex.db_path_expanded
+    blobs_path = blobs_db or db_path.with_name(f"{db_path.stem}.blobs{db_path.suffix}")
+    target_library = library or config.plex.library
+
+    if not db_path.exists():
+        console.print(f"[red]Error: Plex database not found at {db_path}[/red]")
+        raise typer.Exit(1)
+    if not blobs_path.exists():
+        console.print(f"[red]Error: Plex blobs database not found at {blobs_path}[/red]")
+        raise typer.Exit(1)
+
+    console.print("\n[bold]Importing Plex sonic analysis[/bold]")
+    console.print(f"  Database: {db_path}")
+    console.print(f"  Blobs: {blobs_path}")
+    console.print(f"  Library: {target_library}")
+    console.print(f"  Mode: {'Overwrite' if overwrite else 'Missing only'}\n")
+
+    try:
+        ensure_schema()
+        with get_session() as session:
+            stats = import_plex_sonic_embeddings(
+                session=session,
+                plex_db_path=db_path,
+                blobs_db_path=blobs_path,
+                library_name=target_library,
+                overwrite=overwrite,
+            )
+
+        console.print("\n[green]✓ Plex sonic import completed![/green]")
+        console.print(f"  Available vectors: {stats['available']:,}")
+        console.print(f"  Imported: {stats['imported']:,}")
+        console.print(f"  Skipped: {stats['skipped']:,}")
+        console.print(f"  Invalid Plex blobs: {stats['invalid']:,}")
+        console.print(f"  Missing MusicSeed tracks: {stats['missing']:,}\n")
+    except Exception as e:
+        log = get_logger("cli")
+        log.exception(f"Plex sonic import failed: {e}")
+        console.print(f"[red]✗ Plex sonic import failed: {e}[/red]")
         console.print("[dim]Check logs/latest.log for details[/dim]")
         raise typer.Exit(1)
 

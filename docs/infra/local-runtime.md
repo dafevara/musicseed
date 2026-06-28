@@ -8,7 +8,7 @@ MusicSeed runs locally from source. Infrastructure should remain boring and insp
 - uv for dependency management and command execution.
 - PostgreSQL 16 with pgvector from `docker-compose.yml`.
 - Plex SQLite database as a read-only import source.
-- Optional Plex HTTP API for playlist creation.
+- Optional Plex HTTP API for playlist creation (planned; not implemented yet).
 - Optional external HTTP APIs: ListenBrainz and Spotify.
 - Local logs under `logs/`.
 
@@ -68,6 +68,7 @@ Stateful commands should be limited during development:
 
 ```bash
 uv run musicseed enrich --source listenbrainz --limit 100 --batch-size 50 --resume
+uv run musicseed import-plex-sonic
 uv run musicseed embed --limit 10 --workers 1 --missing-only
 uv run musicseed recommend --seed-id 123 --limit 20 --dry-run --explain
 ```
@@ -77,6 +78,7 @@ uv run musicseed recommend --seed-id 123 --limit 20 --dry-run --explain
 Ask before running:
 
 - Full Plex import on the user's real library.
+- Full Plex sonic import with `--overwrite`.
 - Full ListenBrainz or Spotify enrichment.
 - Full-library embedding generation.
 - Any operation that writes or rewrites Plex playlists.

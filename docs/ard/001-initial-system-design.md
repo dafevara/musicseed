@@ -175,7 +175,7 @@ Step 3: EMBEDDING GENERATION
      For each file:        │
      - Load audio (FLAC/MP3/etc.)
      - Run through MusiCNN model
-     - Store vector(512) in pgvector
+     - Store vector(200) in pgvector
 ```
 
 ### 5.2 Recommendation Flow
@@ -364,8 +364,8 @@ CREATE TABLE tracks (
     popularity_score        REAL,      -- normalized 0-1
 
     -- Embedding (pgvector)
-    embedding       vector(512),
-    embedding_model VARCHAR(50),  -- 'essentia-musicnn'
+    embedding       vector(200),
+    embedding_model VARCHAR(50),  -- 'essentia' (MusiCNN) or 'plex-sonic-v7'
 
     -- Plex reference
     plex_guid       VARCHAR(255),
@@ -850,7 +850,12 @@ Output:
 
 | Model | Dimensions | Captures | Status |
 |-------|------------|----------|--------|
-| **Essentia (MusiCNN)** | 512 | Genre, mood, instrumentation | **Selected** - Apple Silicon native |
+| **Essentia (MusiCNN)** | 200 | Genre, mood, instrumentation | **Selected** - Apple Silicon native |
+
+> Implementation note: the `msd-musicnn-1` feature layer (`model/dense/BiasAdd`) emits
+> 200-dimensional vectors, so the schema and pgvector column use `vector(200)`. The original
+> 512-dimension estimate was wrong; all stored embeddings (Essentia and padded Plex sonic) are
+> 200-dimensional. See `src/musicseed/embeddings/essentia_embed.py` (`EMBEDDING_DIM = 200`).
 
 ### 11.5 Distribution
 

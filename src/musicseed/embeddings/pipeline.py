@@ -124,6 +124,12 @@ def run_embedding_pipeline(
     logger.info(f"Starting embedding pipeline with {workers} workers")
     logger.info(f"Model: {model}, missing_only: {missing_only}")
 
+    if model == "essentia":
+        from musicseed.embeddings.essentia_embed import validate_musicnn_model
+
+        model_path = validate_musicnn_model()
+        console.print(f"  Essentia model: {model_path}")
+
     # Get tracks to process
     tracks = get_tracks_to_embed(session, limit=limit, missing_only=missing_only)
 

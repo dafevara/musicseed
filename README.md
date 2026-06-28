@@ -2,7 +2,8 @@
 
 MusicSeed is a personal music recommendation CLI for a local Plex music library. It imports
 Plex metadata into PostgreSQL, enriches tracks with popularity signals, generates audio
-embeddings, and creates seed-based recommendations that can be turned into Plex playlists.
+embeddings, and produces seed-based recommendations. Writing recommendations back to Plex as
+playlists is planned but not implemented yet (`recommend --playlist` prints a pending notice).
 
 This is a DIY, home-usage project. The design favors simple local operation, recoverable batch
 jobs, and explainable recommendations over large-scale product architecture.
@@ -14,7 +15,7 @@ jobs, and explainable recommendations over large-scale product architecture.
 - Stores library data in PostgreSQL 16 with pgvector.
 - Enriches popularity from ListenBrainz by MusicBrainz recording MBID, with Spotify as an optional
   fallback.
-- Generates 512-dimensional audio embeddings through the embedding pipeline.
+- Generates or imports 200-dimensional stored audio vectors for sonic similarity.
 - Recommends tracks from multiple signals: sonic similarity, popularity proximity, mood, style,
   genre, era, and novelty.
 - Provides a Typer CLI with Rich output.
@@ -78,6 +79,12 @@ Generate a limited embedding batch first:
 uv run musicseed embed --limit 10 --workers 1 --missing-only
 ```
 
+Or import existing Plex sonic analysis from the local Plex blobs database:
+
+```bash
+uv run musicseed import-plex-sonic
+```
+
 Try recommendations without writing a playlist:
 
 ```bash
@@ -111,6 +118,13 @@ plex:
 spotify:
   client_id: ${SPOTIFY_CLIENT_ID}
   client_secret: ${SPOTIFY_CLIENT_SECRET}
+
+embedding:
+  model: essentia
+  # Optional. By default MusicSeed downloads this once to
+  # ~/.cache/musicseed/models/msd-musicnn-1.pb.
+  model_path: ""
+  auto_download_model: true
 ```
 
 Environment variables and `~` are expanded by the config loader.

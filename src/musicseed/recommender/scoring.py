@@ -33,6 +33,7 @@ class SeedProfile:
 
     track_ids: set[int]
     embedding: np.ndarray | None
+    embedding_model: str | None
     moods: set[str]
     styles: set[str]
     genres: set[str]
@@ -106,8 +107,16 @@ def track_popularity_value(track: Track) -> float | None:
 
 
 def build_seed_profile(seed_tracks: Sequence[Track]) -> SeedProfile:
+    embedding_models = {
+        track.embedding_model
+        for track in seed_tracks
+        if track.embedding is not None and track.embedding_model
+    }
+    embedding_model = next(iter(embedding_models)) if len(embedding_models) == 1 else None
     embeddings = [
-        _as_vector(track.embedding) for track in seed_tracks if track.embedding is not None
+        _as_vector(track.embedding)
+        for track in seed_tracks
+        if track.embedding is not None and track.embedding_model == embedding_model
     ]
     embedding = np.mean(embeddings, axis=0) if embeddings else None
 
@@ -120,6 +129,7 @@ def build_seed_profile(seed_tracks: Sequence[Track]) -> SeedProfile:
     return SeedProfile(
         track_ids={track.id for track in seed_tracks},
         embedding=embedding,
+        embedding_model=embedding_model,
         moods=moods,
         styles=styles,
         genres=genres,
@@ -153,7 +163,10 @@ def calculate_score(candidate: Track, seed: SeedProfile, weights: Weights) -> Sc
     candidate_genres = {genre.name for genre in candidate.genres}
     play_count = candidate.stats.play_count if candidate.stats else 0
 
-    sonic = cosine_similarity(candidate.embedding, seed.embedding)
+    if candidate.embedding_model == seed.embedding_model:
+        sonic = cosine_similarity(candidate.embedding, seed.embedding)
+    else:
+        sonic = 0.5
     popularity = popularity_proximity(seed.popularity, track_popularity_value(candidate))
     mood = jaccard(seed.moods, candidate_moods) if seed.moods else 0.5
     style = jaccard(seed.styles, candidate_styles) if seed.styles else 0.5

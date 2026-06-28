@@ -85,6 +85,35 @@ def ensure_schema() -> None:
     with engine.connect() as conn:
         for statement in statements:
             conn.execute(text(statement))
+        conn.execute(
+            text(
+                """
+                DO $$
+                BEGIN
+                    IF EXISTS (
+                        SELECT 1
+                        FROM pg_attribute a
+                        JOIN pg_class c ON c.oid = a.attrelid
+                        JOIN pg_namespace n ON n.oid = c.relnamespace
+                        WHERE n.nspname = 'public'
+                          AND c.relname = 'tracks'
+                          AND a.attname = 'embedding'
+                          AND format_type(a.atttypid, a.atttypmod) = 'vector(512)'
+                    ) THEN
+                        DROP INDEX IF EXISTS idx_tracks_embedding;
+                        UPDATE tracks
+                        SET embedding = NULL,
+                            embedding_model = NULL,
+                            embedding_generated = FALSE
+                        WHERE embedding IS NOT NULL;
+                        ALTER TABLE tracks
+                        ALTER COLUMN embedding TYPE vector(200)
+                        USING NULL::vector(200);
+                    END IF;
+                END $$;
+                """
+            )
+        )
         conn.commit()
 
 

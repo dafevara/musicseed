@@ -120,7 +120,7 @@ class Track(Base):
     listenbrainz_matched: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Embedding (pgvector)
-    embedding = mapped_column(Vector(512), nullable=True)
+    embedding = mapped_column(Vector(200), nullable=True)
     embedding_model: Mapped[Optional[str]] = mapped_column(String(50))
 
     # Plex reference

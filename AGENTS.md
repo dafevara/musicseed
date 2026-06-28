@@ -37,7 +37,8 @@ project memory, context routing, tools, and verification paths to make useful ch
 - `src/musicseed/db/session.py`: engine/session setup, schema initialization, additive schema
   repair, and indexes.
 - `src/musicseed/importers/plex.py`: Plex SQLite metadata import.
-- `src/musicseed/enrichers/`: ListenBrainz and Spotify enrichment clients/pipelines.
+- `src/musicseed/enrichers/`: ListenBrainz, Spotify, and MusicBrainz clients plus the shared
+  enrichment pipeline.
 - `src/musicseed/embeddings/`: audio embedding generation pipeline and Essentia wrapper.
 - `src/musicseed/recommender/`: seed resolution, candidate pools, scoring, and playlist ranking.
 - `docker-compose.yml`: local PostgreSQL + pgvector service.

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-for letter in {D..Z}; do
+for letter in {R..Z}; do
   if [[ "$letter" == "M" || "$letter" == "V" ]]; then
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Skipping Spotify enrichment for artists: ${letter}*"
     continue
