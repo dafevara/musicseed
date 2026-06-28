@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from musicseed.db.models import Genre, Mood, Style, Track, TrackStats
+from musicseed.db.models import Genre, Style, Track, TrackStats
 from musicseed.recommender.scoring import SeedProfile
 
 
@@ -79,14 +79,6 @@ def build_candidate_pool(
             .limit(candidate_limit)
         )
         pool.add_many(_ids(apply_year_filter(query)), "genre", seed.track_ids)
-
-    if seed.moods:
-        query = (
-            session.query(Track.id)
-            .filter(Track.moods.any(Mood.name.in_(seed.moods)))
-            .limit(candidate_limit)
-        )
-        pool.add_many(_ids(apply_year_filter(query)), "mood", seed.track_ids)
 
     if seed.styles:
         query = (

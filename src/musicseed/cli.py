@@ -582,10 +582,6 @@ def recommend(
         float,
         typer.Option("--w-popularity", help="Popularity proximity weight"),
     ] = 0.15,
-    w_mood: Annotated[
-        float,
-        typer.Option("--w-mood", help="Mood alignment weight"),
-    ] = 0.15,
     w_style: Annotated[
         float,
         typer.Option("--w-style", help="Style alignment weight"),
@@ -618,7 +614,12 @@ def recommend(
 ) -> None:
     """Generate playlist recommendations from seed tracks."""
     from musicseed.recommender.playlist import recommend_tracks
-    from musicseed.recommender.scoring import Weights
+    from musicseed.recommender.scoring import Weights, track_popularity_value
+
+    def popularity_cell(track) -> str:
+        """Best-available popularity on a 0-100 scale, matching scoring."""
+        value = track_popularity_value(track)
+        return f"{value:.0f}" if value is not None else ""
 
     if not seed and not seed_id:
         console.print("[red]Error: At least one --seed or --seed-id is required[/red]")
@@ -627,7 +628,6 @@ def recommend(
     weights = Weights(
         sonic=w_sonic,
         popularity=w_popularity,
-        mood=w_mood,
         style=w_style,
         genre=w_genre,
         era=w_era,
@@ -643,7 +643,7 @@ def recommend(
     console.print(f"  Playlist: {playlist or '(dry run)'}")
     console.print(
         "  Weights: "
-        f"sonic={w_sonic}, popularity_proximity={w_popularity}, mood={w_mood}, "
+        f"sonic={w_sonic}, popularity_proximity={w_popularity}, "
         f"style={w_style}, genre={w_genre}, era={w_era}, novelty={w_novelty}"
     )
     if year_min or year_max:
@@ -675,7 +675,7 @@ def recommend(
                     track.artist.name if track.artist else "",
                     track.title,
                     str(track.year or ""),
-                    str(track.spotify_popularity if track.spotify_popularity is not None else ""),
+                    popularity_cell(track),
                 )
             console.print(seed_table)
 
@@ -699,15 +699,14 @@ def recommend(
                     track.artist.name if track.artist else "",
                     track.title,
                     str(track.year or ""),
-                    str(track.spotify_popularity if track.spotify_popularity is not None else ""),
+                    popularity_cell(track),
                 ]
                 if explain:
                     row.extend([
                         (
                             f"sonic={score.sonic:.2f} pop={score.popularity:.2f} "
-                            f"mood={score.mood:.2f} style={score.style:.2f} "
-                            f"genre={score.genre:.2f} era={score.era:.2f} "
-                            f"novelty={score.novelty:.2f}"
+                            f"style={score.style:.2f} genre={score.genre:.2f} "
+                            f"era={score.era:.2f} novelty={score.novelty:.2f}"
                         ),
                         ",".join(recommendation.sources),
                     ])

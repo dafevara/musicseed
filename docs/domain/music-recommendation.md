@@ -17,11 +17,14 @@ lightweight external enrichment.
 
 - Sonic similarity: vector similarity between the seed embedding profile and candidate embeddings.
 - Popularity proximity: closeness to the seed track popularity, not a generic popularity boost.
-- Mood alignment: overlap between seed and candidate moods.
 - Style alignment: overlap between seed and candidate styles.
 - Genre alignment: overlap between seed and candidate genres.
 - Era proximity: release year closeness.
 - Novelty: favors less-played tracks using local play counts.
+
+Mood was removed from scoring and candidate generation. Plex mood tags remain in the database and
+are visible in `status`, but they introduce noise rather than a reliable ranking signal and have
+been excluded from `SeedProfile`, `Weights`, `ScoreBreakdown`, and `build_candidate_pool()`.
 
 Missing signals should degrade gracefully. A track without a popularity value or embedding should
 not crash the recommendation flow; it should receive neutral or lower component scores depending

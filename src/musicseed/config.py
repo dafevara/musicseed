@@ -80,7 +80,6 @@ class LoggingConfig:
 class RecommendationWeights:
     sonic: float = 0.30
     popularity: float = 0.15  # Popularity proximity, not absolute popularity boost
-    mood: float = 0.15
     style: float = 0.10
     genre: float = 0.15
     era: float = 0.05

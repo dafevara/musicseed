@@ -27,7 +27,7 @@ Resolved seed tracks are combined into a `SeedProfile`:
 
 - Track IDs to exclude from recommendations.
 - Average embedding when seed embeddings exist.
-- Union of seed moods, styles, and genres.
+- Union of seed styles and genres.
 - Average seed year.
 - Average seed popularity on a 0-100 scale.
 
@@ -40,7 +40,6 @@ predictable, update this doc and the `--explain` output.
 
 - Sonic neighbors from pgvector.
 - Tracks sharing seed genres.
-- Tracks sharing seed moods.
 - Tracks sharing seed styles.
 - Tracks near the seed era.
 - Tracks near seed popularity.
@@ -55,7 +54,6 @@ and artist diversity constraints to shape the final result.
 
 - `sonic`: cosine similarity normalized to 0-1.
 - `popularity`: proximity to seed popularity.
-- `mood`: Jaccard overlap.
 - `style`: Jaccard overlap.
 - `genre`: Jaccard overlap.
 - `era`: proximity within a 50-year window.
@@ -66,14 +64,18 @@ Default weights live in `Weights` and mirror `RecommendationWeights` in config:
 ```text
 sonic=0.30
 popularity=0.15
-mood=0.15
 style=0.10
 genre=0.15
 era=0.05
 novelty=0.10
 ```
 
-Weights are normalized by their sum at scoring time.
+Weights are normalized by their sum at scoring time, so removing a signal shifts relative weight
+to the remaining signals proportionally — no manual rebalancing needed.
+
+Mood was removed from scoring because it introduced noise for this library. Plex mood tags are
+still stored and visible in `status`, but excluded from `Weights`, `ScoreBreakdown`, `SeedProfile`,
+and `build_candidate_pool()`.
 
 ## Selection
 

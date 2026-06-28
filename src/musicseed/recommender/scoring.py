@@ -16,11 +16,12 @@ class Weights:
 
     Popularity means proximity to the seed popularity, not an absolute boost.
     Artist diversity is enforced as a selection constraint, not as a score component.
+    Weights are normalized by their sum at scoring time, so absolute values only
+    control relative importance.
     """
 
     sonic: float = 0.30
     popularity: float = 0.15
-    mood: float = 0.15
     style: float = 0.10
     genre: float = 0.15
     era: float = 0.05
@@ -34,7 +35,6 @@ class SeedProfile:
     track_ids: set[int]
     embedding: np.ndarray | None
     embedding_model: str | None
-    moods: set[str]
     styles: set[str]
     genres: set[str]
     year: int | None
@@ -48,7 +48,6 @@ class ScoreBreakdown:
     total: float
     sonic: float
     popularity: float
-    mood: float
     style: float
     genre: float
     era: float
@@ -120,7 +119,6 @@ def build_seed_profile(seed_tracks: Sequence[Track]) -> SeedProfile:
     ]
     embedding = np.mean(embeddings, axis=0) if embeddings else None
 
-    moods = {mood.name for track in seed_tracks for mood in track.moods}
     styles = {style.name for track in seed_tracks for style in track.styles}
     genres = {genre.name for track in seed_tracks for genre in track.genres}
     year = average_or_none(track.year for track in seed_tracks)
@@ -130,7 +128,6 @@ def build_seed_profile(seed_tracks: Sequence[Track]) -> SeedProfile:
         track_ids={track.id for track in seed_tracks},
         embedding=embedding,
         embedding_model=embedding_model,
-        moods=moods,
         styles=styles,
         genres=genres,
         year=round(year) if year is not None else None,
@@ -158,7 +155,6 @@ def novelty_score(play_count: int | None) -> float:
 
 
 def calculate_score(candidate: Track, seed: SeedProfile, weights: Weights) -> ScoreBreakdown:
-    candidate_moods = {mood.name for mood in candidate.moods}
     candidate_styles = {style.name for style in candidate.styles}
     candidate_genres = {genre.name for genre in candidate.genres}
     play_count = candidate.stats.play_count if candidate.stats else 0
@@ -168,7 +164,6 @@ def calculate_score(candidate: Track, seed: SeedProfile, weights: Weights) -> Sc
     else:
         sonic = 0.5
     popularity = popularity_proximity(seed.popularity, track_popularity_value(candidate))
-    mood = jaccard(seed.moods, candidate_moods) if seed.moods else 0.5
     style = jaccard(seed.styles, candidate_styles) if seed.styles else 0.5
     genre = jaccard(seed.genres, candidate_genres) if seed.genres else 0.5
     era = era_proximity(seed.year, candidate.year)
@@ -177,7 +172,6 @@ def calculate_score(candidate: Track, seed: SeedProfile, weights: Weights) -> Sc
     total_weight = (
         weights.sonic
         + weights.popularity
-        + weights.mood
         + weights.style
         + weights.genre
         + weights.era
@@ -189,7 +183,6 @@ def calculate_score(candidate: Track, seed: SeedProfile, weights: Weights) -> Sc
     total = (
         sonic * weights.sonic
         + popularity * weights.popularity
-        + mood * weights.mood
         + style * weights.style
         + genre * weights.genre
         + era * weights.era
@@ -200,7 +193,6 @@ def calculate_score(candidate: Track, seed: SeedProfile, weights: Weights) -> Sc
         total=total,
         sonic=sonic,
         popularity=popularity,
-        mood=mood,
         style=style,
         genre=genre,
         era=era,
