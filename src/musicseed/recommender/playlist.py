@@ -124,6 +124,7 @@ def recommend_tracks(
     year_min: int | None = None,
     year_max: int | None = None,
     max_tracks_per_artist: int = 3,
+    min_score: float | None = None,
 ) -> tuple[list[Track], list[Recommendation]]:
     """Generate recommendations using multi-source candidates and constrained selection."""
 
@@ -168,6 +169,8 @@ def recommend_tracks(
     artist_counts: dict[int | None, int] = defaultdict(int)
 
     for recommendation in scored:
+        if min_score is not None and recommendation.score.total < min_score:
+            break  # sorted descending — everything after this is also below threshold
         artist_id = recommendation.track.artist_id
         if artist_counts[artist_id] >= max_tracks_per_artist:
             continue

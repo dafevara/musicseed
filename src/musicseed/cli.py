@@ -611,6 +611,10 @@ def recommend(
         int,
         typer.Option("--artist-max", help="Max tracks per artist"),
     ] = 3,
+    min_score: Annotated[
+        Optional[float],
+        typer.Option("--min-score", help="Exclude recommendations below this score (0.0–1.0)"),
+    ] = None,
 ) -> None:
     """Generate playlist recommendations from seed tracks."""
     from musicseed.recommender.playlist import recommend_tracks
@@ -623,6 +627,10 @@ def recommend(
 
     if not seed and not seed_id:
         console.print("[red]Error: At least one --seed or --seed-id is required[/red]")
+        raise typer.Exit(1)
+
+    if min_score is not None and not (0.0 <= min_score <= 1.0):
+        console.print("[red]Error: --min-score must be between 0.0 and 1.0[/red]")
         raise typer.Exit(1)
 
     weights = Weights(
@@ -648,6 +656,8 @@ def recommend(
     )
     if year_min or year_max:
         console.print(f"  Year filter: {year_min or '...'} - {year_max or '...'}")
+    if min_score is not None:
+        console.print(f"  Min score: {min_score}")
     console.print(f"  Max per artist: {artist_max}\n")
 
     try:
@@ -661,6 +671,7 @@ def recommend(
                 year_min=year_min,
                 year_max=year_max,
                 max_tracks_per_artist=artist_max,
+                min_score=min_score,
             )
 
             seed_table = Table(title="Resolved Seeds")

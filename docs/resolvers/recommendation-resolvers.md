@@ -83,8 +83,14 @@ After scoring:
 
 1. Seed tracks are excluded.
 2. Candidates are sorted by total score descending.
-3. `max_tracks_per_artist` is applied as a final diversity constraint.
-4. The top `limit` selected recommendations are returned.
+3. `min_score` acts as an early-exit gate: the first candidate whose `score.total` falls below
+   the threshold stops selection — because the list is sorted descending, everything after it
+   would also fail the threshold.
+4. `max_tracks_per_artist` is applied as a diversity constraint within the passing candidates.
+5. The top `limit` selected recommendations are returned.
+
+`min_score` defaults to `None` (no cutoff). When supplied via `--min-score`, it must be in
+`[0.0, 1.0]`. The result may contain fewer than `limit` tracks when the threshold is active.
 
 Artist diversity should remain a final constraint unless there is a clear reason to make it part
 of scoring.
