@@ -41,6 +41,7 @@ project memory, context routing, tools, and verification paths to make useful ch
   enrichment pipeline.
 - `src/musicseed/embeddings/`: audio embedding generation pipeline and Essentia wrapper.
 - `src/musicseed/recommender/`: seed resolution, candidate pools, scoring, and playlist ranking.
+- `src/musicseed/clients/plex_api.py`: Plex Media Server HTTP client for playlist creation.
 - `docker-compose.yml`: local PostgreSQL + pgvector service.
 
 ## Docs Routing

@@ -22,6 +22,66 @@ app = typer.Typer(
 console = Console()
 
 
+def _popularity_cell(track) -> str:
+    from musicseed.recommender.scoring import track_popularity_value
+    value = track_popularity_value(track)
+    return f"{value:.0f}" if value is not None else ""
+
+
+def _print_seed_table(seed_tracks: list) -> None:
+    table = Table(title="Resolved Seeds")
+    table.add_column("ID", justify="right", style="cyan")
+    table.add_column("Artist", style="green")
+    table.add_column("Track")
+    table.add_column("Year", justify="right")
+    table.add_column("Popularity", justify="right")
+    for track in seed_tracks:
+        table.add_row(
+            str(track.id),
+            track.artist.name if track.artist else "",
+            track.title,
+            str(track.year or ""),
+            _popularity_cell(track),
+        )
+    console.print(table)
+
+
+def _print_recommendations_table(recommendations: list, *, explain: bool) -> None:
+    table = Table(title="Recommendations")
+    table.add_column("#", justify="right", style="cyan")
+    table.add_column("Score", justify="right", style="green")
+    table.add_column("Artist")
+    table.add_column("Track")
+    table.add_column("Year", justify="right")
+    table.add_column("Popularity", justify="right")
+    if explain:
+        table.add_column("Components")
+        table.add_column("Sources")
+    for position, recommendation in enumerate(recommendations, start=1):
+        track = recommendation.track
+        score = recommendation.score
+        row = [
+            str(position),
+            f"{score.total:.3f}",
+            track.artist.name if track.artist else "",
+            track.title,
+            str(track.year or ""),
+            _popularity_cell(track),
+        ]
+        if explain:
+            row.extend([
+                (
+                    f"sonic={score.sonic:.2f} pop={score.popularity:.2f} "
+                    f"style={score.style:.2f} genre={score.genre:.2f} "
+                    f"era={score.era:.2f} novelty={score.novelty:.2f}"
+                ),
+                ",".join(recommendation.sources),
+            ])
+        table.add_row(*row)
+    console.print()
+    console.print(table)
+
+
 def version_callback(value: bool) -> None:
     if value:
         console.print(f"MusicSeed version {__version__}")
@@ -559,16 +619,8 @@ def recommend(
     ] = None,
     limit: Annotated[
         int,
-        typer.Option("--limit", "-n", help="Playlist length"),
+        typer.Option("--limit", "-n", help="Number of recommendations to return"),
     ] = 50,
-    playlist: Annotated[
-        Optional[str],
-        typer.Option("--playlist", "-p", help="Plex playlist name"),
-    ] = None,
-    dry_run: Annotated[
-        bool,
-        typer.Option("--dry-run", help="Output to console only"),
-    ] = False,
     explain: Annotated[
         bool,
         typer.Option("--explain", help="Show component scores and candidate sources"),
@@ -616,14 +668,9 @@ def recommend(
         typer.Option("--min-score", help="Exclude recommendations below this score (0.0–1.0)"),
     ] = None,
 ) -> None:
-    """Generate playlist recommendations from seed tracks."""
+    """Preview recommendations from seed tracks without writing to Plex."""
     from musicseed.recommender.playlist import recommend_tracks
-    from musicseed.recommender.scoring import Weights, track_popularity_value
-
-    def popularity_cell(track) -> str:
-        """Best-available popularity on a 0-100 scale, matching scoring."""
-        value = track_popularity_value(track)
-        return f"{value:.0f}" if value is not None else ""
+    from musicseed.recommender.scoring import Weights
 
     if not seed and not seed_id:
         console.print("[red]Error: At least one --seed or --seed-id is required[/red]")
@@ -648,7 +695,6 @@ def recommend(
     if seed_id:
         console.print(f"  Seed IDs: {', '.join(map(str, seed_id))}")
     console.print(f"  Limit: {limit}")
-    console.print(f"  Playlist: {playlist or '(dry run)'}")
     console.print(
         "  Weights: "
         f"sonic={w_sonic}, popularity_proximity={w_popularity}, "
@@ -673,66 +719,10 @@ def recommend(
                 max_tracks_per_artist=artist_max,
                 min_score=min_score,
             )
-
-            seed_table = Table(title="Resolved Seeds")
-            seed_table.add_column("ID", justify="right", style="cyan")
-            seed_table.add_column("Artist", style="green")
-            seed_table.add_column("Track")
-            seed_table.add_column("Year", justify="right")
-            seed_table.add_column("Popularity", justify="right")
-            for track in seed_tracks:
-                seed_table.add_row(
-                    str(track.id),
-                    track.artist.name if track.artist else "",
-                    track.title,
-                    str(track.year or ""),
-                    popularity_cell(track),
-                )
-            console.print(seed_table)
-
-            result_table = Table(title="Recommendations")
-            result_table.add_column("#", justify="right", style="cyan")
-            result_table.add_column("Score", justify="right", style="green")
-            result_table.add_column("Artist")
-            result_table.add_column("Track")
-            result_table.add_column("Year", justify="right")
-            result_table.add_column("Popularity", justify="right")
-            if explain:
-                result_table.add_column("Components")
-                result_table.add_column("Sources")
-
-            for position, recommendation in enumerate(recommendations, start=1):
-                track = recommendation.track
-                score = recommendation.score
-                row = [
-                    str(position),
-                    f"{score.total:.3f}",
-                    track.artist.name if track.artist else "",
-                    track.title,
-                    str(track.year or ""),
-                    popularity_cell(track),
-                ]
-                if explain:
-                    row.extend([
-                        (
-                            f"sonic={score.sonic:.2f} pop={score.popularity:.2f} "
-                            f"style={score.style:.2f} genre={score.genre:.2f} "
-                            f"era={score.era:.2f} novelty={score.novelty:.2f}"
-                        ),
-                        ",".join(recommendation.sources),
-                    ])
-                result_table.add_row(*row)
-
-            console.print()
-            console.print(result_table)
-            console.print(f"\n[green]Generated {len(recommendations)} recommendations.[/green]")
-
-            if playlist and not dry_run:
-                console.print(
-                    "[yellow]Plex playlist creation is not implemented yet; "
-                    "recommendations were generated only.[/yellow]"
-                )
-            console.print()
+            _print_seed_table(seed_tracks)
+            _print_recommendations_table(recommendations, explain=explain)
+            count = len(recommendations)
+        console.print(f"\n[green]Generated {count} recommendations.[/green]\n")
 
     except ValueError as e:
         console.print(f"[red]Recommendation failed: {e}[/red]")
@@ -742,6 +732,179 @@ def recommend(
         log.exception(f"Recommendation failed: {e}")
         console.print(f"[red]✗ Recommendation failed: {e}[/red]")
         console.print("[dim]Check logs/latest.log for details[/dim]")
+        raise typer.Exit(1)
+
+
+@app.command()
+def playlist(
+    name: Annotated[
+        str,
+        typer.Option("--name", help="Plex playlist name (must be unique in Plex)"),
+    ],
+    seed: Annotated[
+        Optional[list[str]],
+        typer.Option("--seed", "-s", help="Seed track (Artist - Title)"),
+    ] = None,
+    seed_id: Annotated[
+        Optional[list[int]],
+        typer.Option("--seed-id", help="Seed track by database ID"),
+    ] = None,
+    limit: Annotated[
+        int,
+        typer.Option("--limit", "-n", help="Number of tracks in the playlist"),
+    ] = 50,
+    explain: Annotated[
+        bool,
+        typer.Option("--explain", help="Show component scores and candidate sources"),
+    ] = False,
+    # Weights
+    w_sonic: Annotated[
+        float,
+        typer.Option("--w-sonic", help="Sonic similarity weight"),
+    ] = 0.30,
+    w_popularity: Annotated[
+        float,
+        typer.Option("--w-popularity", help="Popularity proximity weight"),
+    ] = 0.15,
+    w_style: Annotated[
+        float,
+        typer.Option("--w-style", help="Style alignment weight"),
+    ] = 0.10,
+    w_genre: Annotated[
+        float,
+        typer.Option("--w-genre", help="Genre alignment weight"),
+    ] = 0.15,
+    w_era: Annotated[
+        float,
+        typer.Option("--w-era", help="Era proximity weight"),
+    ] = 0.05,
+    w_novelty: Annotated[
+        float,
+        typer.Option("--w-novelty", help="Novelty weight"),
+    ] = 0.10,
+    # Filters
+    year_min: Annotated[
+        Optional[int],
+        typer.Option("--year-min", help="Minimum release year"),
+    ] = None,
+    year_max: Annotated[
+        Optional[int],
+        typer.Option("--year-max", help="Maximum release year"),
+    ] = None,
+    artist_max: Annotated[
+        int,
+        typer.Option("--artist-max", help="Max tracks per artist"),
+    ] = 3,
+    min_score: Annotated[
+        Optional[float],
+        typer.Option("--min-score", help="Exclude recommendations below this score (0.0–1.0)"),
+    ] = None,
+) -> None:
+    """Generate recommendations, prompt for approval, then create a Plex playlist."""
+    from musicseed.clients.plex_api import PlexAPIError, PlexClient
+    from musicseed.recommender.playlist import recommend_tracks
+    from musicseed.recommender.scoring import Weights
+
+    if not seed and not seed_id:
+        console.print("[red]Error: At least one --seed or --seed-id is required[/red]")
+        raise typer.Exit(1)
+
+    if min_score is not None and not (0.0 <= min_score <= 1.0):
+        console.print("[red]Error: --min-score must be between 0.0 and 1.0[/red]")
+        raise typer.Exit(1)
+
+    config = get_config()
+    if not config.plex.token:
+        console.print("[red]Error: plex.token is not configured. Add it to your config file.[/red]")
+        raise typer.Exit(1)
+
+    weights = Weights(
+        sonic=w_sonic,
+        popularity=w_popularity,
+        style=w_style,
+        genre=w_genre,
+        era=w_era,
+        novelty=w_novelty,
+    )
+
+    console.print("\n[bold]Generating recommendations for approval[/bold]")
+    if seed:
+        console.print(f"  Seeds: {', '.join(seed)}")
+    if seed_id:
+        console.print(f"  Seed IDs: {', '.join(map(str, seed_id))}")
+    console.print(f"  Playlist name: {name}")
+    console.print(f"  Limit: {limit}")
+    console.print(
+        "  Weights: "
+        f"sonic={w_sonic}, popularity_proximity={w_popularity}, "
+        f"style={w_style}, genre={w_genre}, era={w_era}, novelty={w_novelty}"
+    )
+    if year_min or year_max:
+        console.print(f"  Year filter: {year_min or '...'} - {year_max or '...'}")
+    if min_score is not None:
+        console.print(f"  Min score: {min_score}")
+    console.print(f"  Max per artist: {artist_max}\n")
+
+    plex_ids: list[int] = []
+    ready_count = 0
+
+    try:
+        with get_session() as session:
+            seed_tracks, recommendations = recommend_tracks(
+                session=session,
+                seed_texts=seed,
+                seed_ids=seed_id,
+                limit=limit,
+                weights=weights,
+                year_min=year_min,
+                year_max=year_max,
+                max_tracks_per_artist=artist_max,
+                min_score=min_score,
+            )
+            if not recommendations:
+                console.print("[yellow]No recommendations — playlist not created.[/yellow]")
+                raise typer.Exit(0)
+            # Extract primitive IDs and display while the session is still open.
+            # Seeds go first so the playlist starts with the reference tracks.
+            plex_ids = [t.plex_id for t in seed_tracks if t.plex_id is not None] + [
+                rec.track.plex_id for rec in recommendations if rec.track.plex_id is not None
+            ]
+            ready_count = len(recommendations)
+            _print_seed_table(seed_tracks)
+            _print_recommendations_table(recommendations, explain=explain)
+    except typer.Exit:
+        raise
+    except ValueError as e:
+        console.print(f"[red]Recommendation failed: {e}[/red]")
+        raise typer.Exit(1)
+    except Exception as e:
+        log = get_logger("cli")
+        log.exception(f"Recommendation failed: {e}")
+        console.print(f"[red]✗ Recommendation failed: {e}[/red]")
+        console.print("[dim]Check logs/latest.log for details[/dim]")
+        raise typer.Exit(1)
+
+    console.print(f"\n[green]{ready_count} tracks ready.[/green]\n")
+
+    if not typer.confirm(f"Create playlist '{name}' in Plex?", default=False):
+        console.print("[dim]Cancelled.[/dim]\n")
+        raise typer.Exit(0)
+
+    try:
+        client = PlexClient(base_url=config.plex.url, token=config.plex.token)
+        result = client.create_playlist(name, plex_ids)
+        console.print(
+            f"\n[green]✓ Playlist '{result.title}' created in Plex "
+            f"({len(plex_ids)} tracks).[/green]\n"
+        )
+    except PlexAPIError as e:
+        console.print(f"\n[red]✗ {e}[/red]\n")
+        raise typer.Exit(1)
+    except Exception as e:
+        log = get_logger("cli")
+        log.exception(f"Plex playlist creation failed: {e}")
+        console.print(f"\n[red]✗ Plex playlist creation failed: {e}[/red]")
+        console.print("[dim]Check logs/latest.log for details[/dim]\n")
         raise typer.Exit(1)
 
 

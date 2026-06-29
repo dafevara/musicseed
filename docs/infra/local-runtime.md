@@ -8,7 +8,7 @@ MusicSeed runs locally from source. Infrastructure should remain boring and insp
 - uv for dependency management and command execution.
 - PostgreSQL 16 with pgvector from `docker-compose.yml`.
 - Plex SQLite database as a read-only import source.
-- Optional Plex HTTP API for playlist creation (planned; not implemented yet).
+- Optional Plex HTTP API for playlist creation (`src/musicseed/clients/plex_api.py`).
 - Optional external HTTP APIs: ListenBrainz and Spotify.
 - Local logs under `logs/`.
 
