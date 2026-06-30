@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Iterable, Sequence
+from typing import Any, Iterable, Sequence
 
 import numpy as np
+from pydantic import BaseModel
 
 from musicseed.db.models import Track
 
 
-@dataclass(frozen=True)
-class Weights:
+class Weights(BaseModel):
     """Normalized recommendation weights.
 
     Popularity means proximity to the seed popularity, not an absolute boost.
@@ -19,6 +18,8 @@ class Weights:
     Weights are normalized by their sum at scoring time, so absolute values only
     control relative importance.
     """
+
+    model_config = {"frozen": True}
 
     sonic: float = 0.30
     popularity: float = 0.15
@@ -28,12 +29,13 @@ class Weights:
     novelty: float = 0.10
 
 
-@dataclass(frozen=True)
-class SeedProfile:
+class SeedProfile(BaseModel):
     """Aggregated recommendation signals from one or more seed tracks."""
 
+    model_config = {"frozen": True, "arbitrary_types_allowed": True}
+
     track_ids: set[int]
-    embedding: np.ndarray | None
+    embedding: Any  # np.ndarray | None
     embedding_model: str | None
     styles: set[str]
     genres: set[str]
@@ -41,9 +43,10 @@ class SeedProfile:
     popularity: float | None
 
 
-@dataclass(frozen=True)
-class ScoreBreakdown:
+class ScoreBreakdown(BaseModel):
     """Component-level score details for explainable CLI output."""
+
+    model_config = {"frozen": True}
 
     total: float
     sonic: float

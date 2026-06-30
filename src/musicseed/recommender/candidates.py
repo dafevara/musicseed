@@ -2,25 +2,22 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
-from dataclasses import dataclass, field
-
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+from pydantic import BaseModel, Field
 
 from musicseed.db.models import Genre, Style, Track, TrackStats
 from musicseed.recommender.scoring import SeedProfile
 
 
-@dataclass
-class CandidatePool:
+class CandidatePool(BaseModel):
     """Merged candidate IDs and the signal sources that produced each candidate."""
 
-    sources_by_track_id: dict[int, set[str]] = field(default_factory=lambda: defaultdict(set))
+    sources_by_track_id: dict[int, set[str]] = Field(default_factory=dict)
 
     def add(self, track_id: int, source: str, seed_ids: set[int]) -> None:
         if track_id not in seed_ids:
-            self.sources_by_track_id[track_id].add(source)
+            self.sources_by_track_id.setdefault(track_id, set()).add(source)
 
     def add_many(self, track_ids: list[int], source: str, seed_ids: set[int]) -> None:
         for track_id in track_ids:

@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
 from typing import Any
 
 import httpx
+from pydantic import BaseModel
 
 from musicseed.logging_config import get_logger
 
@@ -16,9 +16,10 @@ LISTENBRAINZ_API_BASE = "https://api.listenbrainz.org"
 LISTENBRAINZ_USER_AGENT = "MusicSeed/0.1.0 (https://github.com/user/musicseed)"
 
 
-@dataclass(frozen=True)
-class ListenBrainzRecordingPopularity:
+class ListenBrainzRecordingPopularity(BaseModel):
     """Popularity data for one MusicBrainz recording."""
+
+    model_config = {"frozen": True}
 
     recording_mbid: str
     total_listen_count: int | None

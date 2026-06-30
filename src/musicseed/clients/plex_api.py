@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 import httpx
+from pydantic import BaseModel
 
 
 class PlexAPIError(RuntimeError):
     """Raised for Plex API errors that should be surfaced to the user."""
 
 
-@dataclass(frozen=True)
-class PlaylistResult:
+class PlaylistResult(BaseModel):
+    model_config = {"frozen": True}
+
     rating_key: str
     title: str
 

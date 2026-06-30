@@ -1,9 +1,9 @@
 """Database session management."""
 
 from contextlib import contextmanager
-from dataclasses import dataclass
 from typing import Generator
 
+from pydantic import BaseModel
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -15,9 +15,10 @@ _engine = None
 _SessionLocal = None
 
 
-@dataclass(frozen=True)
-class IndexResult:
+class IndexResult(BaseModel):
     """Result from one index creation statement."""
+
+    model_config = {"frozen": True}
 
     name: str
     success: bool
@@ -37,7 +38,7 @@ def get_session_factory():
     """Get or create the session factory."""
     global _SessionLocal
     if _SessionLocal is None:
-        _SessionLocal = sessionmaker(bind=get_engine())
+        _SessionLocal = sessionmaker(bind=get_engine(), expire_on_commit=False)
     return _SessionLocal
 
 

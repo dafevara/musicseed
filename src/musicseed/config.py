@@ -1,11 +1,11 @@
 """Configuration loading and management."""
 
 import os
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import yaml
+from pydantic import BaseModel, Field
 
 
 def _expand_env_vars(value: Any) -> Any:
@@ -19,8 +19,7 @@ def _expand_env_vars(value: Any) -> Any:
     return value
 
 
-@dataclass
-class DatabaseConfig:
+class DatabaseConfig(BaseModel):
     host: str = "localhost"
     port: int = 5432
     name: str = "musicseed"
@@ -29,12 +28,13 @@ class DatabaseConfig:
 
     @property
     def url(self) -> str:
-        # Use postgresql+psycopg for psycopg3 driver
-        return f"postgresql+psycopg://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
+        return (
+            f"postgresql+psycopg://{self.user}:{self.password}"
+            f"@{self.host}:{self.port}/{self.name}"
+        )
 
 
-@dataclass
-class PlexConfig:
+class PlexConfig(BaseModel):
     url: str = "http://localhost:32400"
     token: str = ""
     library: str = "Music"
@@ -48,14 +48,12 @@ class PlexConfig:
         return Path(os.path.expanduser(self.db_path))
 
 
-@dataclass
-class SpotifyConfig:
+class SpotifyConfig(BaseModel):
     client_id: str = ""
     client_secret: str = ""
 
 
-@dataclass
-class EmbeddingConfig:
+class EmbeddingConfig(BaseModel):
     model: str = "essentia"
     batch_size: int = 10
     workers: int = 4
@@ -63,65 +61,40 @@ class EmbeddingConfig:
     auto_download_model: bool = True
 
 
-@dataclass
-class EnrichmentConfig:
+class EnrichmentConfig(BaseModel):
     concurrency: int = 5
     batch_size: int = 50
 
 
-@dataclass
-class LoggingConfig:
+class LoggingConfig(BaseModel):
     level: str = "INFO"
     console: bool = False
     console_level: str = "WARNING"
 
 
-@dataclass
-class RecommendationWeights:
+class RecommendationWeights(BaseModel):
     sonic: float = 0.30
-    popularity: float = 0.15  # Popularity proximity, not absolute popularity boost
+    popularity: float = 0.15
     style: float = 0.10
     genre: float = 0.15
     era: float = 0.05
     novelty: float = 0.10
 
 
-@dataclass
-class RecommendationConfig:
-    default_weights: RecommendationWeights = field(default_factory=RecommendationWeights)
+class RecommendationConfig(BaseModel):
+    default_weights: RecommendationWeights = Field(default_factory=RecommendationWeights)
     default_limit: int = 50
     max_tracks_per_artist: int = 3
 
 
-@dataclass
-class Config:
-    database: DatabaseConfig = field(default_factory=DatabaseConfig)
-    plex: PlexConfig = field(default_factory=PlexConfig)
-    spotify: SpotifyConfig = field(default_factory=SpotifyConfig)
-    embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
-    enrichment: EnrichmentConfig = field(default_factory=EnrichmentConfig)
-    logging: LoggingConfig = field(default_factory=LoggingConfig)
-    recommendation: RecommendationConfig = field(default_factory=RecommendationConfig)
-
-
-def _dict_to_dataclass(cls, data: dict) -> Any:
-    """Convert a dictionary to a dataclass, handling nested dataclasses."""
-    if data is None:
-        return cls()
-
-    field_types = {f.name: f.type for f in cls.__dataclass_fields__.values()}
-    kwargs = {}
-
-    for key, value in data.items():
-        if key in field_types:
-            field_type = field_types[key]
-            # Handle nested dataclasses
-            if hasattr(field_type, "__dataclass_fields__") and isinstance(value, dict):
-                kwargs[key] = _dict_to_dataclass(field_type, value)
-            else:
-                kwargs[key] = value
-
-    return cls(**kwargs)
+class Config(BaseModel):
+    database: DatabaseConfig = Field(default_factory=DatabaseConfig)
+    plex: PlexConfig = Field(default_factory=PlexConfig)
+    spotify: SpotifyConfig = Field(default_factory=SpotifyConfig)
+    embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
+    enrichment: EnrichmentConfig = Field(default_factory=EnrichmentConfig)
+    logging: LoggingConfig = Field(default_factory=LoggingConfig)
+    recommendation: RecommendationConfig = Field(default_factory=RecommendationConfig)
 
 
 def load_config(config_path: Path | None = None) -> Config:
@@ -134,7 +107,6 @@ def load_config(config_path: Path | None = None) -> Config:
         Loaded Config object with environment variables expanded.
     """
     if config_path is None:
-        # Default config locations
         candidates = [
             Path.home() / ".config" / "musicseed" / "config.yaml",
             Path.home() / ".musicseed.yaml",
@@ -146,7 +118,6 @@ def load_config(config_path: Path | None = None) -> Config:
                 break
 
     if config_path is None or not config_path.exists():
-        # Return default config
         return Config()
 
     with open(config_path) as f:
@@ -155,23 +126,8 @@ def load_config(config_path: Path | None = None) -> Config:
     if raw_config is None:
         return Config()
 
-    # Expand environment variables
     raw_config = _expand_env_vars(raw_config)
-
-    # Build config object
-    config = Config(
-        database=_dict_to_dataclass(DatabaseConfig, raw_config.get("database", {})),
-        plex=_dict_to_dataclass(PlexConfig, raw_config.get("plex", {})),
-        spotify=_dict_to_dataclass(SpotifyConfig, raw_config.get("spotify", {})),
-        embedding=_dict_to_dataclass(EmbeddingConfig, raw_config.get("embedding", {})),
-        enrichment=_dict_to_dataclass(EnrichmentConfig, raw_config.get("enrichment", {})),
-        logging=_dict_to_dataclass(LoggingConfig, raw_config.get("logging", {})),
-        recommendation=_dict_to_dataclass(
-            RecommendationConfig, raw_config.get("recommendation", {})
-        ),
-    )
-
-    return config
+    return Config.model_validate(raw_config)
 
 
 # Global config instance (lazy loaded)

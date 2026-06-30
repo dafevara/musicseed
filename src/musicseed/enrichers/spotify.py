@@ -4,11 +4,11 @@ import asyncio
 import base64
 import re
 import unicodedata
-from dataclasses import dataclass
 from difflib import SequenceMatcher
 from typing import Any
 
 import httpx
+from pydantic import BaseModel
 
 from musicseed.logging_config import get_logger
 
@@ -19,9 +19,9 @@ SPOTIFY_AUTH_URL = "https://accounts.spotify.com/api/token"
 SPOTIFY_API_BASE = "https://api.spotify.com/v1"
 
 
-@dataclass
-class SpotifyTrack:
+class SpotifyTrack(BaseModel):
     """Spotify track data."""
+
     spotify_id: str
     name: str
     artist: str
@@ -30,9 +30,9 @@ class SpotifyTrack:
     duration_ms: int
 
 
-@dataclass
-class MatchResult:
+class MatchResult(BaseModel):
     """Result of matching a local track to Spotify."""
+
     spotify_track: SpotifyTrack | None
     score: float
     matched: bool

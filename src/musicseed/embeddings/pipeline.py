@@ -2,8 +2,9 @@
 
 import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from dataclasses import dataclass
 from typing import Any
+
+from pydantic import BaseModel
 
 from rich.console import Console
 from rich.progress import (
@@ -23,9 +24,9 @@ logger = get_logger("embeddings.pipeline")
 console = Console()
 
 
-@dataclass
-class EmbeddingStats:
+class EmbeddingStats(BaseModel):
     """Statistics from embedding generation."""
+
     total: int
     generated: int
     skipped: int

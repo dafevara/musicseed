@@ -6,13 +6,12 @@ from typing import Annotated, Optional
 import typer
 from rich.console import Console
 from rich.table import Table
-from sqlalchemy import or_
 
 from musicseed import __version__
 from musicseed.config import get_config, load_config, set_config
-from musicseed.db.session import create_indexes, ensure_schema, get_session, init_db
-from musicseed.importers.plex import import_from_plex, import_plex_sonic_embeddings
+from musicseed.exceptions import ConfigurationError, MusicSeedError, NotFoundError
 from musicseed.logging_config import get_logger, parse_log_level, setup_logging
+from musicseed.recommender.scoring import Weights
 
 app = typer.Typer(
     name="musicseed",
@@ -139,6 +138,8 @@ def main(
 @app.command("init-db")
 def init_database() -> None:
     """Initialize the database schema (creates tables and extensions)."""
+    from musicseed.services import library as library_service
+
     config = get_config()
 
     console.print("\n[bold]Initializing database[/bold]")
@@ -147,7 +148,7 @@ def init_database() -> None:
 
     try:
         with console.status("[bold green]Creating tables..."):
-            init_db()
+            library_service.initialize_database()
         console.print("[green]✓ Database initialized successfully![/green]")
         console.print("  - pgvector extension enabled")
         console.print("  - All tables created\n")
@@ -161,6 +162,8 @@ def init_database() -> None:
 @app.command("optimize-db")
 def optimize_database() -> None:
     """Create database indexes for import, enrichment, and recommendation performance."""
+    from musicseed.services import library as library_service
+
     config = get_config()
 
     console.print("\n[bold]Optimizing database[/bold]")
@@ -168,9 +171,8 @@ def optimize_database() -> None:
     console.print(f"  Database: {config.database.name}\n")
 
     try:
-        ensure_schema()
         with console.status("[bold green]Creating indexes..."):
-            results = create_indexes()
+            results = library_service.optimize_database()
 
         table = Table(title="Index Creation Results")
         table.add_column("Index", style="cyan")
@@ -205,88 +207,43 @@ def optimize_database() -> None:
 @app.command()
 def status() -> None:
     """Show library statistics and enrichment status."""
-    from musicseed.db.models import Album, Artist, Genre, Mood, PlayHistory, Style, Track
-
-    config = get_config()
+    from musicseed.services import library as library_service
 
     console.print("\n[bold]MusicSeed Status[/bold]\n")
 
-    # Database connection info
-    config_table = Table(title="Configuration")
-    config_table.add_column("Setting", style="cyan")
-    config_table.add_column("Value", style="green")
-
-    db_label = f"{config.database.host}:{config.database.port}/{config.database.name}"
-    config_table.add_row("Database", db_label)
-    config_table.add_row("Plex URL", config.plex.url)
-    config_table.add_row("Plex DB", str(config.plex.db_path_expanded))
-    config_table.add_row("Plex Library", config.plex.library)
-
-    console.print(config_table)
-
-    # Database statistics
     try:
-        ensure_schema()
-        with get_session() as session:
-            artist_count = session.query(Artist).count()
-            album_count = session.query(Album).count()
-            track_count = session.query(Track).count()
-            play_count = session.query(PlayHistory).count()
+        stat = library_service.get_status()
 
-            # Enrichment stats
-            tracks_with_mbid = session.query(Track).filter(Track.mbid.isnot(None)).count()
-            tracks_with_spotify = (
-                session.query(Track).filter(Track.spotify_id.isnot(None)).count()
-            )
-            spotify_attempted = (
-                session.query(Track).filter(Track.spotify_matched.is_(True)).count()
-            )
-            tracks_with_embedding = (
-                session.query(Track).filter(Track.embedding.isnot(None)).count()
-            )
-            embeddings_attempted = (
-                session.query(Track).filter(Track.embedding_generated.is_(True)).count()
-            )
-            tracks_with_listenbrainz = (
-                session.query(Track)
-                .filter(
-                    or_(
-                        Track.listenbrainz_listen_count.isnot(None),
-                        Track.listenbrainz_listener_count.isnot(None),
-                    )
-                )
-                .count()
-            )
-            listenbrainz_attempted = (
-                session.query(Track).filter(Track.listenbrainz_matched.is_(True)).count()
-            )
-
-            # Tag stats
-            genre_count = session.query(Genre).count()
-            mood_count = session.query(Mood).count()
-            style_count = session.query(Style).count()
+        config_table = Table(title="Configuration")
+        config_table.add_column("Setting", style="cyan")
+        config_table.add_column("Value", style="green")
+        config_table.add_row("Database", f"{stat.db_host}:{stat.db_port}/{stat.db_name}")
+        config_table.add_row("Plex URL", stat.plex_url)
+        config_table.add_row("Plex DB", stat.plex_db)
+        config_table.add_row("Plex Library", stat.plex_library)
+        console.print(config_table)
 
         stats_table = Table(title="Library Statistics")
         stats_table.add_column("Metric", style="cyan")
         stats_table.add_column("Count", style="green", justify="right")
-
-        stats_table.add_row("Artists", f"{artist_count:,}")
-        stats_table.add_row("Albums", f"{album_count:,}")
-        stats_table.add_row("Tracks", f"{track_count:,}")
-        stats_table.add_row("Play history entries", f"{play_count:,}")
-        stats_table.add_row("Genres", f"{genre_count:,}")
-        stats_table.add_row("Moods", f"{mood_count:,}")
-        stats_table.add_row("Styles", f"{style_count:,}")
+        stats_table.add_row("Artists", f"{stat.artist_count:,}")
+        stats_table.add_row("Albums", f"{stat.album_count:,}")
+        stats_table.add_row("Tracks", f"{stat.track_count:,}")
+        stats_table.add_row("Play history entries", f"{stat.play_count:,}")
+        stats_table.add_row("Genres", f"{stat.genre_count:,}")
+        stats_table.add_row("Moods", f"{stat.mood_count:,}")
+        stats_table.add_row("Styles", f"{stat.style_count:,}")
 
         console.print()
         console.print(stats_table)
 
-        if track_count > 0:
+        if stat.track_count > 0:
             def pct(count: int, total: int) -> str:
                 if total <= 0:
                     return "n/a"
                 return f"{(count / total) * 100:.1f}%"
 
+            e = stat.enrichment
             enrichment_table = Table(title="Enrichment Status")
             enrichment_table.add_column("Source", style="cyan")
             enrichment_table.add_column("Eligible", style="blue", justify="right")
@@ -297,36 +254,35 @@ def status() -> None:
 
             enrichment_table.add_row(
                 "MusicBrainz ID",
-                f"{track_count:,}",
+                f"{stat.track_count:,}",
                 "n/a",
-                f"{tracks_with_mbid:,}",
+                f"{e.tracks_with_mbid:,}",
                 "n/a",
-                pct(tracks_with_mbid, track_count),
+                pct(e.tracks_with_mbid, stat.track_count),
             )
             enrichment_table.add_row(
                 "Spotify",
-                f"{track_count:,}",
-                f"{spotify_attempted:,}",
-                f"{tracks_with_spotify:,}",
-                pct(tracks_with_spotify, spotify_attempted),
-                pct(tracks_with_spotify, track_count),
+                f"{stat.track_count:,}",
+                f"{e.spotify_attempted:,}",
+                f"{e.tracks_with_spotify:,}",
+                pct(e.tracks_with_spotify, e.spotify_attempted),
+                pct(e.tracks_with_spotify, stat.track_count),
             )
-
             enrichment_table.add_row(
                 "Embeddings",
-                f"{track_count:,}",
-                f"{embeddings_attempted:,}",
-                f"{tracks_with_embedding:,}",
-                pct(tracks_with_embedding, embeddings_attempted),
-                pct(tracks_with_embedding, track_count),
+                f"{stat.track_count:,}",
+                f"{e.embeddings_attempted:,}",
+                f"{e.tracks_with_embedding:,}",
+                pct(e.tracks_with_embedding, e.embeddings_attempted),
+                pct(e.tracks_with_embedding, stat.track_count),
             )
             enrichment_table.add_row(
                 "ListenBrainz",
-                f"{tracks_with_mbid:,}",
-                f"{listenbrainz_attempted:,}",
-                f"{tracks_with_listenbrainz:,}",
-                pct(tracks_with_listenbrainz, listenbrainz_attempted),
-                pct(tracks_with_listenbrainz, track_count),
+                f"{e.tracks_with_mbid:,}",
+                f"{e.listenbrainz_attempted:,}",
+                f"{e.tracks_with_listenbrainz:,}",
+                pct(e.tracks_with_listenbrainz, e.listenbrainz_attempted),
+                pct(e.tracks_with_listenbrainz, stat.track_count),
             )
 
             console.print()
@@ -354,15 +310,11 @@ def import_library(
     ] = False,
 ) -> None:
     """Import metadata from Plex database."""
-    config = get_config()
+    from musicseed.services import library as library_service
 
+    config = get_config()
     db_path = plex_db or config.plex.db_path_expanded
     target_library = library or config.plex.library
-
-    if not db_path.exists():
-        console.print(f"[red]Error: Plex database not found at {db_path}[/red]")
-        console.print("\nPlease specify the path with --plex-db or update your config file.")
-        raise typer.Exit(1)
 
     console.print("\n[bold]Importing from Plex database[/bold]")
     console.print(f"  Database: {db_path}")
@@ -370,19 +322,20 @@ def import_library(
     console.print(f"  Mode: {'Full' if full else 'Incremental'}\n")
 
     try:
-        with get_session() as session:
-            imported = import_from_plex(
-                session=session,
-                plex_db_path=db_path,
-                library_name=target_library,
-                full_import=full,
-            )
-
+        result = library_service.import_library(
+            plex_db_path=plex_db,
+            library_name=library,
+            full_import=full,
+        )
         console.print("\n[green]✓ Import completed![/green]")
-        console.print(f"  Artists: {imported['artists']:,}")
-        console.print(f"  Albums: {imported['albums']:,}")
-        console.print(f"  Tracks: {imported['tracks']:,}")
-        console.print(f"  Play history: {imported['play_history']:,}\n")
+        console.print(f"  Artists: {result.artists:,}")
+        console.print(f"  Albums: {result.albums:,}")
+        console.print(f"  Tracks: {result.tracks:,}")
+        console.print(f"  Play history: {result.play_history:,}\n")
+    except NotFoundError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        console.print("\nPlease specify the path with --plex-db or update your config file.")
+        raise typer.Exit(1)
     except Exception as e:
         log = get_logger("cli")
         log.exception(f"Import failed: {e}")
@@ -411,18 +364,12 @@ def import_plex_sonic(
     ] = False,
 ) -> None:
     """Import Plex sonic analysis vectors."""
-    config = get_config()
+    from musicseed.services import library as library_service
 
+    config = get_config()
     db_path = plex_db or config.plex.db_path_expanded
     blobs_path = blobs_db or db_path.with_name(f"{db_path.stem}.blobs{db_path.suffix}")
     target_library = library or config.plex.library
-
-    if not db_path.exists():
-        console.print(f"[red]Error: Plex database not found at {db_path}[/red]")
-        raise typer.Exit(1)
-    if not blobs_path.exists():
-        console.print(f"[red]Error: Plex blobs database not found at {blobs_path}[/red]")
-        raise typer.Exit(1)
 
     console.print("\n[bold]Importing Plex sonic analysis[/bold]")
     console.print(f"  Database: {db_path}")
@@ -431,22 +378,21 @@ def import_plex_sonic(
     console.print(f"  Mode: {'Overwrite' if overwrite else 'Missing only'}\n")
 
     try:
-        ensure_schema()
-        with get_session() as session:
-            stats = import_plex_sonic_embeddings(
-                session=session,
-                plex_db_path=db_path,
-                blobs_db_path=blobs_path,
-                library_name=target_library,
-                overwrite=overwrite,
-            )
-
+        result = library_service.import_plex_sonic(
+            plex_db_path=plex_db,
+            blobs_db_path=blobs_db,
+            library_name=library,
+            overwrite=overwrite,
+        )
         console.print("\n[green]✓ Plex sonic import completed![/green]")
-        console.print(f"  Available vectors: {stats['available']:,}")
-        console.print(f"  Imported: {stats['imported']:,}")
-        console.print(f"  Skipped: {stats['skipped']:,}")
-        console.print(f"  Invalid Plex blobs: {stats['invalid']:,}")
-        console.print(f"  Missing MusicSeed tracks: {stats['missing']:,}\n")
+        console.print(f"  Available vectors: {result.available:,}")
+        console.print(f"  Imported: {result.imported:,}")
+        console.print(f"  Skipped: {result.skipped:,}")
+        console.print(f"  Invalid Plex blobs: {result.invalid:,}")
+        console.print(f"  Missing MusicSeed tracks: {result.missing:,}\n")
+    except NotFoundError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
     except Exception as e:
         log = get_logger("cli")
         log.exception(f"Plex sonic import failed: {e}")
@@ -487,23 +433,12 @@ def enrich(
     ] = 5,
 ) -> None:
     """Enrich tracks with external metadata."""
-    import asyncio
-
-    from musicseed.enrichers.pipeline import run_enrichment
+    from musicseed.services import enrichment as enrichment_service
 
     if source not in {"spotify", "listenbrainz"}:
         console.print(
             f"[red]Unknown source: {source}. Supported sources: spotify, listenbrainz.[/red]"
         )
-        raise typer.Exit(1)
-
-    config = get_config()
-
-    if source == "spotify" and (
-        not config.spotify.client_id or not config.spotify.client_secret
-    ):
-        console.print("[red]Spotify credentials not configured.[/red]")
-        console.print("Add spotify.client_id and spotify.client_secret to your config file.")
         raise typer.Exit(1)
 
     console.print(f"\n[bold]Enriching tracks from {source}[/bold]")
@@ -517,23 +452,15 @@ def enrich(
     console.print(f"  Resume mode: {resume}\n")
 
     try:
-        with get_session() as session:
-            ensure_schema()
-            stats = asyncio.run(
-                run_enrichment(
-                    session=session,
-                    source=source,
-                    client_id=config.spotify.client_id,
-                    client_secret=config.spotify.client_secret,
-                    batch_size=batch_size,
-                    limit=limit,
-                    artist=artist,
-                    album=album,
-                    unattempted_only=resume,
-                    concurrency=concurrency,
-                )
-            )
-
+        stats = enrichment_service.enrich_tracks(
+            source=source,
+            batch_size=batch_size,
+            limit=limit,
+            artist=artist,
+            album=album,
+            resume=resume,
+            concurrency=concurrency,
+        )
         console.print("\n[green]✓ Enrichment completed![/green]")
         console.print(f"  Total processed: {stats.total:,}")
         matched_pct = stats.matched / max(stats.total, 1) * 100
@@ -542,7 +469,9 @@ def enrich(
         if stats.errors:
             console.print(f"  Errors: {stats.errors:,}")
         console.print()
-
+    except ConfigurationError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
     except Exception as e:
         log = get_logger("cli")
         log.exception(f"Enrichment failed: {e}")
@@ -575,21 +504,18 @@ def embed(
     ] = 4,
 ) -> None:
     """Generate audio embeddings for tracks."""
-    from musicseed.embeddings.pipeline import run_embedding_pipeline
+    from musicseed.services import enrichment as enrichment_service
 
     console.print(f"\n[bold]Generating embeddings with {model}[/bold]")
 
     try:
-        with get_session() as session:
-            stats = run_embedding_pipeline(
-                session=session,
-                model=model,
-                batch_size=batch_size,
-                limit=limit,
-                missing_only=missing_only,
-                workers=workers,
-            )
-
+        stats = enrichment_service.generate_embeddings(
+            model=model,
+            batch_size=batch_size,
+            limit=limit,
+            missing_only=missing_only,
+            workers=workers,
+        )
         console.print("\n[green]✓ Embedding generation completed![/green]")
         console.print(f"  Total processed: {stats.total:,}")
         generated_pct = stats.generated / max(stats.total, 1) * 100
@@ -598,7 +524,6 @@ def embed(
         if stats.errors:
             console.print(f"  Errors: {stats.errors:,}")
         console.print()
-
     except Exception as e:
         log = get_logger("cli")
         log.exception(f"Embedding generation failed: {e}")
@@ -625,52 +550,22 @@ def recommend(
         bool,
         typer.Option("--explain", help="Show component scores and candidate sources"),
     ] = False,
-    # Weights
-    w_sonic: Annotated[
-        float,
-        typer.Option("--w-sonic", help="Sonic similarity weight"),
-    ] = 0.30,
-    w_popularity: Annotated[
-        float,
-        typer.Option("--w-popularity", help="Popularity proximity weight"),
-    ] = 0.15,
-    w_style: Annotated[
-        float,
-        typer.Option("--w-style", help="Style alignment weight"),
-    ] = 0.10,
-    w_genre: Annotated[
-        float,
-        typer.Option("--w-genre", help="Genre alignment weight"),
-    ] = 0.15,
-    w_era: Annotated[
-        float,
-        typer.Option("--w-era", help="Era proximity weight"),
-    ] = 0.05,
-    w_novelty: Annotated[
-        float,
-        typer.Option("--w-novelty", help="Novelty weight"),
-    ] = 0.10,
-    # Filters
-    year_min: Annotated[
-        Optional[int],
-        typer.Option("--year-min", help="Minimum release year"),
-    ] = None,
-    year_max: Annotated[
-        Optional[int],
-        typer.Option("--year-max", help="Maximum release year"),
-    ] = None,
-    artist_max: Annotated[
-        int,
-        typer.Option("--artist-max", help="Max tracks per artist"),
-    ] = 3,
+    w_sonic: Annotated[float, typer.Option("--w-sonic", help="Sonic similarity weight")] = 0.30,
+    w_popularity: Annotated[float, typer.Option("--w-popularity", help="Popularity proximity weight")] = 0.15,
+    w_style: Annotated[float, typer.Option("--w-style", help="Style alignment weight")] = 0.10,
+    w_genre: Annotated[float, typer.Option("--w-genre", help="Genre alignment weight")] = 0.15,
+    w_era: Annotated[float, typer.Option("--w-era", help="Era proximity weight")] = 0.05,
+    w_novelty: Annotated[float, typer.Option("--w-novelty", help="Novelty weight")] = 0.10,
+    year_min: Annotated[Optional[int], typer.Option("--year-min", help="Minimum release year")] = None,
+    year_max: Annotated[Optional[int], typer.Option("--year-max", help="Maximum release year")] = None,
+    artist_max: Annotated[int, typer.Option("--artist-max", help="Max tracks per artist")] = 3,
     min_score: Annotated[
         Optional[float],
         typer.Option("--min-score", help="Exclude recommendations below this score (0.0–1.0)"),
     ] = None,
 ) -> None:
     """Preview recommendations from seed tracks without writing to Plex."""
-    from musicseed.recommender.playlist import recommend_tracks
-    from musicseed.recommender.scoring import Weights
+    from musicseed.services import recommend as recommend_service
 
     if not seed and not seed_id:
         console.print("[red]Error: At least one --seed or --seed-id is required[/red]")
@@ -707,24 +602,20 @@ def recommend(
     console.print(f"  Max per artist: {artist_max}\n")
 
     try:
-        with get_session() as session:
-            seed_tracks, recommendations = recommend_tracks(
-                session=session,
-                seed_texts=seed,
-                seed_ids=seed_id,
-                limit=limit,
-                weights=weights,
-                year_min=year_min,
-                year_max=year_max,
-                max_tracks_per_artist=artist_max,
-                min_score=min_score,
-            )
-            _print_seed_table(seed_tracks)
-            _print_recommendations_table(recommendations, explain=explain)
-            count = len(recommendations)
-        console.print(f"\n[green]Generated {count} recommendations.[/green]\n")
-
-    except ValueError as e:
+        result = recommend_service.get_recommendations(
+            seed_texts=seed,
+            seed_ids=seed_id,
+            limit=limit,
+            weights=weights,
+            year_min=year_min,
+            year_max=year_max,
+            max_tracks_per_artist=artist_max,
+            min_score=min_score,
+        )
+        _print_seed_table(result.seed_tracks)
+        _print_recommendations_table(result.recommendations, explain=explain)
+        console.print(f"\n[green]Generated {len(result.recommendations)} recommendations.[/green]\n")
+    except NotFoundError as e:
         console.print(f"[red]Recommendation failed: {e}[/red]")
         raise typer.Exit(1)
     except Exception as e:
@@ -757,53 +648,22 @@ def playlist(
         bool,
         typer.Option("--explain", help="Show component scores and candidate sources"),
     ] = False,
-    # Weights
-    w_sonic: Annotated[
-        float,
-        typer.Option("--w-sonic", help="Sonic similarity weight"),
-    ] = 0.30,
-    w_popularity: Annotated[
-        float,
-        typer.Option("--w-popularity", help="Popularity proximity weight"),
-    ] = 0.15,
-    w_style: Annotated[
-        float,
-        typer.Option("--w-style", help="Style alignment weight"),
-    ] = 0.10,
-    w_genre: Annotated[
-        float,
-        typer.Option("--w-genre", help="Genre alignment weight"),
-    ] = 0.15,
-    w_era: Annotated[
-        float,
-        typer.Option("--w-era", help="Era proximity weight"),
-    ] = 0.05,
-    w_novelty: Annotated[
-        float,
-        typer.Option("--w-novelty", help="Novelty weight"),
-    ] = 0.10,
-    # Filters
-    year_min: Annotated[
-        Optional[int],
-        typer.Option("--year-min", help="Minimum release year"),
-    ] = None,
-    year_max: Annotated[
-        Optional[int],
-        typer.Option("--year-max", help="Maximum release year"),
-    ] = None,
-    artist_max: Annotated[
-        int,
-        typer.Option("--artist-max", help="Max tracks per artist"),
-    ] = 3,
+    w_sonic: Annotated[float, typer.Option("--w-sonic", help="Sonic similarity weight")] = 0.30,
+    w_popularity: Annotated[float, typer.Option("--w-popularity", help="Popularity proximity weight")] = 0.15,
+    w_style: Annotated[float, typer.Option("--w-style", help="Style alignment weight")] = 0.10,
+    w_genre: Annotated[float, typer.Option("--w-genre", help="Genre alignment weight")] = 0.15,
+    w_era: Annotated[float, typer.Option("--w-era", help="Era proximity weight")] = 0.05,
+    w_novelty: Annotated[float, typer.Option("--w-novelty", help="Novelty weight")] = 0.10,
+    year_min: Annotated[Optional[int], typer.Option("--year-min", help="Minimum release year")] = None,
+    year_max: Annotated[Optional[int], typer.Option("--year-max", help="Maximum release year")] = None,
+    artist_max: Annotated[int, typer.Option("--artist-max", help="Max tracks per artist")] = 3,
     min_score: Annotated[
         Optional[float],
         typer.Option("--min-score", help="Exclude recommendations below this score (0.0–1.0)"),
     ] = None,
 ) -> None:
     """Generate recommendations, prompt for approval, then create a Plex playlist."""
-    from musicseed.clients.plex_api import PlexAPIError, PlexClient
-    from musicseed.recommender.playlist import recommend_tracks
-    from musicseed.recommender.scoring import Weights
+    from musicseed.services import recommend as recommend_service
 
     if not seed and not seed_id:
         console.print("[red]Error: At least one --seed or --seed-id is required[/red]")
@@ -811,11 +671,6 @@ def playlist(
 
     if min_score is not None and not (0.0 <= min_score <= 1.0):
         console.print("[red]Error: --min-score must be between 0.0 and 1.0[/red]")
-        raise typer.Exit(1)
-
-    config = get_config()
-    if not config.plex.token:
-        console.print("[red]Error: plex.token is not configured. Add it to your config file.[/red]")
         raise typer.Exit(1)
 
     weights = Weights(
@@ -845,36 +700,18 @@ def playlist(
         console.print(f"  Min score: {min_score}")
     console.print(f"  Max per artist: {artist_max}\n")
 
-    plex_ids: list[int] = []
-    ready_count = 0
-
     try:
-        with get_session() as session:
-            seed_tracks, recommendations = recommend_tracks(
-                session=session,
-                seed_texts=seed,
-                seed_ids=seed_id,
-                limit=limit,
-                weights=weights,
-                year_min=year_min,
-                year_max=year_max,
-                max_tracks_per_artist=artist_max,
-                min_score=min_score,
-            )
-            if not recommendations:
-                console.print("[yellow]No recommendations — playlist not created.[/yellow]")
-                raise typer.Exit(0)
-            # Extract primitive IDs and display while the session is still open.
-            # Seeds go first so the playlist starts with the reference tracks.
-            plex_ids = [t.plex_id for t in seed_tracks if t.plex_id is not None] + [
-                rec.track.plex_id for rec in recommendations if rec.track.plex_id is not None
-            ]
-            ready_count = len(recommendations)
-            _print_seed_table(seed_tracks)
-            _print_recommendations_table(recommendations, explain=explain)
-    except typer.Exit:
-        raise
-    except ValueError as e:
+        rec_result = recommend_service.get_recommendations(
+            seed_texts=seed,
+            seed_ids=seed_id,
+            limit=limit,
+            weights=weights,
+            year_min=year_min,
+            year_max=year_max,
+            max_tracks_per_artist=artist_max,
+            min_score=min_score,
+        )
+    except NotFoundError as e:
         console.print(f"[red]Recommendation failed: {e}[/red]")
         raise typer.Exit(1)
     except Exception as e:
@@ -884,20 +721,39 @@ def playlist(
         console.print("[dim]Check logs/latest.log for details[/dim]")
         raise typer.Exit(1)
 
-    console.print(f"\n[green]{ready_count} tracks ready.[/green]\n")
+    if not rec_result.recommendations:
+        console.print("[yellow]No recommendations — playlist not created.[/yellow]")
+        raise typer.Exit(0)
+
+    _print_seed_table(rec_result.seed_tracks)
+    _print_recommendations_table(rec_result.recommendations, explain=explain)
+    console.print(f"\n[green]{len(rec_result.recommendations)} tracks ready.[/green]\n")
 
     if not typer.confirm(f"Create playlist '{name}' in Plex?", default=False):
         console.print("[dim]Cancelled.[/dim]\n")
         raise typer.Exit(0)
 
     try:
-        client = PlexClient(base_url=config.plex.url, token=config.plex.token)
-        result = client.create_playlist(name, plex_ids)
-        console.print(
-            f"\n[green]✓ Playlist '{result.title}' created in Plex "
-            f"({len(plex_ids)} tracks).[/green]\n"
+        plex_result = recommend_service.create_playlist(
+            name,
+            seed_texts=seed,
+            seed_ids=seed_id,
+            limit=limit,
+            weights=weights,
+            year_min=year_min,
+            year_max=year_max,
+            max_tracks_per_artist=artist_max,
+            min_score=min_score,
         )
-    except PlexAPIError as e:
+        total = len(plex_result.seed_tracks) + len(plex_result.recommendations)
+        console.print(
+            f"\n[green]✓ Playlist '{plex_result.playlist.title}' created in Plex "
+            f"({total} tracks).[/green]\n"
+        )
+    except ConfigurationError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+    except MusicSeedError as e:
         console.print(f"\n[red]✗ {e}[/red]\n")
         raise typer.Exit(1)
     except Exception as e:

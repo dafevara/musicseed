@@ -2,9 +2,9 @@
 
 import asyncio
 import re
-from dataclasses import dataclass
 
 import httpx
+from pydantic import BaseModel
 
 from musicseed.logging_config import get_logger
 
@@ -18,9 +18,9 @@ MB_USER_AGENT = "MusicSeed/0.1.0 (https://github.com/user/musicseed)"
 MB_RATE_LIMIT = 1.0
 
 
-@dataclass
-class MBRecordingInfo:
+class MBRecordingInfo(BaseModel):
     """Info from MusicBrainz recording lookup."""
+
     mbid: str
     spotify_id: str | None
     title: str | None

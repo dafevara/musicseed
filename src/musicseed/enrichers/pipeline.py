@@ -1,7 +1,8 @@
 """Enrichment pipeline for batch processing tracks."""
 
 import math
-from dataclasses import dataclass
+
+from pydantic import BaseModel
 
 from rich.console import Console
 from rich.progress import (
@@ -23,8 +24,7 @@ logger = get_logger("enrichers.pipeline")
 console = Console()
 
 
-@dataclass
-class EnrichmentStats:
+class EnrichmentStats(BaseModel):
     """Statistics from enrichment run."""
 
     total: int
@@ -336,7 +336,7 @@ async def run_spotify_enrichment(
         f"Spotify enrichment complete: {matched} matched, "
         f"{unmatched} unmatched, {errors} errors"
     )
-    return EnrichmentStats(len(tracks), matched, unmatched, errors)
+    return EnrichmentStats(total=len(tracks), matched=matched, unmatched=unmatched, errors=errors)
 
 
 async def run_listenbrainz_enrichment(
@@ -396,7 +396,7 @@ async def run_listenbrainz_enrichment(
         f"ListenBrainz enrichment complete: {matched} with popularity, "
         f"{unmatched} without popularity data, {errors} errors"
     )
-    return EnrichmentStats(len(tracks), matched, unmatched, errors)
+    return EnrichmentStats(total=len(tracks), matched=matched, unmatched=unmatched, errors=errors)
 
 
 async def run_enrichment(

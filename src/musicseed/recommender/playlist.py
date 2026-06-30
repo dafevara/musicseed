@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass
 from typing import Sequence
 
+from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
@@ -19,8 +19,9 @@ from musicseed.recommender.scoring import (
 )
 
 
-@dataclass(frozen=True)
-class Recommendation:
+class Recommendation(BaseModel):
+    model_config = {"frozen": True, "arbitrary_types_allowed": True}
+
     track: Track
     score: ScoreBreakdown
     sources: list[str]

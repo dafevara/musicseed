@@ -3,10 +3,11 @@
 import gzip
 import sqlite3
 import traceback
-from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Generator
+
+from pydantic import BaseModel
 
 from rich.console import Console
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
@@ -43,9 +44,9 @@ MUSICSEED_EMBEDDING_DIM = 200
 PLEX_SONIC_MODEL = "plex-sonic-v7"
 
 
-@dataclass
-class PlexTrackRow:
+class PlexTrackRow(BaseModel):
     """Raw track data from Plex database."""
+
     id: int
     guid: str
     title: str
@@ -59,9 +60,9 @@ class PlexTrackRow:
     updated_at: int | None
 
 
-@dataclass
-class PlexAlbumRow:
+class PlexAlbumRow(BaseModel):
     """Raw album data from Plex database."""
+
     id: int
     guid: str
     title: str
@@ -72,9 +73,9 @@ class PlexAlbumRow:
     added_at: int | None
 
 
-@dataclass
-class PlexArtistRow:
+class PlexArtistRow(BaseModel):
     """Raw artist data from Plex database."""
+
     id: int
     guid: str
     title: str
