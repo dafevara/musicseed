@@ -34,17 +34,34 @@ platform. It is meant to run from source on the owner machine against the owner'
 - Plex Media Server with a music library
 - Optional Spotify API credentials for fallback enrichment
 
+## Repository Layout
+
+MusicSeed is a monorepo of independent apps that share the same core logic:
+
+- `core/` — `musicseed-core`, the reusable library (import, enrichment, embeddings, recommender,
+  db, config). Importable as `musicseed`. This is where all logic lives.
+- `cli/` — `musicseed-cli`, the Typer command-line app. Depends on `core` via an editable path
+  dependency (`musicseed-core = { path = "../core" }`).
+- `api/`, `mcp/`, `web/` — future surfaces (HTTP API, MCP server, frontend). Not present yet;
+  each will be a sibling app that also depends on `core`.
+
+Each app has its own `pyproject.toml` and its own `uv.lock`/virtualenv. Shared infrastructure
+(`docker-compose.yml`, `docs/`, `ruff.toml`) lives at the repo root.
+
 ## Quick Start
 
-Start the local database:
+Start the local database (from the repo root):
 
 ```bash
 docker-compose up -d
 ```
 
-Install and inspect the CLI:
+Run all `musicseed` commands from the `cli/` directory (or prefix them with
+`uv run --project cli`). Install and inspect the CLI:
 
 ```bash
+cd cli
+uv sync
 uv run musicseed --help
 ```
 
@@ -93,11 +110,11 @@ uv run musicseed recommend --seed-id 123 --limit 20 --dry-run --explain
 
 ## Configuration
 
-MusicSeed loads YAML config from the first existing path:
+The CLI loads YAML config from the first existing path:
 
 - `~/.config/musicseed/config.yaml`
 - `~/.musicseed.yaml`
-- `config.yaml`
+- `config.yaml` (relative to the current directory, e.g. `cli/config.yaml`)
 
 Minimal local example:
 
@@ -134,9 +151,11 @@ Environment variables and `~` are expanded by the config loader.
 Useful checks:
 
 ```bash
-python3 -m compileall -q src/musicseed
-uv run ruff check src
-uv run musicseed --help
+# Core library (from core/)
+cd core && uv run ruff check src && python3 -m compileall -q src/musicseed
+
+# CLI app (from cli/)
+cd cli && uv run ruff check src && uv run musicseed --help
 ```
 
 The repository includes `AGENTS.md` for coding agents. Use it as the provider-neutral harness

@@ -11,7 +11,11 @@ existing code clearly needs them.
   enrichment, audio embeddings, and play history.
 - Runtime: Python 3.11+, Typer/Rich CLI, SQLAlchemy, PostgreSQL 16 with pgvector, uv.
 - Platform: macOS on Apple Silicon, run from source.
-- Primary package: `src/musicseed`.
+- Layout: monorepo of independent apps. `core/` (`musicseed-core`, importable as `musicseed`)
+  holds all logic; `cli/` (`musicseed-cli`) is the Typer surface and depends on `core` via an
+  editable path dependency. `api/`, `mcp/`, `web/` are future sibling apps. Each app has its own
+  `pyproject.toml` and `uv.lock`; run `uv` commands from inside the app dir.
+- Primary library package: `core/src/musicseed`.
 - Existing docs: start with `README.md`, then use the focused docs under `docs/`.
 - Current authoritative design record: `docs/ard/001-initial-system-design.md`.
 
@@ -30,19 +34,22 @@ project memory, context routing, tools, and verification paths to make useful ch
 
 ## Code Map
 
-- `src/musicseed/cli.py`: Typer commands and user-facing command flow.
-- `src/musicseed/config.py`: YAML config loading and environment expansion.
-- `src/musicseed/db/models.py`: SQLAlchemy tables for artists, albums, tracks, tags, history,
+- `cli/src/musicseed_cli/app.py`: Typer commands and user-facing command flow (the CLI app).
+- `core/src/musicseed/config.py`: YAML config loading and environment expansion (CLI config).
+- `core/src/musicseed/services/`: surface-agnostic application layer (library, enrichment,
+  recommend, populate). All app surfaces (cli, future api/mcp) call these.
+- `core/src/musicseed/db/models.py`: SQLAlchemy tables for artists, albums, tracks, tags, history,
   stats, playlists, popularity fields, and embeddings.
-- `src/musicseed/db/session.py`: engine/session setup, schema initialization, additive schema
+- `core/src/musicseed/db/session.py`: engine/session setup, schema initialization, additive schema
   repair, and indexes.
-- `src/musicseed/importers/plex.py`: Plex SQLite metadata import.
-- `src/musicseed/enrichers/`: ListenBrainz, Spotify, and MusicBrainz clients plus the shared
+- `core/src/musicseed/importers/plex.py`: Plex SQLite metadata import.
+- `core/src/musicseed/enrichers/`: ListenBrainz, Spotify, and MusicBrainz clients plus the shared
   enrichment pipeline.
-- `src/musicseed/embeddings/`: audio embedding generation pipeline and Essentia wrapper.
-- `src/musicseed/recommender/`: seed resolution, candidate pools, scoring, and playlist ranking.
-- `src/musicseed/clients/plex_api.py`: Plex Media Server HTTP client for playlist creation.
-- `docker-compose.yml`: local PostgreSQL + pgvector service.
+- `core/src/musicseed/embeddings/`: audio embedding generation pipeline and Essentia wrapper.
+- `core/src/musicseed/recommender/`: seed resolution, candidate pools, scoring, and playlist
+  ranking.
+- `core/src/musicseed/clients/plex_api.py`: Plex Media Server HTTP client for playlist creation.
+- `docker-compose.yml`: local PostgreSQL + pgvector service (shared, repo root).
 
 ## Docs Routing
 
@@ -55,16 +62,22 @@ project memory, context routing, tools, and verification paths to make useful ch
 
 ## Common Commands
 
-Use these from the repository root.
+Start shared infra from the repo root, run app commands from the app dir.
 
 ```bash
+docker-compose up -d                       # from repo root
+
+cd cli                                      # CLI app dir
+uv sync                                     # installs core editable + typer/rich
 uv run musicseed --help
 uv run musicseed status
-uv run ruff check src
-python3 -m compileall -q src/musicseed
-docker-compose up -d
 uv run musicseed init-db
 uv run musicseed optimize-db
+uv run ruff check src
+
+cd ../core                                  # core library dir
+uv run ruff check src
+python3 -m compileall -q src/musicseed
 ```
 
 For slow or stateful operations, use limits while developing:
@@ -107,10 +120,11 @@ the docs in the same change.
 
 Before handing work back, run the smallest useful subset:
 
-- Syntax/import sanity: `python3 -m compileall -q src/musicseed`.
-- Lint when dependencies are available: `uv run ruff check src`.
-- CLI smoke check: `uv run musicseed --help`.
-- DB-related changes: `docker-compose up -d`, then `uv run musicseed init-db` or `status` when safe.
+- Syntax/import sanity: `python3 -m compileall -q core/src/musicseed cli/src/musicseed_cli`.
+- Lint when dependencies are available: `uv run ruff check src` from within `core/` and `cli/`.
+- CLI smoke check: `cd cli && uv run musicseed --help`.
+- DB-related changes: `docker-compose up -d`, then `cd cli && uv run musicseed init-db` or
+  `status` when safe.
 - Recommendation changes: run a limited dry run with `--dry-run --explain` if local data exists.
 
 Report any command that could not be run and why.
