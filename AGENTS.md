@@ -1,55 +1,48 @@
 # MusicSeed Agent Guide
 
-MusicSeed is a personal, local-first music recommendation CLI for a Plex library.
-Optimize for correctness, recoverability, and simple operation on one user's machine.
-Do not introduce enterprise patterns, distributed systems, or heavy process unless the
-existing code clearly needs them.
+MusicSeed is a personal, local-first music recommendation tool for a Plex library. Optimize for
+correctness, recoverability, and simple operation on one user's machine. Do not introduce
+enterprise patterns, distributed systems, or heavy process unless the existing code clearly needs
+them.
+
+This is the **root guide** for the monorepo. It covers shared context, layout, and repo-wide
+rules, then routes you to the app you're working in. **Read the per-app `AGENTS.md` for details.**
 
 ## Fast Context
 
 - Product: generate Plex playlists from seed tracks using local library metadata, popularity
   enrichment, audio embeddings, and play history.
-- Runtime: Python 3.11+, Typer/Rich CLI, SQLAlchemy, PostgreSQL 16 with pgvector, uv.
+- Runtime: Python 3.11+, SQLAlchemy, PostgreSQL 16 with pgvector, uv. Typer/Rich in the CLI.
 - Platform: macOS on Apple Silicon, run from source.
-- Layout: monorepo of independent apps. `core/` (`musicseed-core`, importable as `musicseed`)
-  holds all logic; `cli/` (`musicseed-cli`) is the Typer surface and depends on `core` via an
-  editable path dependency. `api/`, `mcp/`, `web/` are future sibling apps. Each app has its own
-  `pyproject.toml` and `uv.lock`; run `uv` commands from inside the app dir.
-- Primary library package: `core/src/musicseed`.
-- Existing docs: start with `README.md`, then use the focused docs under `docs/`.
-- Current authoritative design record: `docs/ard/001-initial-system-design.md`.
+- Recommendation signals (six): sonic, popularity, style, genre, era, novelty.
+
+## Monorepo layout
+
+Independent apps that share one core library. Each app has its own `pyproject.toml`, `uv.lock`,
+and `.venv`; run `uv` commands from inside the app directory.
+
+| Path | What | Guide |
+|---|---|---|
+| `core/` | `musicseed-core` — all logic (import, enrich, embed, recommender, db, config). Importable as `musicseed`. Library only, no CLI. | [`core/AGENTS.md`](core/AGENTS.md) |
+| `cli/` | `musicseed-cli` — Typer CLI (`musicseed`). Thin wrapper over core's services; depends on core via an editable path. | [`cli/AGENTS.md`](cli/AGENTS.md) |
+| `api/`, `mcp/`, `web/` | Future surfaces (HTTP API, MCP server, frontend). Not present yet; each will be a sibling app depending on `core`. | — |
+
+Shared at the repo root: `docker-compose.yml` (Postgres + pgvector), `ruff.toml` (lint config for
+all apps), `docs/`, `data/`, `logs/`.
+
+**Where logic goes:** all business logic lives in `core/` behind the surface-agnostic `services/`
+layer. App surfaces (cli, future api/mcp) only parse input, call a service, and format the result.
+If you're adding recommendation/db/Plex logic to a surface, move it to `core`.
 
 ## Harness Principles
 
-These instructions follow a lightweight harness-engineering style: give agents just enough
-project memory, context routing, tools, and verification paths to make useful changes safely.
-
 - Prefer repo-local truth over guessing. Read the relevant file and focused doc before editing.
-- Keep context small. Open the docs for the area you are touching instead of loading every doc.
+- Keep context small. Open the app guide and docs for the area you're touching, not everything.
 - Make reversible, local changes. This project controls a personal music database and Plex
   library, so destructive operations require explicit user intent.
 - Verify cheaply first. Compile and lint before running DB, network, or audio-heavy commands.
-- Preserve home-project simplicity. A clear script, README note, or focused doc is often better
-  than a new framework.
-
-## Code Map
-
-- `cli/src/musicseed_cli/app.py`: Typer commands and user-facing command flow (the CLI app).
-- `core/src/musicseed/config.py`: YAML config loading and environment expansion (CLI config).
-- `core/src/musicseed/services/`: surface-agnostic application layer (library, enrichment,
-  recommend, populate). All app surfaces (cli, future api/mcp) call these.
-- `core/src/musicseed/db/models.py`: SQLAlchemy tables for artists, albums, tracks, tags, history,
-  stats, playlists, popularity fields, and embeddings.
-- `core/src/musicseed/db/session.py`: engine/session setup, schema initialization, additive schema
-  repair, and indexes.
-- `core/src/musicseed/importers/plex.py`: Plex SQLite metadata import.
-- `core/src/musicseed/enrichers/`: ListenBrainz, Spotify, and MusicBrainz clients plus the shared
-  enrichment pipeline.
-- `core/src/musicseed/embeddings/`: audio embedding generation pipeline and Essentia wrapper.
-- `core/src/musicseed/recommender/`: seed resolution, candidate pools, scoring, and playlist
-  ranking.
-- `core/src/musicseed/clients/plex_api.py`: Plex Media Server HTTP client for playlist creation.
-- `docker-compose.yml`: local PostgreSQL + pgvector service (shared, repo root).
+- Preserve home-project simplicity. A clear script, README note, or focused doc usually beats a
+  new framework.
 
 ## Docs Routing
 
@@ -57,74 +50,41 @@ project memory, context routing, tools, and verification paths to make useful ch
 - Harness strategy and maintenance loop: `docs/harness-engineering.md`.
 - Music/recommendation domain concepts: `docs/domain/music-recommendation.md`.
 - Local services, config, logs, and verification commands: `docs/infra/local-runtime.md`.
-- Seed matching, candidate generation, scoring, and playlist selection: `docs/resolvers/recommendation-resolvers.md`.
-- Historical plan and architecture: `docs/implementation-plan.md` and `docs/ard/001-initial-system-design.md`.
+- Seed matching, candidate generation, scoring, playlist selection: `docs/resolvers/recommendation-resolvers.md`.
+- Historical plan and architecture: `docs/implementation-plan.md`, `docs/ard/001-initial-system-design.md`.
 
-## Common Commands
-
-Start shared infra from the repo root, run app commands from the app dir.
+## Shared Commands
 
 ```bash
-docker-compose up -d                       # from repo root
-
-cd cli                                      # CLI app dir
-uv sync                                     # installs core editable + typer/rich
-uv run musicseed --help
-uv run musicseed status
-uv run musicseed init-db
-uv run musicseed optimize-db
-uv run ruff check src
-
-cd ../core                                  # core library dir
-uv run ruff check src
-python3 -m compileall -q src/musicseed
+docker-compose up -d                 # from repo root — Postgres + pgvector
+cd cli   && uv run musicseed status  # run the CLI from cli/
+cd core  && uv run ruff check src    # per-app lint (ruff.toml is shared at root)
+python3 -m compileall -q core/src/musicseed cli/src/musicseed_cli
 ```
 
-For slow or stateful operations, use limits while developing:
+App-specific commands and verification live in each app's `AGENTS.md`.
 
-```bash
-uv run musicseed enrich --source listenbrainz --limit 100 --batch-size 50 --resume
-uv run musicseed embed --limit 10 --workers 1 --missing-only
-uv run musicseed recommend --seed-id 123 --limit 20 --dry-run --explain
-```
-
-If a command shown here does not exist or its flags differ from code, trust the code and update
-the docs in the same change.
-
-## Safety Rules
+## Repo-wide Safety Rules
 
 - Do not delete or rewrite `data/`, `logs/`, local Plex databases, or PostgreSQL volumes unless
   the user explicitly asks.
-- Do not run full-library import, enrichment, or embedding jobs without user confirmation.
-- Do not expose Plex tokens, Spotify credentials, database passwords, local file paths from the
-  user's library, or logs containing secrets.
-- Use `--limit`, `--dry-run`, `--resume`, and low worker counts when exploring behavior.
-- Treat external APIs as optional and rate-limited. ListenBrainz enrichment is preferred when
-  MBIDs are available; Spotify is a fallback requiring credentials.
-- Keep `.DS_Store`, local databases, logs, and other machine-local artifacts out of committed
-  changes unless the user has intentionally asked to track them.
+- Do not run full-library import, enrichment, or embedding jobs without user confirmation. Use
+  `--limit`, `--dry-run`, `--resume`, and low worker counts when exploring behavior.
+- Do not expose Plex tokens, Spotify credentials, database passwords, local library file paths, or
+  logs containing secrets.
+- Treat external APIs as optional and rate-limited. ListenBrainz is preferred when MBIDs exist;
+  Spotify is a credentialed fallback.
+- Keep `.DS_Store`, local databases, logs, and other machine-local artifacts out of commits unless
+  intentionally asked to track them.
 
 ## Change Guidelines
 
-- Match existing style: dataclasses, type hints, SQLAlchemy ORM, Typer commands, Rich output.
-- Keep CLI behavior explicit and recoverable. Prefer idempotent commands and resumable pipelines.
-- For schema changes, use additive migrations or `ensure_schema()`-style compatibility for this
-  local project unless a larger migration system is introduced intentionally.
-- For recommendation changes, preserve explainability. Update score breakdowns or resolver docs
+- Match existing style: type hints, SQLAlchemy ORM, Pydantic models, Typer commands, Rich output.
+- Keep `core/services/` surface-agnostic (no Typer/HTTP framework, no user-facing `print`); return
+  result models and raise typed exceptions for surfaces to map.
+- Schema changes: additive migrations or `ensure_schema()`-style compatibility for this local
+  project unless a real migration system is introduced intentionally.
+- Recommendation changes: preserve explainability — update score breakdowns and the resolver docs
   when adding a signal.
-- For long-running jobs, log actionable details to `logs/latest.log` and keep console output concise.
-- Add tests when a change affects matching, scoring, filtering, or data conversion. If tests are
-  not present yet, use focused pure-function tests rather than broad integration tests.
-
-## Verification Checklist
-
-Before handing work back, run the smallest useful subset:
-
-- Syntax/import sanity: `python3 -m compileall -q core/src/musicseed cli/src/musicseed_cli`.
-- Lint when dependencies are available: `uv run ruff check src` from within `core/` and `cli/`.
-- CLI smoke check: `cd cli && uv run musicseed --help`.
-- DB-related changes: `docker-compose up -d`, then `cd cli && uv run musicseed init-db` or
-  `status` when safe.
-- Recommendation changes: run a limited dry run with `--dry-run --explain` if local data exists.
-
-Report any command that could not be run and why.
+- Docs/code drift: if a documented command or flag disagrees with the code, trust the code and fix
+  the doc in the same change.
