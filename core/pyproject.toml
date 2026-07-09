@@ -3,6 +3,7 @@ name = "musicseed-core"
 version = "0.1.0"
 description = "Core music recommendation logic for MusicSeed (library, enrichment, embeddings, recommender)"
 readme = "../README.md"
+license = "MIT"
 authors = [
     { name = "Daniel Valencia", email = "dafevara@gmail.com" }
 ]

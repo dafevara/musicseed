@@ -9,13 +9,15 @@ wheels/
 
 # Virtual environments
 .venv
+.venv/
 
-# Local environment and config
+# Local environment and real config (never commit secrets)
 .env
 .env.*
 !.env.example
 config.yaml
 *.local.yaml
+!config.example.yaml
 
 # Local/generated MusicSeed state
 data/
@@ -31,11 +33,14 @@ logs/
 *.key
 *.p12
 *.pfx
-*secret*
-*credential*
-*token*
+*credentials*
+*secrets*
 
 # OS/editor-local files
 .DS_Store
 .python-version
 *.code-workspace
+.idea/
+.vscode/
+*.swp
+*~

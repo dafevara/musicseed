@@ -20,12 +20,25 @@ the logic this app calls. This file covers the CLI app only.
 
 ## Code Map
 
-- `src/musicseed_cli/app.py`: the entire Typer app — `app = typer.Typer(...)`, the global
+- `src/musicseed_cli/app.py`: **app assembly only** — `app = typer.Typer(...)`, the global
   `@app.callback()` (`--version`, `--config`, logging flags → `load_config`/`set_config` +
-  `setup_logging`), every command, and the Rich table helpers (`_print_seed_table`,
-  `_print_recommendations_table`). Imports from core are unchanged from the pre-monorepo layout
-  (`from musicseed.config import …`, `from musicseed.services import …`, etc.).
+  `setup_logging`), and a single `register_all(app)` call that attaches every command. This is the
+  entry point (`musicseed_cli.app:app`); keep the `app` object importable from here.
+- `src/musicseed_cli/commands/`: **one module per command**, each exposing a plain command function
+  plus a `register(app)` that attaches it. `commands/__init__.py` holds `register_all(app)`, which
+  registers all modules in the intended command order. Modules: `init_db`, `optimize_db`, `status`,
+  `import_library`, `import_plex_sonic`, `enrich`, `embed`, `recommend`, `playlist`, `playlists`,
+  `populate`. To add a command, create a module with `register(app)` and list it in
+  `commands/__init__.py`.
+- `src/musicseed_cli/console.py`: the shared Rich `Console` instance (`from musicseed_cli.console
+  import console`).
+- `src/musicseed_cli/rendering.py`: shared recommendation-output helpers — `print_seed_table`,
+  `print_recommendations_table`, `popularity_cell`, and `build_weights(...)` (assembles a
+  `recommender.scoring.Weights` from the six `--w-*` options, used by `recommend`/`playlist`/`populate`).
 - `src/musicseed_cli/__init__.py`: package marker.
+
+Imports from core are unchanged from the pre-monorepo layout (`from musicseed.config import …`,
+`from musicseed.services import …`, etc.).
 
 ## Commands → core service (all logic is in core)
 
@@ -42,8 +55,9 @@ the logic this app calls. This file covers the CLI app only.
 
 ## Particularities to respect
 
-- **Thin wrapper only.** Commands validate input, build a `recommender.scoring.Weights` from the
-  six `--w-*` options, call one service function, and render the result. Keep it that way.
+- **Thin wrapper only.** Commands validate input, build a `recommender.scoring.Weights` via
+  `rendering.build_weights` from the six `--w-*` options, call one service function, and render the
+  result. Keep it that way.
 - **Error mapping.** Commands catch `NotFoundError` / `ConfigurationError` / `MusicSeedError` and
   translate to `console.print(...)` + `raise typer.Exit(1)`; unexpected errors are logged via
   `get_logger("cli")` to `logs/latest.log` before exiting. Follow this pattern for new commands.
@@ -78,4 +92,5 @@ uv run musicseed embed --limit 10 --workers 1 --missing-only
 uv run musicseed recommend --seed-id 123 --limit 20 --explain
 ```
 
-If a flag here disagrees with `app.py`, trust the code and update this doc in the same change.
+If a flag here disagrees with the command module in `commands/`, trust the code and update this doc
+in the same change.

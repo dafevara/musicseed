@@ -23,6 +23,15 @@ jobs, and explainable recommendations over large-scale product architecture.
 MusicSeed is not a Plex replacement, streaming server, social product, or multi-user platform. It
 runs from source on the owner's machine against the owner's Plex library.
 
+## License And Security
+
+- License: [MIT](LICENSE)
+- Security policy and private reporting: [SECURITY.md](SECURITY.md)
+- Example config (no secrets): [config.example.yaml](config.example.yaml)
+
+Do not commit real `config.yaml`, `.env`, database dumps, or logs. Keep Plex tokens and API
+credentials in env vars or an untracked local config.
+
 ## Repository Layout
 
 MusicSeed is a monorepo of independent apps that share one core library. Each app has its own

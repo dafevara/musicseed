@@ -49,30 +49,9 @@ The CLI loads YAML config from the first existing path:
 - `~/.musicseed.yaml`
 - `config.yaml` (relative to the current directory, i.e. `cli/config.yaml` when run from here)
 
-Minimal example:
-
-```yaml
-database:
-  host: localhost
-  port: 5432
-  name: musicseed
-  user: musicseed
-  password: musicseed
-
-plex:
-  url: http://localhost:32400
-  token: ${PLEX_TOKEN}
-  library: Music
-  db_path: "~/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db"
-
-spotify:
-  client_id: ${SPOTIFY_CLIENT_ID}
-  client_secret: ${SPOTIFY_CLIENT_SECRET}
-
-embedding:
-  model: essentia
-  auto_download_model: true
-```
+Copy the repo root [`config.example.yaml`](../config.example.yaml) to one of those paths and
+fill in values. Prefer `${PLEX_TOKEN}` / `${SPOTIFY_CLIENT_*}` over hard-coded secrets.
+**Never commit a real `config.yaml`.**
 
 Environment variables and `~` are expanded by the loader. Writing playlists to Plex requires
 `plex.token`.

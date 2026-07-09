@@ -1,0 +1,59 @@
+# MusicSeed configuration example
+#
+# Copy to one of:
+#   ~/.config/musicseed/config.yaml
+#   ~/.musicseed.yaml
+#   ./config.yaml   (cwd-relative; e.g. cli/config.yaml when run from cli/)
+#
+# Never commit a real config file. Prefer ${ENV_VAR} for secrets.
+# Values support ${ENV} expansion and ~ for home directory.
+
+database:
+  host: localhost
+  port: 5432
+  name: musicseed
+  user: musicseed
+  # Matches docker-compose.yml defaults for local dev only.
+  # Prefer: password: ${MUSICSEED_DB_PASSWORD}
+  password: musicseed
+
+plex:
+  url: http://localhost:32400
+  # Required for playlist create / populate. Prefer an env var.
+  token: ${PLEX_TOKEN}
+  library: Music
+  # macOS default; adjust for your Plex install (Linux paths differ).
+  db_path: >-
+    ~/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db
+
+# Optional. Leave empty (or omit) if you only use ListenBrainz enrichment.
+spotify:
+  client_id: ${SPOTIFY_CLIENT_ID}
+  client_secret: ${SPOTIFY_CLIENT_SECRET}
+
+embedding:
+  model: essentia
+  batch_size: 10
+  workers: 4
+  model_path: ""
+  auto_download_model: true
+
+enrichment:
+  concurrency: 5
+  batch_size: 50
+
+logging:
+  level: INFO
+  console: false
+  console_level: WARNING
+
+recommendation:
+  default_limit: 50
+  max_tracks_per_artist: 3
+  default_weights:
+    sonic: 0.30
+    popularity: 0.15
+    style: 0.10
+    genre: 0.15
+    era: 0.05
+    novelty: 0.10
