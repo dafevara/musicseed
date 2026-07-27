@@ -36,6 +36,12 @@ Service entry points:
 - `services/recommend.py`: `get_recommendations`, `create_playlist`.
 - `services/populate.py`: `list_plex_playlists`, `get_populate_recommendations`,
   `populate_playlist`.
+- `services/plex_analysis.py`: `get_sonic_status`, `probe_sonic_trigger`,
+  `probe_butler_trigger`, `refresh_album`, `refresh_sonic_analysis` — inspect Plex sonic
+  analysis coverage over the HTTP API (`musicAnalysisVersion`) and trigger it on demand via
+  `POST /butler/MusicAnalysis` (proven to work; per-item `analyze` does NOT trigger sonic
+  analysis). The Butler task always processes Plex's whole pending backlog; date windows only
+  scope watching/reporting.
 
 ## Code Map
 

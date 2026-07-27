@@ -17,6 +17,8 @@ from musicseed_cli.commands import (
     playlists,
     populate,
     recommend,
+    sonic_probe,
+    sonic_refresh,
     status,
 )
 
@@ -26,6 +28,8 @@ _MODULES = (
     status,
     import_library,
     import_plex_sonic,
+    sonic_probe,
+    sonic_refresh,
     enrich,
     embed,
     recommend,
