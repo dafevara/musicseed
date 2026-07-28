@@ -58,13 +58,8 @@ def get_session() -> Generator[Session, None, None]:
 
 
 def init_db() -> None:
-    """Initialize the database schema and extensions."""
+    """Initialize the database schema."""
     engine = get_engine()
-
-    # Enable pgvector extension
-    with engine.connect() as conn:
-        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-        conn.commit()
 
     # Create all tables
     Base.metadata.create_all(engine)
@@ -82,39 +77,15 @@ def ensure_schema() -> None:
             "ALTER TABLE tracks ADD COLUMN IF NOT EXISTS "
             "listenbrainz_matched BOOLEAN DEFAULT FALSE"
         ),
+        # Sonic vectors are read from Plex at query time and no longer stored.
+        "DROP INDEX IF EXISTS idx_tracks_embedding",
+        "ALTER TABLE tracks DROP COLUMN IF EXISTS embedding",
+        "ALTER TABLE tracks DROP COLUMN IF EXISTS embedding_model",
+        "ALTER TABLE tracks DROP COLUMN IF EXISTS embedding_generated",
     ]
     with engine.connect() as conn:
         for statement in statements:
             conn.execute(text(statement))
-        conn.execute(
-            text(
-                """
-                DO $$
-                BEGIN
-                    IF EXISTS (
-                        SELECT 1
-                        FROM pg_attribute a
-                        JOIN pg_class c ON c.oid = a.attrelid
-                        JOIN pg_namespace n ON n.oid = c.relnamespace
-                        WHERE n.nspname = 'public'
-                          AND c.relname = 'tracks'
-                          AND a.attname = 'embedding'
-                          AND format_type(a.atttypid, a.atttypmod) = 'vector(512)'
-                    ) THEN
-                        DROP INDEX IF EXISTS idx_tracks_embedding;
-                        UPDATE tracks
-                        SET embedding = NULL,
-                            embedding_model = NULL,
-                            embedding_generated = FALSE
-                        WHERE embedding IS NOT NULL;
-                        ALTER TABLE tracks
-                        ALTER COLUMN embedding TYPE vector(200)
-                        USING NULL::vector(200);
-                    END IF;
-                END $$;
-                """
-            )
-        )
         conn.commit()
 
 
@@ -124,14 +95,6 @@ def create_indexes() -> list[IndexResult]:
 
     indexes = [
         ("extension_pg_trgm", "CREATE EXTENSION IF NOT EXISTS pg_trgm"),
-        # Vector similarity search (IVFFlat for ~60K tracks)
-        (
-            "idx_tracks_embedding",
-            """
-            CREATE INDEX IF NOT EXISTS idx_tracks_embedding ON tracks
-            USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)
-            """,
-        ),
         # Common queries
         (
             "idx_tracks_artist",
@@ -212,11 +175,6 @@ def create_indexes() -> list[IndexResult]:
             "idx_tracks_spotify_queue",
             "CREATE INDEX IF NOT EXISTS idx_tracks_spotify_queue "
             "ON tracks(id) WHERE spotify_matched IS NOT TRUE",
-        ),
-        (
-            "idx_tracks_embedding_queue",
-            "CREATE INDEX IF NOT EXISTS idx_tracks_embedding_queue "
-            "ON tracks(id) WHERE file_path IS NOT NULL AND embedding_generated IS NOT TRUE",
         ),
         (
             "idx_artists_name_trgm",

@@ -9,15 +9,15 @@ from pydantic import BaseModel
 from musicseed.config import get_config
 from musicseed.db.session import IndexResult, create_indexes, ensure_schema, get_session, init_db
 from musicseed.exceptions import NotFoundError
-from musicseed.importers.plex import import_from_plex, import_plex_sonic_embeddings
+from musicseed.importers.plex import import_from_plex
+from musicseed.sonic import get_sonic_vectors
 
 
 class EnrichmentCoverage(BaseModel):
     tracks_with_mbid: int
     tracks_with_spotify: int
     spotify_attempted: int
-    tracks_with_embedding: int
-    embeddings_attempted: int
+    tracks_with_sonic: int
     tracks_with_listenbrainz: int
     listenbrainz_attempted: int
 
@@ -44,14 +44,6 @@ class ImportResult(BaseModel):
     albums: int
     tracks: int
     play_history: int
-
-
-class PlexSonicImportResult(BaseModel):
-    available: int
-    imported: int
-    skipped: int
-    invalid: int
-    missing: int
 
 
 def initialize_database() -> None:
@@ -93,38 +85,25 @@ def import_library(
     return ImportResult(**result)
 
 
-def import_plex_sonic(
-    plex_db_path: Path | None = None,
-    blobs_db_path: Path | None = None,
-    library_name: str | None = None,
-    overwrite: bool = False,
-) -> PlexSonicImportResult:
-    """Import Plex sonic analysis vectors.
+def _count_tracks_with_sonic(session) -> int:
+    """Count local tracks Plex currently has a sonic vector for.
 
-    Raises:
-        NotFoundError: if Plex database or blobs database file does not exist.
+    Returns 0 rather than raising when Plex's databases are unavailable, so
+    status still renders the rest of the library.
     """
-    config = get_config()
-    db_path = plex_db_path or config.plex.db_path_expanded
-    blobs_path = blobs_db_path or db_path.with_name(f"{db_path.stem}.blobs{db_path.suffix}")
-    target_library = library_name or config.plex.library
+    from musicseed.db.models import Track
 
-    if not db_path.exists():
-        raise NotFoundError(f"Plex database not found at {db_path}")
-    if not blobs_path.exists():
-        raise NotFoundError(f"Plex blobs database not found at {blobs_path}")
+    try:
+        vectors = get_sonic_vectors()
+    except NotFoundError:
+        return 0
 
-    ensure_schema()
-    with get_session() as session:
-        stats = import_plex_sonic_embeddings(
-            session=session,
-            plex_db_path=db_path,
-            blobs_db_path=blobs_path,
-            library_name=target_library,
-            overwrite=overwrite,
-        )
-
-    return PlexSonicImportResult(**stats)
+    plex_ids = vectors.plex_ids
+    return sum(
+        1
+        for (plex_id,) in session.query(Track.plex_id).filter(Track.plex_id.isnot(None))
+        if plex_id in plex_ids
+    )
 
 
 def get_status() -> LibraryStatus:
@@ -145,12 +124,7 @@ def get_status() -> LibraryStatus:
         tracks_with_mbid = session.query(Track).filter(Track.mbid.isnot(None)).count()
         tracks_with_spotify = session.query(Track).filter(Track.spotify_id.isnot(None)).count()
         spotify_attempted = session.query(Track).filter(Track.spotify_matched.is_(True)).count()
-        tracks_with_embedding = (
-            session.query(Track).filter(Track.embedding.isnot(None)).count()
-        )
-        embeddings_attempted = (
-            session.query(Track).filter(Track.embedding_generated.is_(True)).count()
-        )
+        tracks_with_sonic = _count_tracks_with_sonic(session)
         tracks_with_listenbrainz = (
             session.query(Track)
             .filter(
@@ -187,8 +161,7 @@ def get_status() -> LibraryStatus:
             tracks_with_mbid=tracks_with_mbid,
             tracks_with_spotify=tracks_with_spotify,
             spotify_attempted=spotify_attempted,
-            tracks_with_embedding=tracks_with_embedding,
-            embeddings_attempted=embeddings_attempted,
+            tracks_with_sonic=tracks_with_sonic,
             tracks_with_listenbrainz=tracks_with_listenbrainz,
             listenbrainz_attempted=listenbrainz_attempted,
         ),

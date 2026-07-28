@@ -1,4 +1,4 @@
-"""Enrichment service — surface-agnostic entry points for metadata enrichment and embeddings."""
+"""Enrichment service — surface-agnostic entry points for metadata enrichment."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ import asyncio
 
 from musicseed.config import get_config
 from musicseed.db.session import ensure_schema, get_session
-from musicseed.embeddings.pipeline import EmbeddingStats, run_embedding_pipeline
 from musicseed.enrichers.pipeline import EnrichmentStats, run_enrichment
 from musicseed.exceptions import ConfigurationError
 
@@ -50,23 +49,4 @@ def enrich_tracks(
                 unattempted_only=resume,
                 concurrency=concurrency,
             )
-        )
-
-
-def generate_embeddings(
-    model: str = "essentia",
-    batch_size: int = 10,
-    limit: int | None = None,
-    missing_only: bool = True,
-    workers: int = 4,
-) -> EmbeddingStats:
-    """Generate audio embeddings for tracks."""
-    with get_session() as session:
-        return run_embedding_pipeline(
-            session=session,
-            model=model,
-            batch_size=batch_size,
-            limit=limit,
-            missing_only=missing_only,
-            workers=workers,
         )

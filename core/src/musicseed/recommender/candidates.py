@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from musicseed.db.models import Genre, Style, Track, TrackStats
 from musicseed.recommender.scoring import SeedProfile
+from musicseed.sonic import SonicVectors
 
 
 class CandidatePool(BaseModel):
@@ -42,6 +43,7 @@ def _ids(query) -> list[int]:
 def build_candidate_pool(
     session: Session,
     seed: SeedProfile,
+    vectors: SonicVectors,
     *,
     limit: int,
     year_min: int | None = None,
@@ -52,64 +54,63 @@ def build_candidate_pool(
     pool = CandidatePool()
     candidate_limit = _limit(limit)
 
-    def apply_year_filter(query):
+    def collect(query, source: str) -> None:
+        """Narrow a source query to the year window, bound it, and pool the results.
+
+        The year filter has to be applied before ``limit`` — SQLAlchemy rejects
+        ``filter()`` on an already-limited query, and filtering after the fact
+        would trim an already-truncated set rather than search within the window.
+        """
         if year_min is not None:
             query = query.filter(Track.year >= year_min)
         if year_max is not None:
             query = query.filter(Track.year <= year_max)
-        return query
+        pool.add_many(_ids(query.limit(candidate_limit)), source, seed.track_ids)
 
-    if seed.embedding is not None and seed.embedding_model is not None:
-        query = (
-            session.query(Track.id)
-            .filter(Track.embedding.isnot(None))
-            .filter(Track.embedding_model == seed.embedding_model)
-            .order_by(Track.embedding.cosine_distance(seed.embedding.tolist()))
-            .limit(candidate_limit)
-        )
-        pool.add_many(_ids(apply_year_filter(query)), "sonic", seed.track_ids)
+    if seed.embedding is not None:
+        # Sonic ranking happens in memory over Plex's vectors; the year window is
+        # still applied in SQL so it constrains this source like the others.
+        nearest_plex_ids = vectors.nearest(seed.embedding, candidate_limit)
+        if nearest_plex_ids:
+            collect(
+                session.query(Track.id).filter(Track.plex_id.in_(nearest_plex_ids)),
+                "sonic",
+            )
 
     if seed.genres:
-        query = (
-            session.query(Track.id)
-            .filter(Track.genres.any(Genre.name.in_(seed.genres)))
-            .limit(candidate_limit)
+        collect(
+            session.query(Track.id).filter(Track.genres.any(Genre.name.in_(seed.genres))),
+            "genre",
         )
-        pool.add_many(_ids(apply_year_filter(query)), "genre", seed.track_ids)
 
     if seed.styles:
-        query = (
-            session.query(Track.id)
-            .filter(Track.styles.any(Style.name.in_(seed.styles)))
-            .limit(candidate_limit)
+        collect(
+            session.query(Track.id).filter(Track.styles.any(Style.name.in_(seed.styles))),
+            "style",
         )
-        pool.add_many(_ids(apply_year_filter(query)), "style", seed.track_ids)
 
     if seed.year is not None:
-        query = (
+        collect(
             session.query(Track.id)
             .filter(Track.year.isnot(None))
-            .order_by(func.abs(Track.year - seed.year))
-            .limit(candidate_limit)
+            .order_by(func.abs(Track.year - seed.year)),
+            "era",
         )
-        pool.add_many(_ids(apply_year_filter(query)), "era", seed.track_ids)
 
     if seed.popularity is not None:
         popularity_expr = func.coalesce(Track.popularity_score * 100, Track.spotify_popularity)
-        query = (
+        collect(
             session.query(Track.id)
             .filter(popularity_expr.isnot(None))
-            .order_by(func.abs(popularity_expr - seed.popularity))
-            .limit(candidate_limit)
+            .order_by(func.abs(popularity_expr - seed.popularity)),
+            "popularity",
         )
-        pool.add_many(_ids(apply_year_filter(query)), "popularity", seed.track_ids)
 
-    novelty_query = (
+    collect(
         session.query(Track.id)
         .outerjoin(TrackStats, TrackStats.track_id == Track.id)
-        .order_by(func.coalesce(TrackStats.play_count, 0), Track.id)
-        .limit(candidate_limit)
+        .order_by(func.coalesce(TrackStats.play_count, 0), Track.id),
+        "novelty",
     )
-    pool.add_many(_ids(apply_year_filter(novelty_query)), "novelty", seed.track_ids)
 
     return pool

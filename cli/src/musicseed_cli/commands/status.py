@@ -70,12 +70,12 @@ def status() -> None:
                 pct(e.tracks_with_spotify, stat.track_count),
             )
             enrichment_table.add_row(
-                "Embeddings",
+                "Plex sonic",
                 f"{stat.track_count:,}",
-                f"{e.embeddings_attempted:,}",
-                f"{e.tracks_with_embedding:,}",
-                pct(e.tracks_with_embedding, e.embeddings_attempted),
-                pct(e.tracks_with_embedding, stat.track_count),
+                "n/a",
+                f"{e.tracks_with_sonic:,}",
+                "n/a",
+                pct(e.tracks_with_sonic, stat.track_count),
             )
             enrichment_table.add_row(
                 "ListenBrainz",

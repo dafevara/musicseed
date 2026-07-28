@@ -7,10 +7,8 @@ that attaches it to the shared Typer application.
 import typer
 
 from musicseed_cli.commands import (
-    embed,
     enrich,
     import_library,
-    import_plex_sonic,
     init_db,
     optimize_db,
     playlist,
@@ -27,11 +25,9 @@ _MODULES = (
     optimize_db,
     status,
     import_library,
-    import_plex_sonic,
     sonic_probe,
     sonic_refresh,
     enrich,
-    embed,
     recommend,
     playlist,
     playlists,

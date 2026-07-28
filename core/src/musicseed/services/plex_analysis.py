@@ -1,6 +1,7 @@
 """Plex sonic analysis service — inspect and trigger Plex's own sonic analysis.
 
-Keeps Plex sonic vectors (imported via ``import_plex_sonic``) up to date:
+Keeps the Plex sonic vectors that MusicSeed reads at query time (see
+``musicseed.sonic``) up to date:
 
 1. Which tracks has Plex already analyzed sonically (``musicAnalysisVersion``)?
 2. Trigger the ``MusicAnalysis`` Butler task on demand (``POST /butler/…``) and

@@ -47,18 +47,16 @@ class PlexConfig(BaseModel):
     def db_path_expanded(self) -> Path:
         return Path(os.path.expanduser(self.db_path))
 
+    @property
+    def blobs_db_path_expanded(self) -> Path:
+        """Path to the Plex blobs database, which holds sonic analysis vectors."""
+        db_path = self.db_path_expanded
+        return db_path.with_name(f"{db_path.stem}.blobs{db_path.suffix}")
+
 
 class SpotifyConfig(BaseModel):
     client_id: str = ""
     client_secret: str = ""
-
-
-class EmbeddingConfig(BaseModel):
-    model: str = "essentia"
-    batch_size: int = 10
-    workers: int = 4
-    model_path: str = ""
-    auto_download_model: bool = True
 
 
 class EnrichmentConfig(BaseModel):
@@ -91,7 +89,6 @@ class Config(BaseModel):
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     plex: PlexConfig = Field(default_factory=PlexConfig)
     spotify: SpotifyConfig = Field(default_factory=SpotifyConfig)
-    embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
     enrichment: EnrichmentConfig = Field(default_factory=EnrichmentConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     recommendation: RecommendationConfig = Field(default_factory=RecommendationConfig)

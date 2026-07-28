@@ -31,13 +31,6 @@ spotify:
   client_id: ${SPOTIFY_CLIENT_ID}
   client_secret: ${SPOTIFY_CLIENT_SECRET}
 
-embedding:
-  model: essentia
-  batch_size: 10
-  workers: 4
-  model_path: ""
-  auto_download_model: true
-
 enrichment:
   concurrency: 5
   batch_size: 50

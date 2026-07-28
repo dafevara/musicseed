@@ -3,7 +3,6 @@
 from datetime import datetime
 from typing import Optional
 
-from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -119,9 +118,8 @@ class Track(Base):
     listenbrainz_listener_count: Mapped[Optional[int]] = mapped_column(Integer)
     listenbrainz_matched: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    # Embedding (pgvector)
-    embedding = mapped_column(Vector(200), nullable=True)
-    embedding_model: Mapped[Optional[str]] = mapped_column(String(50))
+    # Sonic vectors are not stored: they are read from Plex at query time
+    # (see musicseed.sonic), keyed by plex_id.
 
     # Plex reference
     plex_guid: Mapped[Optional[str]] = mapped_column(String(255))
@@ -129,7 +127,6 @@ class Track(Base):
 
     # Enrichment status
     spotify_matched: Mapped[bool] = mapped_column(Boolean, default=False)
-    embedding_generated: Mapped[bool] = mapped_column(Boolean, default=False)
     match_tier: Mapped[Optional[int]] = mapped_column(SmallInteger)
 
     # Timestamps

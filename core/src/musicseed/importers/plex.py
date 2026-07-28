@@ -1,6 +1,5 @@
 """Plex SQLite database importer."""
 
-import gzip
 import sqlite3
 import traceback
 from datetime import datetime
@@ -38,10 +37,6 @@ TAG_TYPE_GENRE = 1
 TAG_TYPE_MOOD = 300
 TAG_TYPE_STYLE = 301
 TAG_TYPE_MBID = 314
-PLEX_SONIC_BLOB_TYPE = 7
-PLEX_SONIC_DIM = 50
-MUSICSEED_EMBEDDING_DIM = 200
-PLEX_SONIC_MODEL = "plex-sonic-v7"
 
 
 class PlexTrackRow(BaseModel):
@@ -56,6 +51,7 @@ class PlexTrackRow(BaseModel):
     duration: int | None
     index: int | None  # track number
     year: int | None
+    album_year: int | None  # fallback: Plex rarely sets year on track rows
     added_at: int | None
     updated_at: int | None
 
@@ -240,7 +236,8 @@ class PlexImporter:
                 mi.id, mi.guid, mi.title, mi.title_sort,
                 mi.parent_id, mi.duration, mi."index", mi.year,
                 mi.added_at, mi.updated_at,
-                album.parent_id as grandparent_id
+                album.parent_id as grandparent_id,
+                album.year as album_year
             FROM metadata_items mi
             LEFT JOIN metadata_items album ON mi.parent_id = album.id
             WHERE mi.library_section_id = ? AND mi.metadata_type = ?
@@ -260,6 +257,7 @@ class PlexImporter:
                 duration=row["duration"],
                 index=row["index"],
                 year=row["year"],
+                album_year=row["album_year"],
                 added_at=row["added_at"],
                 updated_at=row["updated_at"],
             )
@@ -379,191 +377,6 @@ class PlexImporter:
             self._conn = None
 
 
-class PlexSonicImporter:
-    """Import Plex sonic analysis vectors from the Plex blobs database."""
-
-    def __init__(
-        self,
-        plex_db_path: Path,
-        blobs_db_path: Path | None = None,
-        library_name: str = "Music",
-    ):
-        self.plex_db_path = plex_db_path
-        self.blobs_db_path = blobs_db_path or plex_db_path.with_name(
-            f"{plex_db_path.stem}.blobs{plex_db_path.suffix}"
-        )
-        self.library_name = library_name
-        self._conn: sqlite3.Connection | None = None
-
-    def _get_connection(self) -> sqlite3.Connection:
-        """Get read-only SQLite connection to the Plex blobs database."""
-        if self._conn is None:
-            uri = f"file:{self.blobs_db_path}?mode=ro"
-            self._conn = sqlite3.connect(uri, uri=True)
-            self._conn.row_factory = sqlite3.Row
-            self._conn.text_factory = lambda b: b.decode("utf-8", errors="replace")
-            self._conn.execute(
-                "ATTACH DATABASE ? AS mainlib",
-                (f"file:{self.plex_db_path}?mode=ro",),
-            )
-        return self._conn
-
-    def get_counts(self) -> dict[str, int]:
-        """Return Plex sonic vector coverage for the selected music library."""
-        conn = self._get_connection()
-        row = conn.execute(
-            """
-            SELECT COUNT(*) AS total
-            FROM blobs b
-            JOIN mainlib.metadata_items mi
-              ON b.linked_type = 'metadata_item' AND b.linked_id = mi.id
-            JOIN mainlib.library_sections ls ON ls.id = mi.library_section_id
-            WHERE b.blob_type = ?
-              AND b.blob IS NOT NULL
-              AND mi.metadata_type = ?
-              AND mi.deleted_at IS NULL
-              AND ls.name = ?
-              AND ls.section_type = 8
-            """,
-            (PLEX_SONIC_BLOB_TYPE, METADATA_TYPE_TRACK, self.library_name),
-        ).fetchone()
-        return {"vectors": int(row["total"] if row else 0)}
-
-    def iter_vectors(self) -> Generator[tuple[int, list[float] | None], None, None]:
-        """Yield Plex track IDs and decoded vectors, or None for invalid blobs."""
-        conn = self._get_connection()
-        cursor = conn.execute(
-            """
-            SELECT mi.id AS plex_id, b.blob
-            FROM blobs b
-            JOIN mainlib.metadata_items mi
-              ON b.linked_type = 'metadata_item' AND b.linked_id = mi.id
-            JOIN mainlib.library_sections ls ON ls.id = mi.library_section_id
-            WHERE b.blob_type = ?
-              AND b.blob IS NOT NULL
-              AND mi.metadata_type = ?
-              AND mi.deleted_at IS NULL
-              AND ls.name = ?
-              AND ls.section_type = 8
-            ORDER BY mi.id
-            """,
-            (PLEX_SONIC_BLOB_TYPE, METADATA_TYPE_TRACK, self.library_name),
-        )
-
-        for row in cursor:
-            vector = _decode_plex_sonic_vector(row["blob"])
-            yield row["plex_id"], vector
-
-    def close(self) -> None:
-        """Close the database connection."""
-        if self._conn:
-            self._conn.close()
-            self._conn = None
-
-
-def _decode_plex_sonic_vector(blob: bytes) -> list[float] | None:
-    """Decode a Plex sonic blob into MusicSeed's 200-dimensional vector shape."""
-    try:
-        text = gzip.decompress(blob).decode("ascii")
-        values = [float(value) for value in text.split(",") if value]
-    except (OSError, UnicodeDecodeError, ValueError):
-        return None
-
-    if len(values) != PLEX_SONIC_DIM:
-        return None
-
-    return values + [0.0] * (MUSICSEED_EMBEDDING_DIM - PLEX_SONIC_DIM)
-
-
-def import_plex_sonic_embeddings(
-    session: Session,
-    plex_db_path: Path,
-    blobs_db_path: Path | None = None,
-    library_name: str = "Music",
-    overwrite: bool = False,
-) -> dict[str, int]:
-    """Import Plex sonic analysis vectors into MusicSeed track embeddings."""
-    importer = PlexSonicImporter(
-        plex_db_path=plex_db_path,
-        blobs_db_path=blobs_db_path,
-        library_name=library_name,
-    )
-
-    try:
-        counts = importer.get_counts()
-        stats = {
-            "available": counts["vectors"],
-            "imported": 0,
-            "skipped": 0,
-            "missing": 0,
-            "invalid": 0,
-        }
-        batch: list[tuple[int, list[float]]] = []
-
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TaskProgressColumn(),
-            console=console,
-        ) as progress:
-            task = progress.add_task(
-                "Importing Plex sonic vectors...",
-                total=counts["vectors"],
-            )
-            for plex_id, vector in importer.iter_vectors():
-                if vector is None:
-                    stats["invalid"] += 1
-                    progress.advance(task)
-                    continue
-
-                batch.append((plex_id, vector))
-                if len(batch) >= 500:
-                    _update_plex_sonic_batch(session, batch, stats, overwrite)
-                    session.commit()
-                    batch = []
-                progress.advance(task)
-
-            if batch:
-                _update_plex_sonic_batch(session, batch, stats, overwrite)
-
-        session.commit()
-        return stats
-    finally:
-        importer.close()
-
-
-def _update_plex_sonic_batch(
-    session: Session,
-    batch: list[tuple[int, list[float]]],
-    stats: dict[str, int],
-    overwrite: bool,
-) -> None:
-    """Update MusicSeed tracks for one batch of Plex sonic vectors."""
-    vectors_by_plex_id = dict(batch)
-    tracks = (
-        session.query(Track)
-        .filter(Track.plex_id.in_(vectors_by_plex_id.keys()))
-        .all()
-    )
-    tracks_by_plex_id = {track.plex_id: track for track in tracks if track.plex_id is not None}
-
-    for plex_id, vector in vectors_by_plex_id.items():
-        track = tracks_by_plex_id.get(plex_id)
-        if track is None:
-            stats["missing"] += 1
-            continue
-
-        if track.embedding is not None and not overwrite:
-            stats["skipped"] += 1
-            continue
-
-        track.embedding = vector
-        track.embedding_model = PLEX_SONIC_MODEL
-        track.embedding_generated = True
-        stats["imported"] += 1
-
-
 def import_from_plex(
     session: Session,
     plex_db_path: Path,
@@ -677,7 +490,8 @@ def import_from_plex(
                 track.title_sort = plex_track.title_sort
                 track.duration_ms = plex_track.duration
                 track.track_number = plex_track.index
-                track.year = plex_track.year
+                # Plex sets year on album rows far more reliably than on track rows.
+                track.year = plex_track.year or plex_track.album_year
                 track.plex_id = plex_track.id
                 track.plex_guid = plex_track.guid
 

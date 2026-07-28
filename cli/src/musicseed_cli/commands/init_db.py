@@ -8,7 +8,7 @@ from musicseed_cli.console import console
 
 
 def init_database() -> None:
-    """Initialize the database schema (creates tables and extensions)."""
+    """Initialize the database schema (creates tables)."""
     from musicseed.services import library as library_service
 
     config = get_config()
@@ -21,7 +21,6 @@ def init_database() -> None:
         with console.status("[bold green]Creating tables..."):
             library_service.initialize_database()
         console.print("[green]✓ Database initialized successfully![/green]")
-        console.print("  - pgvector extension enabled")
         console.print("  - All tables created\n")
     except Exception as e:
         console.print(f"[red]✗ Failed to initialize database: {e}[/red]")

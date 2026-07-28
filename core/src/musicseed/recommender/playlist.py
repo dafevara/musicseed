@@ -17,6 +17,7 @@ from musicseed.recommender.scoring import (
     build_seed_profile,
     calculate_score,
 )
+from musicseed.sonic import get_sonic_vectors
 
 
 class Recommendation(BaseModel):
@@ -135,11 +136,13 @@ def recommend_tracks(
         raise ValueError("max_tracks_per_artist must be greater than zero")
 
     weights = weights or Weights()
+    vectors = get_sonic_vectors()
     seed_tracks = resolve_seed_tracks(session, seed_texts=seed_texts, seed_ids=seed_ids)
-    seed_profile = build_seed_profile(seed_tracks)
+    seed_profile = build_seed_profile(seed_tracks, vectors)
     candidate_pool = build_candidate_pool(
         session,
         seed_profile,
+        vectors,
         limit=limit,
         year_min=year_min,
         year_max=year_max,
@@ -158,7 +161,7 @@ def recommend_tracks(
     scored = [
         Recommendation(
             track=track,
-            score=calculate_score(track, seed_profile, weights),
+            score=calculate_score(track, seed_profile, weights, vectors),
             sources=candidate_pool.sources_for(track.id),
         )
         for track in candidates

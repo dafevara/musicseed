@@ -8,6 +8,7 @@ import numpy as np
 from pydantic import BaseModel
 
 from musicseed.db.models import Track
+from musicseed.sonic import SonicVectors
 
 
 class Weights(BaseModel):
@@ -36,7 +37,6 @@ class SeedProfile(BaseModel):
 
     track_ids: set[int]
     embedding: Any  # np.ndarray | None
-    embedding_model: str | None
     styles: set[str]
     genres: set[str]
     year: int | None
@@ -108,17 +108,11 @@ def track_popularity_value(track: Track) -> float | None:
     return None
 
 
-def build_seed_profile(seed_tracks: Sequence[Track]) -> SeedProfile:
-    embedding_models = {
-        track.embedding_model
-        for track in seed_tracks
-        if track.embedding is not None and track.embedding_model
-    }
-    embedding_model = next(iter(embedding_models)) if len(embedding_models) == 1 else None
+def build_seed_profile(seed_tracks: Sequence[Track], vectors: SonicVectors) -> SeedProfile:
     embeddings = [
-        _as_vector(track.embedding)
-        for track in seed_tracks
-        if track.embedding is not None and track.embedding_model == embedding_model
+        vector
+        for vector in (vectors.get(track.plex_id) for track in seed_tracks)
+        if vector is not None
     ]
     embedding = np.mean(embeddings, axis=0) if embeddings else None
 
@@ -130,7 +124,6 @@ def build_seed_profile(seed_tracks: Sequence[Track]) -> SeedProfile:
     return SeedProfile(
         track_ids={track.id for track in seed_tracks},
         embedding=embedding,
-        embedding_model=embedding_model,
         styles=styles,
         genres=genres,
         year=round(year) if year is not None else None,
@@ -157,15 +150,18 @@ def novelty_score(play_count: int | None) -> float:
     return 1.0 / (1.0 + count * 0.2)
 
 
-def calculate_score(candidate: Track, seed: SeedProfile, weights: Weights) -> ScoreBreakdown:
+def calculate_score(
+    candidate: Track,
+    seed: SeedProfile,
+    weights: Weights,
+    vectors: SonicVectors,
+) -> ScoreBreakdown:
     candidate_styles = {style.name for style in candidate.styles}
     candidate_genres = {genre.name for genre in candidate.genres}
     play_count = candidate.stats.play_count if candidate.stats else 0
 
-    if candidate.embedding_model == seed.embedding_model:
-        sonic = cosine_similarity(candidate.embedding, seed.embedding)
-    else:
-        sonic = 0.5
+    # cosine_similarity returns the 0.5 neutral when either side has no vector.
+    sonic = cosine_similarity(vectors.get(candidate.plex_id), seed.embedding)
     popularity = popularity_proximity(seed.popularity, track_popularity_value(candidate))
     style = jaccard(seed.styles, candidate_styles) if seed.styles else 0.5
     genre = jaccard(seed.genres, candidate_genres) if seed.genres else 0.5
