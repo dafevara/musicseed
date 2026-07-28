@@ -11,8 +11,8 @@ rules, then routes you to the app you're working in. **Read the per-app `AGENTS.
 ## Fast Context
 
 - Product: generate Plex playlists from seed tracks using local library metadata, popularity
-  enrichment, audio embeddings, and play history.
-- Runtime: Python 3.11+, SQLAlchemy, PostgreSQL 16 with pgvector, uv. Typer/Rich in the CLI.
+  enrichment, Plex sonic analysis vectors (read at query time), and play history.
+- Runtime: Python 3.11+, SQLAlchemy, PostgreSQL 16, uv. Typer/Rich in the CLI.
 - Platform: macOS on Apple Silicon, run from source.
 - Recommendation signals (six): sonic, popularity, style, genre, era, novelty.
 
@@ -23,7 +23,7 @@ and `.venv`; run `uv` commands from inside the app directory.
 
 | Path | What | Guide |
 |---|---|---|
-| `core/` | `musicseed-core` — all logic (import, enrich, embed, recommender, db, config). Importable as `musicseed`. Library only, no CLI. | [`core/AGENTS.md`](core/AGENTS.md) |
+| `core/` | `musicseed-core` — all logic (import, enrich, sonic vectors, recommender, db, config). Importable as `musicseed`. Library only, no CLI. | [`core/AGENTS.md`](core/AGENTS.md) |
 | `cli/` | `musicseed-cli` — Typer CLI (`musicseed`). Thin wrapper over core's services; depends on core via an editable path. | [`cli/AGENTS.md`](cli/AGENTS.md) |
 | `api/`, `mcp/`, `web/` | Future surfaces (HTTP API, MCP server, frontend). Not present yet; each will be a sibling app depending on `core`. | — |
 
@@ -51,7 +51,8 @@ If you're adding recommendation/db/Plex logic to a surface, move it to `core`.
 - Music/recommendation domain concepts: `docs/domain/music-recommendation.md`.
 - Local services, config, logs, and verification commands: `docs/infra/local-runtime.md`.
 - Seed matching, candidate generation, scoring, playlist selection: `docs/resolvers/recommendation-resolvers.md`.
-- Historical plan and architecture: `docs/implementation-plan.md`, `docs/ard/001-initial-system-design.md`.
+- Historical plan and architecture: `docs/implementation-plan.md`, `docs/ard/001-initial-system-design.md`
+  (partially superseded by `docs/ard/002-sonic-vectors-at-query-time.md`).
 
 ## Shared Commands
 
@@ -68,8 +69,8 @@ App-specific commands and verification live in each app's `AGENTS.md`.
 
 - Do not delete or rewrite `data/`, `logs/`, local Plex databases, or PostgreSQL volumes unless
   the user explicitly asks.
-- Do not run full-library import, enrichment, or embedding jobs without user confirmation. Use
-  `--limit`, `--dry-run`, `--resume`, and low worker counts when exploring behavior.
+- Do not run full-library import or enrichment jobs without user confirmation. Use
+  `--limit`, `--dry-run`, and `--resume` when exploring behavior.
 - Do not expose Plex tokens, Spotify credentials, database passwords, local library file paths, or
   logs containing secrets.
 - Treat external APIs as optional and rate-limited. ListenBrainz is preferred when MBIDs exist;

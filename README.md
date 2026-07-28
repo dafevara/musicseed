@@ -1,8 +1,9 @@
 # MusicSeed
 
 MusicSeed is a personal music recommendation tool for a local Plex music library. It imports Plex
-metadata into PostgreSQL, enriches tracks with popularity signals, generates audio embeddings,
-produces seed-based recommendations, and writes them back to Plex as playlists.
+metadata into PostgreSQL, enriches tracks with popularity signals, reads Plex's sonic analysis
+vectors for similarity, produces seed-based recommendations, and writes them back to Plex as
+playlists.
 
 This is a DIY, home-usage project. The design favors simple local operation, recoverable batch
 jobs, and explainable recommendations over large-scale product architecture.
@@ -10,10 +11,11 @@ jobs, and explainable recommendations over large-scale product architecture.
 ## What It Does
 
 - Imports artists, albums, tracks, tags, file paths, MusicBrainz IDs, and play history from the
-  Plex SQLite database into PostgreSQL 16 with pgvector.
+  Plex SQLite database into PostgreSQL 16.
 - Enriches popularity from ListenBrainz by MusicBrainz recording MBID, with Spotify as an optional
   fallback.
-- Generates or imports 200-dimensional stored audio vectors for sonic similarity.
+- Uses Plex's own sonic analysis vectors (50-dimensional, read in memory at query time) for sonic
+  similarity — MusicSeed generates no embeddings and stores no vectors.
 - Recommends tracks from six signals: sonic similarity, popularity proximity, style, genre, era,
   and novelty.
 - Creates and populates Plex playlists from recommendations via a Typer CLI with Rich output.
@@ -38,7 +40,7 @@ MusicSeed is a monorepo of independent apps that share one core library. Each ap
 `pyproject.toml` and its own `uv.lock`/virtualenv.
 
 - **[`core/`](core/README.md)** — `musicseed-core`, the reusable library (import, enrichment,
-  embeddings, recommender, db, config). Importable as `musicseed`. All logic lives here; no UI.
+  sonic vectors, recommender, db, config). Importable as `musicseed`. All logic lives here; no UI.
 - **[`cli/`](cli/README.md)** — `musicseed-cli`, the Typer command-line app. Depends on `core` via
   an editable path dependency. **This is how you use MusicSeed today.**
 - `api/`, `mcp/`, `web/` — future surfaces (HTTP API, MCP server, frontend). Not present yet; each

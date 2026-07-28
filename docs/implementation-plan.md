@@ -6,6 +6,12 @@ Implementation plan for MusicSeed - a music recommendation CLI tool that creates
 
 **Reference:** `/Users/dafevara/Projects/MusicSeed/docs/ard/001-initial-system-design.md`
 
+> **Historical note (July 2026):** this plan describes the original build, including a Phase 3
+> "Audio Embeddings" pipeline (Essentia + pgvector) that was later removed. MusicSeed now reads
+> Plex sonic vectors at query time and stores no vectors — see
+> [ARD 002](ard/002-sonic-vectors-at-query-time.md). Keep this document as history; do not treat
+> its embedding/pgvector sections as current design.
+
 ---
 
 ## Target Platform

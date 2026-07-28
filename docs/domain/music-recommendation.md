@@ -7,7 +7,7 @@ lightweight external enrichment.
 
 - Artist: performer or credited artist imported from Plex.
 - Album: release container imported from Plex.
-- Track: playable recording with metadata, file path, identifiers, tags, popularity, embedding,
+- Track: playable recording with metadata, file path, identifiers, tags, popularity,
   and Plex references.
 - Mood, style, genre: Plex tag dimensions used as soft recommendation signals.
 - Play history and track stats: listening behavior used for novelty and discovery.
@@ -15,7 +15,8 @@ lightweight external enrichment.
 
 ## Recommendation Signals
 
-- Sonic similarity: vector similarity between the seed embedding profile and candidate embeddings.
+- Sonic similarity: cosine similarity between the seed profile's average Plex sonic vector and
+  candidate vectors.
 - Popularity proximity: closeness to the seed track popularity, not a generic popularity boost.
 - Style alignment: overlap between seed and candidate styles.
 - Genre alignment: overlap between seed and candidate genres.
@@ -26,9 +27,9 @@ Mood was removed from scoring and candidate generation. Plex mood tags remain in
 are visible in `status`, but they introduce noise rather than a reliable ranking signal and have
 been excluded from `SeedProfile`, `Weights`, `ScoreBreakdown`, and `build_candidate_pool()`.
 
-Missing signals should degrade gracefully. A track without a popularity value or embedding should
-not crash the recommendation flow; it should receive neutral or lower component scores depending
-on the scoring function.
+Missing signals should degrade gracefully. A track without a popularity value or sonic vector
+should not crash the recommendation flow; it should receive neutral or lower component scores
+depending on the scoring function.
 
 ## Popularity
 
@@ -44,19 +45,23 @@ ListenBrainz raw counts are normalized into `Track.popularity_score` on a 0-1 sc
 popularity is a 0-100 provider value. Scoring converts the best available value to a comparable
 0-100 scale before computing proximity to the seed profile.
 
-## Embeddings
+## Sonic Vectors
 
-Embeddings represent audio similarity and are stored in pgvector as 200-dimensional vectors.
-Essentia MusiCNN writes native 200-dimensional feature vectors. Plex sonic analysis stores
-50-dimensional vectors in `com.plexapp.plugins.library.blobs.db`; MusicSeed pads those to 200
-dimensions and records `embedding_model = "plex-sonic-v7"` so recommendation queries only compare
-vectors from the same source.
-Generation is expensive compared with metadata operations, so development runs should use `--limit`,
-`--workers 1`, and `--missing-only`. Plex sonic import should be preferred when Plex has already
-analyzed the library.
+Sonic similarity uses Plex's own sonic analysis vectors. Plex stores one 50-dimensional vector per
+analyzed track in `com.plexapp.plugins.library.blobs.db`; MusicSeed reads them straight from that
+database at query time (`core/src/musicseed/sonic.py`) into an in-memory, L2-normalized matrix
+keyed by `plex_id`. Nearest-neighbor search is a single numpy matmul — trivially fast at
+personal-library scale — so there is no vector index and no stored copy that could drift out of
+date. MusicSeed does not generate its own embeddings (the Essentia pipeline was removed) and never
+reads audio files.
 
-Use embeddings as one signal among several. A recommendation should still produce reasonable
-results when embeddings are incomplete by falling back to tags, era, popularity, and novelty.
+Coverage is Plex's responsibility. A track Plex hasn't analyzed simply has no vector and receives
+a neutral 0.5 sonic score. If the Plex blobs database itself is unavailable, `recommend` fails
+with `NotFoundError` rather than degrading silently. Check coverage with `sonic-probe`; trigger
+analysis with `sonic-refresh`.
+
+Use sonic similarity as one signal among several. A recommendation should still produce reasonable
+results for tracks without vectors by falling back to tags, era, popularity, and novelty.
 
 ## Diversity
 

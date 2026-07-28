@@ -27,7 +27,7 @@ the logic this app calls. This file covers the CLI app only.
 - `src/musicseed_cli/commands/`: **one module per command**, each exposing a plain command function
   plus a `register(app)` that attaches it. `commands/__init__.py` holds `register_all(app)`, which
   registers all modules in the intended command order. Modules: `init_db`, `optimize_db`, `status`,
-  `import_library`, `import_plex_sonic`, `sonic_probe`, `sonic_refresh`, `enrich`, `embed`,
+  `import_library`, `sonic_probe`, `sonic_refresh`, `enrich`,
   `recommend`, `playlist`, `playlists`, `populate`. To add a command, create a module with
   `register(app)` and list it in
   `commands/__init__.py`.
@@ -46,11 +46,10 @@ Imports from core are unchanged from the pre-monorepo layout (`from musicseed.co
 | Command | Calls |
 |---|---|
 | `init-db` / `optimize-db` / `status` | `services.library.initialize_database` / `optimize_database` / `get_status` |
-| `import` / `import-plex-sonic` | `services.library.import_library` / `import_plex_sonic` |
+| `import` | `services.library.import_library` |
 | `sonic-probe` (`--trigger`/`--trigger-butler` confirm before touching Plex) | `services.plex_analysis.get_sonic_status` / `probe_sonic_trigger` / `probe_butler_trigger` |
 | `sonic-refresh` (`--days N`, confirms before triggering the Butler task) | `services.plex_analysis.refresh_sonic_analysis` |
 | `enrich` (`--source spotify|listenbrainz`) | `services.enrichment.enrich_tracks` |
-| `embed` | `services.enrichment.generate_embeddings` |
 | `recommend` | `services.recommend.get_recommendations` |
 | `playlist` | `get_recommendations` → confirm → `services.recommend.create_playlist` |
 | `playlists` | `services.populate.list_plex_playlists` |
@@ -91,7 +90,6 @@ Use limits when exercising slow/stateful paths:
 
 ```bash
 uv run musicseed enrich --source listenbrainz --limit 100 --batch-size 50 --resume
-uv run musicseed embed --limit 10 --workers 1 --missing-only
 uv run musicseed recommend --seed-id 123 --limit 20 --explain
 ```
 

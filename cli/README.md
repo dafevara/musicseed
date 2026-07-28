@@ -25,9 +25,7 @@ uv run musicseed status                     # library + enrichment coverage
 
 # Ingest (use --limit while exploring)
 uv run musicseed import
-uv run musicseed import-plex-sonic          # import existing Plex sonic vectors
 uv run musicseed enrich --source listenbrainz --limit 100 --batch-size 50 --resume
-uv run musicseed embed --limit 10 --workers 1 --missing-only
 
 # Recommend / create playlists
 uv run musicseed recommend --seed-id 123 --limit 20 --explain
@@ -40,6 +38,10 @@ uv run musicseed populate --playlist "My Mix" --dry-run      # preview complemen
 `--w-style`, `--w-genre`, `--w-era`, `--w-novelty`), year filters (`--year-min`/`--year-max`),
 `--artist-max`, and `--min-score`. `playlist` and `populate` prompt for confirmation before
 writing to Plex; `populate --dry-run` previews without writing.
+
+Recommendations read Plex's sonic analysis vectors directly from the Plex blobs database, so
+tracks must be sonically analyzed by Plex first — check coverage with `musicseed sonic-probe` and
+trigger analysis with `musicseed sonic-refresh`.
 
 ## Configuration
 

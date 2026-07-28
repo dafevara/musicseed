@@ -1,7 +1,7 @@
 # musicseed-core
 
 Core library for [MusicSeed](../README.md). It contains all of the project's logic — Plex import,
-metadata enrichment, audio embeddings, the recommender, database access, and configuration — with
+metadata enrichment, the recommender, database access, and configuration — with
 **no user interface**. App surfaces such as [`../cli`](../cli) depend on this package and drive it
 through its `services/` layer.
 
@@ -42,13 +42,12 @@ core/
 ├── pyproject.toml            # musicseed-core; deps; hatchling build of src/musicseed
 ├── uv.lock
 └── src/musicseed/
-    ├── config.py  exceptions.py  logging_config.py
+    ├── config.py  exceptions.py  logging_config.py  sonic.py
     ├── db/                    # SQLAlchemy models + session/engine/schema/indexes
     ├── services/             # surface-agnostic application layer (call this)
     ├── recommender/          # seed resolution, candidates, scoring, playlist/populate
     ├── enrichers/            # ListenBrainz / Spotify / MusicBrainz + pipeline
-    ├── embeddings/           # Essentia audio-embedding pipeline
-    ├── importers/            # Plex SQLite metadata + sonic import
+    ├── importers/            # Plex SQLite metadata import
     └── clients/plex_api.py   # Plex Media Server HTTP client
 ```
 
@@ -60,7 +59,8 @@ uv run ruff check src
 python3 -m compileall -q src/musicseed
 ```
 
-`essentia-tensorflow` is pinned to `2.1b6.dev1389` (newer dev builds drop CPython 3.11 wheels).
+`sonic.py` reads Plex's sonic analysis vectors straight from the Plex blobs database at query
+time; there is no embedding pipeline and no stored vector copy.
 DB-touching work needs `docker-compose up -d` from the repo root and a configured database.
 
 See [`AGENTS.md`](AGENTS.md) for the full code map, service entry points, and conventions.

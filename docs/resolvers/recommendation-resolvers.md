@@ -4,10 +4,11 @@ This document explains how seed input becomes a ranked recommendation list.
 
 ## Entry Points
 
-- CLI command: `musicseed recommend` in `src/musicseed/cli.py`.
-- Orchestration: `src/musicseed/recommender/playlist.py`.
-- Candidate generation: `src/musicseed/recommender/candidates.py`.
-- Scoring: `src/musicseed/recommender/scoring.py`.
+- CLI command: `musicseed recommend` in `cli/src/musicseed_cli/commands/recommend.py`.
+- Orchestration: `core/src/musicseed/recommender/playlist.py`.
+- Candidate generation: `core/src/musicseed/recommender/candidates.py`.
+- Scoring: `core/src/musicseed/recommender/scoring.py`.
+- Sonic vectors (read from Plex at query time): `core/src/musicseed/sonic.py`.
 
 ## Seed Resolution
 
@@ -26,7 +27,7 @@ asking the user for a better seed.
 Resolved seed tracks are combined into a `SeedProfile`:
 
 - Track IDs to exclude from recommendations.
-- Average embedding when seed embeddings exist.
+- Average of the seeds' Plex sonic vectors (looked up by `plex_id`); absent when no seed has one.
 - Union of seed styles and genres.
 - Average seed year.
 - Average seed popularity on a 0-100 scale.
@@ -38,7 +39,8 @@ predictable, update this doc and the `--explain` output.
 
 `build_candidate_pool()` gathers overlapping candidate IDs from available signals:
 
-- Sonic neighbors from pgvector.
+- Sonic neighbors: top-N cosine-nearest Plex sonic vectors, computed in memory with one numpy
+  matmul over the vector matrix and mapped from `plex_id` back to tracks.
 - Tracks sharing seed genres.
 - Tracks sharing seed styles.
 - Tracks near the seed era.
@@ -115,5 +117,6 @@ When adding a signal, update:
 - Run `python3 -m compileall -q src/musicseed`.
 - Run `uv run ruff check src` if dependencies are available.
 - Use a dry run: `uv run musicseed recommend --seed-id 123 --limit 20 --dry-run --explain`.
-- Confirm missing embeddings, missing popularity, and missing tags do not crash scoring.
+- Confirm tracks without sonic vectors, missing popularity, and missing tags do not crash scoring.
+- Confirm a missing Plex blobs database fails `recommend` with a clear `NotFoundError`.
 - Confirm ambiguous seed text still fails clearly.

@@ -1,7 +1,7 @@
 # musicseed-core — Agent Guide
 
 `core/` is the reusable library that holds **all** of MusicSeed's logic: Plex import, metadata
-enrichment, audio embeddings, the recommender, database access, and configuration. It has no
+enrichment, the recommender, database access, and configuration. It has no
 user interface. Every app surface (the `cli/`, and future `api/`/`mcp/`) depends on this package
 and drives it through the `services/` layer.
 
@@ -30,9 +30,9 @@ only layer app surfaces should call. Each service function:
 Service entry points:
 
 - `services/library.py`: `initialize_database`, `optimize_database`, `import_library`,
-  `import_plex_sonic`, `get_status`.
+  `get_status`.
 - `services/enrichment.py`: `enrich_tracks` (**calls `asyncio.run()` internally — never call it
-  from inside a running event loop; offload to a thread**), `generate_embeddings`.
+  from inside a running event loop; offload to a thread**).
 - `services/recommend.py`: `get_recommendations`, `create_playlist`.
 - `services/populate.py`: `list_plex_playlists`, `get_populate_recommendations`,
   `populate_playlist`.
@@ -53,13 +53,17 @@ Service entry points:
   own `__file__` to the nearest `pyproject.toml` and writes `logs/` beside it, so logs land in
   `core/logs/`. Pass an explicit `log_dir` to override.
 - `db/models.py`: SQLAlchemy 2.0 ORM (Artist, Album, Track, tag tables, play history, stats,
-  playlists). `Track.embedding` is a `pgvector` `Vector(200)`.
+  playlists). No vector columns: sonic vectors are not stored.
 - `db/session.py`: `get_engine`, `get_session_factory` (`expire_on_commit=False`), `get_session`
   (commit/rollback/close context manager), `init_db`, `ensure_schema` (additive migrations),
   `create_indexes`, `reset_engine` (dispose engine — the hook for tests/config reload).
-- `importers/plex.py`: Plex SQLite metadata + sonic-blob import.
+- `importers/plex.py`: Plex SQLite metadata import. Track years fall back to the album year when
+  Plex doesn't set one on the track row.
 - `enrichers/`: ListenBrainz, Spotify, MusicBrainz clients + the async enrichment pipeline.
-- `embeddings/`: Essentia audio-embedding pipeline and model wrapper.
+- `sonic.py`: Plex sonic analysis vectors read at query time from the Plex blobs DB into an
+  in-memory L2-normalized matrix (`SonicVectors`, keyed by `plex_id`). Lazy global cache via
+  `get_sonic_vectors()` / `reset_sonic_vectors()`; raises `NotFoundError` when the Plex databases
+  are unavailable.
 - `recommender/`: `scoring.py` (`Weights`, `ScoreBreakdown`, `SeedProfile`, `calculate_score`),
   `candidates.py` (`build_candidate_pool`), `playlist.py` (`Recommendation`, `recommend_tracks`,
   `resolve_seed_tracks` — raises `ValueError` on unresolved seeds), `populate.py`
@@ -75,17 +79,15 @@ Service entry points:
   `Track`s stay usable after the session closes — preserve both if you touch loading.
 - **Recommendation signals are exactly six**: sonic, popularity, style, genre, era, novelty. There
   is no "mood" signal (it was removed). `Weights`/`ScoreBreakdown` are frozen Pydantic models.
-- **`rich` is a real core dependency** — the import/enrich/embed pipelines render progress with it.
+- **`rich` is a real core dependency** — the import/enrich pipelines render progress with it.
   Keep it in core deps even though it's UI-flavored.
-- **`essentia-tensorflow` is pinned to `==2.1b6.dev1389`.** Newer dev builds dropped CPython 3.11
-  wheels; do not loosen this pin without confirming a cp311 wheel exists.
 - **Everything is synchronous** (sync SQLAlchemy + httpx), except the enrichment pipeline which is
   async internally and wrapped by `asyncio.run()` in the service.
 
 ## Dependencies
 
-`rich`, `sqlalchemy>=2.0`, `psycopg[binary]`, `pgvector`, `pyyaml`, `httpx`, `numpy`,
-`essentia-tensorflow==2.1b6.dev1389`, `pydantic>=2.0`. After changing deps: `uv lock && uv sync`
+`rich`, `sqlalchemy>=2.0`, `psycopg[binary]`, `pyyaml`, `httpx`, `numpy`, `pydantic>=2.0`.
+After changing deps: `uv lock && uv sync`
 in `core/`, then re-lock dependent apps (`cd ../cli && uv lock`).
 
 ## Verify (from `core/`)

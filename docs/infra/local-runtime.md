@@ -4,11 +4,12 @@ MusicSeed runs locally from source. Infrastructure should remain boring and insp
 
 ## Runtime Pieces
 
-- Python 3.11+ package under `src/musicseed`.
+- Python 3.11+ packages under `core/src/musicseed` (library) and `cli/src/musicseed_cli` (CLI).
 - uv for dependency management and command execution.
-- PostgreSQL 16 with pgvector from `docker-compose.yml`.
+- PostgreSQL 16 from `docker-compose.yml`.
 - Plex SQLite database as a read-only import source.
-- Optional Plex HTTP API for playlist creation (`src/musicseed/clients/plex_api.py`).
+- Plex blobs SQLite database as a read-only source of sonic analysis vectors (read at query time).
+- Optional Plex HTTP API for playlist creation (`core/src/musicseed/clients/plex_api.py`).
 - Optional external HTTP APIs: ListenBrainz and Spotify.
 - Local logs under `logs/`.
 
@@ -31,7 +32,7 @@ uv run musicseed optimize-db
 uv run musicseed status
 ```
 
-`init-db` creates tables and enables pgvector. `optimize-db` creates search, queue, tag, and vector
+`init-db` creates tables. `optimize-db` creates search, queue, and tag
 indexes. `ensure_schema()` applies lightweight additive updates for existing local databases.
 
 ## Configuration
@@ -46,7 +47,7 @@ Environment variables and `~` are expanded. Keep credentials out of repo-local t
 
 ## Logging
 
-The CLI configures file logging through `src/musicseed/logging_config.py`.
+The CLI configures file logging through `core/src/musicseed/logging_config.py`.
 
 - Timestamped run logs: `logs/musicseed_YYYYMMDD_HHMMSS.log`
 - Latest run: `logs/latest.log`
@@ -59,7 +60,7 @@ output. Console output should summarize progress and outcome.
 These are cheap and should be used before heavier checks:
 
 ```bash
-python3 -m compileall -q src/musicseed
+python3 -m compileall -q core/src/musicseed cli/src/musicseed_cli
 uv run ruff check src
 uv run musicseed --help
 ```
@@ -68,8 +69,7 @@ Stateful commands should be limited during development:
 
 ```bash
 uv run musicseed enrich --source listenbrainz --limit 100 --batch-size 50 --resume
-uv run musicseed import-plex-sonic
-uv run musicseed embed --limit 10 --workers 1 --missing-only
+uv run musicseed sonic-probe
 uv run musicseed recommend --seed-id 123 --limit 20 --dry-run --explain
 ```
 
@@ -78,9 +78,8 @@ uv run musicseed recommend --seed-id 123 --limit 20 --dry-run --explain
 Ask before running:
 
 - Full Plex import on the user's real library.
-- Full Plex sonic import with `--overwrite`.
 - Full ListenBrainz or Spotify enrichment.
-- Full-library embedding generation.
+- Triggering Plex's MusicAnalysis Butler task (`sonic-refresh`, `sonic-probe --trigger-butler`).
 - Any operation that writes or rewrites Plex playlists.
 - PostgreSQL volume deletion or data reset.
 

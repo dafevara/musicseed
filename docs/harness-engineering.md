@@ -38,7 +38,7 @@ Sensors are feedback mechanisms that tell an agent whether work is valid.
 Computational sensors:
 
 ```bash
-python3 -m compileall -q src/musicseed
+python3 -m compileall -q core/src/musicseed cli/src/musicseed_cli
 uv run ruff check src
 uv run musicseed --help
 ```
@@ -53,7 +53,7 @@ uv run musicseed recommend --seed-id 123 --limit 20 --dry-run --explain
 Human sensors:
 
 - Inspect a dry-run playlist before writing to Plex.
-- Review `logs/latest.log` after failed imports, enrichment runs, or embedding jobs.
+- Review `logs/latest.log` after failed imports or enrichment runs.
 - Prefer a small sample run before full-library work.
 
 ## Fit-For-Project Practices
