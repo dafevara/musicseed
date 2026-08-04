@@ -16,8 +16,7 @@ def optimize_database() -> None:
     config = get_config()
 
     console.print("\n[bold]Optimizing database[/bold]")
-    console.print(f"  Host: {config.database.host}:{config.database.port}")
-    console.print(f"  Database: {config.database.name}\n")
+    console.print(f"  File: {config.database.path_expanded}\n")
 
     try:
         with console.status("[bold green]Creating indexes..."):

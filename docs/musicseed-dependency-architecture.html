@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MusicSeed — Dependency &amp; Workflow Architecture</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel-2: #1d212b;
+    --border: #2b3140;
+    --text: #e6e9ef;
+    --muted: #9aa3b2;
+    --accent: #6ea8fe;
+    --green: #5fd0a5;
+    --red: #e5707e;
+    --amber: #e5b567;
+    --purple: #b48ead;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.6 -apple-system, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 48px 24px 96px; }
+  h1 { font-size: 30px; margin: 0 0 4px; }
+  h2 {
+    font-size: 20px; margin: 56px 0 16px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  h3 { font-size: 16px; margin: 24px 0 8px; }
+  p, li { color: var(--muted); }
+  p strong, li strong { color: var(--text); }
+  code {
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 4px; padding: 1px 6px; font-size: 13px;
+    font-family: "SF Mono", Menlo, Consolas, monospace; color: var(--text);
+  }
+  pre {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 16px; overflow-x: auto; font-size: 13px;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+  }
+  pre code { background: none; border: none; padding: 0; }
+  .subtitle { color: var(--muted); margin-top: 0; }
+  .badge {
+    display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px;
+    padding: 2px 10px; margin-right: 6px; vertical-align: middle;
+  }
+  .badge.green { background: rgba(95,208,165,.12); color: var(--green); border: 1px solid rgba(95,208,165,.4); }
+  .badge.red { background: rgba(229,112,126,.12); color: var(--red); border: 1px solid rgba(229,112,126,.4); }
+  .badge.blue { background: rgba(110,168,254,.12); color: var(--accent); border: 1px solid rgba(110,168,254,.4); }
+
+  .grid { display: grid; gap: 14px; }
+  .grid.cols-2 { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  .grid.cols-3 { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .card h4 { margin: 0 0 6px; font-size: 14px; }
+  .card p { margin: 4px 0; font-size: 13.5px; }
+  .card .num { font-size: 26px; font-weight: 700; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin: 8px 0; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--text); font-size: 12.5px; text-transform: uppercase; letter-spacing: .04em; }
+  td { color: var(--muted); }
+  td:first-child { color: var(--text); font-family: "SF Mono", Menlo, monospace; font-size: 12.5px; }
+  tr.removed td:first-child { text-decoration: line-through; color: var(--red); }
+  .tag { font-size: 11.5px; font-weight: 600; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+  .tag.kept { background: rgba(95,208,165,.12); color: var(--green); }
+  .tag.gone { background: rgba(229,112,126,.12); color: var(--red); }
+  .tag.core { background: rgba(110,168,254,.12); color: var(--accent); }
+  .tag.cli { background: rgba(180,142,173,.12); color: var(--purple); }
+  .tag.opt { background: rgba(229,181,103,.12); color: var(--amber); }
+
+  figure {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 20px; margin: 16px 0; overflow-x: auto;
+  }
+  figcaption { font-size: 12.5px; color: var(--muted); margin-top: 10px; }
+  svg text { font-family: -apple-system, "SF Pro Text", "Segoe UI", sans-serif; }
+  .box-label { font-size: 12px; font-weight: 600; fill: var(--text); }
+  .box-sub { font-size: 10px; fill: var(--muted); }
+  .flow-label { font-size: 9.5px; fill: var(--muted); }
+
+  .note {
+    background: rgba(110,168,254,.07); border: 1px solid rgba(110,168,254,.3);
+    border-radius: 8px; padding: 12px 16px; font-size: 13.5px; color: var(--muted);
+  }
+  .note strong { color: var(--accent); }
+  footer { margin-top: 72px; font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 16px; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>MusicSeed — Dependency &amp; Workflow Architecture</h1>
+<p class="subtitle">
+  Post dependency-reduction snapshot · August 2026 ·
+  <span class="badge green">SQLite only</span>
+  <span class="badge green">No Docker</span>
+  <span class="badge green">No ML runtime</span>
+</p>
+
+<p>This document explains <strong>every dependency MusicSeed relies on today</strong> — Python
+packages, data stores, network services — and <strong>how data flows</strong> through the four
+main workflows (import, enrich, sonic retrieval, recommend). It exists to track how small the
+install surface has become, so publishing MusicSeed as open source means a new user needs as
+little as possible.</p>
+
+<div class="note">
+  <strong>TL;DR install surface:</strong> Python 3.11+ and <code>uv</code>, six core packages,
+  two CLI packages, one SQLite file (created automatically), and read access to two Plex SQLite
+  databases. That's the whole thing — no server, no containers, no native ML libraries.
+</div>
+
+<!-- ============================ BIG PICTURE ============================ -->
+<h2>1. The big picture</h2>
+
+<figure>
+<svg width="1010" height="470" viewBox="0 0 1010 470" role="img" aria-label="MusicSeed dependency graph">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 9 5 L 0 9 z" fill="#6ea8fe"/>
+    </marker>
+    <marker id="arrRo" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 9 5 L 0 9 z" fill="#5fd0a5"/>
+    </marker>
+  </defs>
+
+  <!-- CLI -->
+  <rect x="380" y="16" rx="8" width="250" height="58" fill="#1d212b" stroke="#b48ead"/>
+  <text x="505" y="40" text-anchor="middle" class="box-label">musicseed-cli</text>
+  <text x="505" y="58" text-anchor="middle" class="box-sub">Typer commands · Rich output · thin wrapper</text>
+
+  <!-- Core -->
+  <rect x="300" y="116" rx="8" width="410" height="120" fill="#1d212b" stroke="#6ea8fe" stroke-width="1.5"/>
+  <text x="505" y="140" text-anchor="middle" class="box-label">musicseed-core (import name: musicseed)</text>
+  <text x="505" y="157" text-anchor="middle" class="box-sub">services/ · importers/ · enrichers/ · recommender/ · sonic.py</text>
+  <text x="505" y="185" text-anchor="middle" class="box-sub">deps: sqlalchemy · pyyaml · httpx · numpy · pydantic · rich</text>
+  <text x="505" y="205" text-anchor="middle" class="box-sub">all business logic lives here — no UI, no Typer</text>
+
+  <!-- MusicSeed SQLite -->
+  <rect x="30" y="330" rx="8" width="220" height="66" fill="#1d212b" stroke="#6ea8fe"/>
+  <text x="140" y="354" text-anchor="middle" class="box-label">musicseed.db (SQLite)</text>
+  <text x="140" y="371" text-anchor="middle" class="box-sub">~/.local/share/musicseed/ · WAL</text>
+  <text x="140" y="386" text-anchor="middle" class="box-sub">read + write · MusicSeed's own state</text>
+
+  <!-- Plex metadata DB -->
+  <rect x="290" y="330" rx="8" width="220" height="66" fill="#1d212b" stroke="#5fd0a5"/>
+  <text x="400" y="354" text-anchor="middle" class="box-label">Plex metadata DB</text>
+  <text x="400" y="371" text-anchor="middle" class="box-sub">com.plexapp.plugins.library.db</text>
+  <text x="400" y="386" text-anchor="middle" class="box-sub">READ-ONLY (stdlib sqlite3)</text>
+
+  <!-- Plex blobs DB -->
+  <rect x="550" y="330" rx="8" width="220" height="66" fill="#1d212b" stroke="#5fd0a5"/>
+  <text x="660" y="354" text-anchor="middle" class="box-label">Plex blobs DB</text>
+  <text x="660" y="371" text-anchor="middle" class="box-sub">…library.blobs.db · sonic vectors</text>
+  <text x="660" y="386" text-anchor="middle" class="box-sub">READ-ONLY at query time</text>
+
+  <!-- Plex HTTP API -->
+  <rect x="810" y="330" rx="8" width="190" height="66" fill="#1d212b" stroke="#e5b567"/>
+  <text x="905" y="354" text-anchor="middle" class="box-label">Plex HTTP API</text>
+  <text x="905" y="371" text-anchor="middle" class="box-sub">playlists · sonic Butler trigger</text>
+  <text x="905" y="386" text-anchor="middle" class="box-sub">optional · token required</text>
+
+  <!-- External APIs -->
+  <rect x="810" y="116" rx="8" width="190" height="120" fill="#1d212b" stroke="#e5b567"/>
+  <text x="905" y="140" text-anchor="middle" class="box-label">External APIs</text>
+  <text x="905" y="160" text-anchor="middle" class="box-sub">ListenBrainz (preferred)</text>
+  <text x="905" y="178" text-anchor="middle" class="box-sub">MusicBrainz (MBIDs)</text>
+  <text x="905" y="196" text-anchor="middle" class="box-sub">Spotify (optional fallback)</text>
+  <text x="905" y="220" text-anchor="middle" class="box-sub">rate-limited · enrichment only</text>
+
+  <!-- edges -->
+  <line x1="505" y1="74" x2="505" y2="116" stroke="#6ea8fe" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="515" y="100" class="flow-label">editable path dep · services only</text>
+
+  <path d="M 400 236 C 300 280, 180 300, 145 330" fill="none" stroke="#6ea8fe" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="215" y="290" class="flow-label">SQLAlchemy ORM</text>
+
+  <line x1="430" y1="236" x2="405" y2="330" stroke="#5fd0a5" stroke-width="1.5" marker-end="url(#arrRo)"/>
+  <text x="345" y="300" class="flow-label">import</text>
+
+  <line x1="610" y1="236" x2="650" y2="330" stroke="#5fd0a5" stroke-width="1.5" marker-end="url(#arrRo)"/>
+  <text x="612" y="300" class="flow-label">sonic vectors</text>
+
+  <path d="M 710 200 C 790 240, 870 290, 900 330" fill="none" stroke="#e5b567" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="820" y="280" class="flow-label">httpx · playlist writes</text>
+
+  <line x1="710" y1="176" x2="810" y2="176" stroke="#e5b567" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="724" y="168" class="flow-label">httpx · async</text>
+</svg>
+<figcaption>
+  Everything MusicSeed touches. Green borders are read-only SQLite files owned by Plex;
+  the blue-bordered file is the only writable store. Amber is network I/O. Removed in the
+  dependency reduction: PostgreSQL server, Docker, pgvector, psycopg, essentia-tensorflow,
+  and all audio-file reads.
+</figcaption>
+</figure>
+
+<div class="grid cols-3">
+  <div class="card">
+    <h4>Python packages (core)</h4>
+    <p class="num">6</p>
+    <p>sqlalchemy, pyyaml, httpx, numpy, pydantic, rich — all pure-Python or widely pre-built wheels.</p>
+  </div>
+  <div class="card">
+    <h4>Python packages (CLI)</h4>
+    <p class="num">2 + core</p>
+    <p>typer, rich, and musicseed-core via an editable path. No other surface exists yet.</p>
+  </div>
+  <div class="card">
+    <h4>External processes</h4>
+    <p class="num">0</p>
+    <p>No database server, no container runtime, no daemon. Plex itself is the only assumed service.</p>
+  </div>
+</div>
+
+<!-- ============================ DEPENDENCY LEDGER ============================ -->
+<h2>2. Dependency ledger (before → after)</h2>
+
+<h3>Python packages</h3>
+<table>
+  <thead><tr><th>Package</th><th>Role</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td>sqlalchemy</td><td>ORM over the SQLite state file</td><td><span class="tag kept">kept</span> <span class="tag core">core</span></td></tr>
+    <tr><td>httpx</td><td>HTTP to Plex API + ListenBrainz/MusicBrainz/Spotify</td><td><span class="tag kept">kept</span> <span class="tag core">core</span></td></tr>
+    <tr><td>numpy</td><td>Sonic vector math (matmul, cosine) at query time</td><td><span class="tag kept">kept</span> <span class="tag core">core</span></td></tr>
+    <tr><td>pydantic</td><td>Config + service result models</td><td><span class="tag kept">kept</span> <span class="tag core">core</span></td></tr>
+    <tr><td>pyyaml</td><td>config.yaml loading</td><td><span class="tag kept">kept</span> <span class="tag core">core</span></td></tr>
+    <tr><td>rich</td><td>Progress rendering inside import/enrich pipelines</td><td><span class="tag kept">kept</span> <span class="tag core">core</span></td></tr>
+    <tr><td>typer</td><td>CLI framework</td><td><span class="tag kept">kept</span> <span class="tag cli">cli</span></td></tr>
+    <tr class="removed"><td>essentia-tensorflow</td><td>Self-generated audio embeddings (MusiCNN)</td><td><span class="tag gone">removed · Phase 1</span></td></tr>
+    <tr class="removed"><td>psycopg[binary]</td><td>PostgreSQL driver</td><td><span class="tag gone">removed · Phase 3</span></td></tr>
+    <tr class="removed"><td>pgvector</td><td>Vector column type + cosine-distance query</td><td><span class="tag gone">removed · Phase 2</span></td></tr>
+  </tbody>
+</table>
+
+<h3>Infrastructure &amp; system requirements</h3>
+<table>
+  <thead><tr><th>Component</th><th>Former role</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr class="removed"><td>PostgreSQL 16 server</td><td>MusicSeed state database</td><td><span class="tag gone">removed · Phase 3</span></td></tr>
+    <tr class="removed"><td>Docker / docker-compose</td><td>Ran the Postgres container</td><td><span class="tag gone">removed · Phase 3</span></td></tr>
+    <tr class="removed"><td>pg_trgm extension</td><td>Trigram indexes (never queried)</td><td><span class="tag gone">removed · Phase 3</span></td></tr>
+    <tr class="removed"><td>TensorFlow runtime</td><td>Pulled in by essentia; amd64-only</td><td><span class="tag gone">removed · Phase 1</span></td></tr>
+    <tr class="removed"><td>Audio-file access</td><td>Reading music files to embed them</td><td><span class="tag gone">removed · Phase 1</span></td></tr>
+    <tr class="removed"><td>Stored embeddings</td><td>Vector(200) column, zero-padded from 50</td><td><span class="tag gone">removed · Phase 2</span></td></tr>
+  </tbody>
+</table>
+
+<h3>What remains external (and can't be removed)</h3>
+<table>
+  <thead><tr><th>Dependency</th><th>Why it exists</th><th>Access</th></tr></thead>
+  <tbody>
+    <tr><td>Plex metadata DB</td><td>Source of truth for artists/albums/tracks/tags/play history</td><td>read-only, stdlib sqlite3</td></tr>
+    <tr><td>Plex blobs DB</td><td>Plex's own 50-dim sonic analysis vectors</td><td>read-only, at query time</td></tr>
+    <tr><td>Plex HTTP API</td><td>Creating/populating playlists; triggering sonic analysis</td><td>optional, token-gated</td></tr>
+    <tr><td>ListenBrainz / MusicBrainz</td><td>Popularity enrichment via recording MBIDs</td><td>optional, rate-limited</td></tr>
+    <tr><td>Spotify Web API</td><td>Fallback popularity/metadata when MBIDs are missing</td><td>optional, credentialed</td></tr>
+  </tbody>
+</table>
+
+<div class="note">
+  <strong>Why sonic vectors are not a stored dependency:</strong> Plex already computes a
+  50-dimensional vector per track during its own sonic analysis. MusicSeed reads those vectors
+  straight out of the Plex blobs database into an in-memory L2-normalized matrix
+  (<code>sonic.py → SonicVectors</code>) when a recommendation runs. Nothing is copied, embedded,
+  or indexed — so there is no vector column, no ANN index, and no embedding pipeline to maintain.
+</div>
+
+<!-- ============================ WORKFLOWS ============================ -->
+<h2>3. Workflows</h2>
+
+<h3>3.1 Import — Plex metadata → musicseed.db</h3>
+<figure>
+<svg width="1010" height="110" viewBox="0 0 1010 110">
+  <defs><marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 1 L 9 5 L 0 9 z" fill="#6ea8fe"/></marker></defs>
+  <rect x="10" y="28" rx="8" width="180" height="54" fill="#1d212b" stroke="#5fd0a5"/>
+  <text x="100" y="50" text-anchor="middle" class="box-label">Plex metadata DB</text>
+  <text x="100" y="66" text-anchor="middle" class="box-sub">read-only sqlite3</text>
+  <line x1="190" y1="55" x2="250" y2="55" stroke="#6ea8fe" stroke-width="1.5" marker-end="url(#a1)"/>
+  <rect x="255" y="28" rx="8" width="210" height="54" fill="#1d212b" stroke="#6ea8fe"/>
+  <text x="360" y="50" text-anchor="middle" class="box-label">importers/plex.py</text>
+  <text x="360" y="66" text-anchor="middle" class="box-sub">row mapping · year fallback</text>
+  <line x1="465" y1="55" x2="525" y2="55" stroke="#6ea8fe" stroke-width="1.5" marker-end="url(#a1)"/>
+  <rect x="530" y="28" rx="8" width="230" height="54" fill="#1d212b" stroke="#6ea8fe"/>
+  <text x="645" y="50" text-anchor="middle" class="box-label">services/library.import_library</text>
+  <text x="645" y="66" text-anchor="middle" class="box-sub">batch commits · resumable</text>
+  <line x1="760" y1="55" x2="820" y2="55" stroke="#6ea8fe" stroke-width="1.5" marker-end="url(#a1)"/>
+  <rect x="825" y="28" rx="8" width="175" height="54" fill="#1d212b" stroke="#6ea8fe"/>
+  <text x="912" y="50" text-anchor="middle" class="box-label">musicseed.db</text>
+  <text x="912" y="66" text-anchor="middle" class="box-sub">13 tables</text>
+</svg>
+<figcaption><code>musicseed import</code> — one-way copy of artists, albums, tracks, genres, moods, styles, play history. The Plex file is never written to.</figcaption>
+</figure>
+
+<h3>3.2 Enrich — popularity signals (async, resumable)</h3>
+<figure>
+<svg width="1010" height="150" viewBox="0 0 1010 150">
+  <defs><marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 1 L 9 5 L 0 9 z" fill="#e5b567"/></marker></defs>
+  <rect x="10" y="48" rx="8" width="180" height="54" fill="#1d212b" stroke="#6ea8fe"/>
+  <text x="100" y="70" text-anchor="middle" class="box-label">tracks with MBID</text>
+  <text x="100" y="86" text-anchor="middle" class="box-sub">musicseed.db queue</text>
+  <line x1="190" y1="75" x2="250" y2="75" stroke="#e5b567" stroke-width="1.5" marker-end="url(#a2)"/>
+  <rect x="255" y="48" rx="8" width="230" height="54" fill="#1d212b" stroke="#e5b567"/>
+  <text x="370" y="70" text-anchor="middle" class="box-label">enrichers/pipeline.py</text>
+  <text x="370" y="86" text-anchor="middle" class="box-sub">async · bounded concurrency · retries</text>
+  <line x1="485" y1="62" x2="545" y2="40" stroke="#e5b567" stroke-width="1.5" marker-end="url(#a2)"/>
+  <line x1="485" y1="88" x2="545" y2="110" stroke="#e5b567" stroke-width="1.5" marker-end="url(#a2)"/>
+  <rect x="550" y="14" rx="8" width="200" height="50" fill="#1d212b" stroke="#e5b567"/>
+  <text x="650" y="34" text-anchor="middle" class="box-label">ListenBrainz</text>
+  <text x="650" y="50" text-anchor="middle" class="box-sub">preferred (MBID-keyed)</text>
+  <rect x="550" y="86" rx="8" width="200" height="50" fill="#1d212b" stroke="#e5b567"/>
+  <text x="650" y="106" text-anchor="middle" class="box-label">Spotify</text>
+  <text x="650" y="122" text-anchor="middle" class="box-sub">optional fallback · credentials</text>
+  <line x1="750" y1="40" x2="810" y2="62" stroke="#e5b567" stroke-width="1.5" marker-end="url(#a2)"/>
+  <line x1="750" y1="110" x2="810" y2="88" stroke="#e5b567" stroke-width="1.5" marker-end="url(#a2)"/>
+  <rect x="815" y="48" rx="8" width="185" height="54" fill="#1d212b" stroke="#6ea8fe"/>
+  <text x="907" y="70" text-anchor="middle" class="box-label">popularity columns</text>
+  <text x="907" y="86" text-anchor="middle" class="box-sub">musicseed.db · batch commits</text>
+</svg>
+<figcaption><code>musicseed enrich --source listenbrainz|spotify</code> — attempted tracks are flagged so interrupted runs resume. This is the only workflow that spends third-party API calls, which is why old Postgres data was migrated rather than re-fetched.</figcaption>
+</figure>
+
+<h3>3.3 Sonic retrieval — vectors at query time (no storage)</h3>
+<figure>
+<svg width="1010" height="110" viewBox="0 0 1010 110">
+  <defs><marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 1 L 9 5 L 0 9 z" fill="#5fd0a5"/></marker></defs>
+  <rect x="10" y="28" rx="8" width="180" height="54" fill="#1d212b" stroke="#5fd0a5"/>
+  <text x="100" y="50" text-anchor="middle" class="box-label">Plex blobs DB</text>
+  <text x="100" y="66" text-anchor="middle" class="box-sub">read-only</text>
+  <line x1="190" y1="55" x2="250" y2="55" stroke="#5fd0a5" stroke-width="1.5" marker-end="url(#a3)"/>
+  <rect x="255" y="28" rx="8" width="220" height="54" fill="#1d212b" stroke="#6ea8fe"/>
+  <text x="365" y="50" text-anchor="middle" class="box-label">sonic.py</text>
+  <text x="365" y="66" text-anchor="middle" class="box-sub">decode 50-dim · L2-normalize · cache</text>
+  <line x1="475" y1="55" x2="535" y2="55" stroke="#5fd0a5" stroke-width="1.5" marker-end="url(#a3)"/>
+  <rect x="540" y="28" rx="8" width="220" height="54" fill="#1d212b" stroke="#6ea8fe"/>
+  <text x="650" y="50" text-anchor="middle" class="box-label">SonicVectors (in RAM)</text>
+  <text x="650" y="66" text-anchor="middle" class="box-sub">~60K × 50 float32 ≈ 12 MB</text>
+  <line x1="760" y1="55" x2="820" y2="55" stroke="#5fd0a5" stroke-width="1.5" marker-end="url(#a3)"/>
+  <rect x="825" y="28" rx="8" width="175" height="54" fill="#1d212b" stroke="#6ea8fe"/>
+  <text x="912" y="50" text-anchor="middle" class="box-label">nearest()</text>
+  <text x="912" y="66" text-anchor="middle" class="box-sub">numpy matmul · ms-scale</text>
+</svg>
+<figcaption>At this scale brute-force cosine search is single-digit milliseconds — faster than any server round-trip. No ANN index, no vector column, no padding hacks.</figcaption>
+</figure>
+
+<h3>3.4 Recommend — six signals, explainable</h3>
+<figure>
+<svg width="1010" height="150" viewBox="0 0 1010 150">
+  <defs><marker id="a4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 1 L 9 5 L 0 9 z" fill="#6ea8fe"/></marker></defs>
+  <rect x="10" y="48" rx="8" width="150" height="54" fill="#1d212b" stroke="#b48ead"/>
+  <text x="85" y="70" text-anchor="middle" class="box-label">seed tracks</text>
+  <text x="85" y="86" text-anchor="middle" class="box-sub">IDs or text</text>
+  <line x1="160" y1="75" x2="210" y2="75" stroke="#6ea8fe" stroke-width="1.5" marker-end="url(#a4)"/>
+  <rect x="215" y="48" rx="8" width="160" height="54" fill="#1d212b" stroke="#6ea8fe"/>
+  <text x="295" y="70" text-anchor="middle" class="box-label">SeedProfile</text>
+  <text x="295" y="86" text-anchor="middle" class="box-sub">resolve_seed_tracks</text>
+  <line x1="375" y1="75" x2="425" y2="75" stroke="#6ea8fe" stroke-width="1.5" marker-end="url(#a4)"/>
+  <rect x="430" y="48" rx="8" width="185" height="54" fill="#1d212b" stroke="#6ea8fe"/>
+  <text x="522" y="66" text-anchor="middle" class="box-label">build_candidate_pool</text>
+  <text x="522" y="82" text-anchor="middle" class="box-sub">sonic (numpy) + 5 SQL sources</text>
+  <line x1="615" y1="75" x2="665" y2="75" stroke="#6ea8fe" stroke-width="1.5" marker-end="url(#a4)"/>
+  <rect x="670" y="48" rx="8" width="160" height="54" fill="#1d212b" stroke="#6ea8fe"/>
+  <text x="750" y="66" text-anchor="middle" class="box-label">calculate_score</text>
+  <text x="750" y="82" text-anchor="middle" class="box-sub">ScoreBreakdown · 6 weights</text>
+  <line x1="830" y1="75" x2="880" y2="75" stroke="#6ea8fe" stroke-width="1.5" marker-end="url(#a4)"/>
+  <rect x="885" y="48" rx="8" width="115" height="54" fill="#1d212b" stroke="#b48ead"/>
+  <text x="942" y="66" text-anchor="middle" class="box-label">playlist</text>
+  <text x="942" y="82" text-anchor="middle" class="box-sub">max 3 / artist</text>
+  <rect x="430" y="118" rx="6" width="570" height="26" fill="#171a21" stroke="#2b3140"/>
+  <text x="715" y="135" text-anchor="middle" class="box-sub">signals: sonic · popularity · style · genre · era · novelty — every score is explainable via --explain</text>
+</svg>
+<figcaption><code>musicseed recommend</code> previews; <code>playlist</code> / <code>populate</code> ask for confirmation, then write to Plex over the HTTP API — the only workflow that mutates anything outside musicseed.db.</figcaption>
+</figure>
+
+<!-- ============================ NEW USER PATH ============================ -->
+<h2>4. What a brand-new user needs (open-source readiness)</h2>
+
+<div class="grid cols-2">
+  <div class="card">
+    <h4>Prerequisites</h4>
+    <p>· Python 3.11+ and <code>uv</code></p>
+    <p>· Plex Media Server with a music library, sonically analyzed</p>
+    <p>· Optional: Spotify API credentials (fallback enrichment only)</p>
+  </div>
+  <div class="card">
+    <h4>Install (today, from source)</h4>
+    <p><code>cd cli &amp;&amp; uv sync</code></p>
+    <p><code>cp config.example.yaml ~/.config/musicseed/config.yaml</code></p>
+    <p><code>uv run musicseed init-db &amp;&amp; uv run musicseed import</code></p>
+  </div>
+</div>
+
+<h3>Still on the road to <code>pip install musicseed</code></h3>
+<table>
+  <thead><tr><th>Gap</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>PyPI packaging</td><td>core + cli are separate distributions joined by an editable path; decide on one combined package or publish both.</td></tr>
+    <tr><td>Plex DB discovery</td><td>db_path defaults are macOS-specific; Linux/Windows paths need documenting or auto-detection.</td></tr>
+    <tr><td>Sonic analysis coverage</td><td>Recommendation quality depends on Plex having analyzed the library; <code>sonic-probe</code> reports coverage, <code>sonic-refresh</code> triggers the Butler task.</td></tr>
+  </tbody>
+</table>
+
+<h2>5. Verify the current state</h2>
+<pre><code>cd core &amp;&amp; uv run ruff check src
+python3 -m compileall -q core/src/musicseed cli/src/musicseed_cli
+cd cli &amp;&amp; uv run musicseed init-db      # creates the SQLite file
+uv run musicseed status                  # shows DB path + file size
+uv run musicseed recommend --seed-id 123 --limit 20 --explain</code></pre>
+
+<footer>
+  Generated August 2026, after completion of the dependency-reduction plan
+  (<code>musicseed-dependency-reduction-plan.md</code>). Historical context:
+  <code>docs/ard/001</code> (original design, superseded), <code>docs/ard/002</code> (sonic
+  vectors at query time), <code>docs/implementation-plan.md</code> (original build plan, historical).
+</footer>
+
+</main>
+</body>
+</html>

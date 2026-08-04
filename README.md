@@ -1,9 +1,9 @@
 # MusicSeed
 
 MusicSeed is a personal music recommendation tool for a local Plex music library. It imports Plex
-metadata into PostgreSQL, enriches tracks with popularity signals, reads Plex's sonic analysis
-vectors for similarity, produces seed-based recommendations, and writes them back to Plex as
-playlists.
+metadata into a local SQLite database, enriches tracks with popularity signals, reads Plex's
+sonic analysis vectors for similarity, produces seed-based recommendations, and writes them back
+to Plex as playlists.
 
 This is a DIY, home-usage project. The design favors simple local operation, recoverable batch
 jobs, and explainable recommendations over large-scale product architecture.
@@ -11,7 +11,8 @@ jobs, and explainable recommendations over large-scale product architecture.
 ## What It Does
 
 - Imports artists, albums, tracks, tags, file paths, MusicBrainz IDs, and play history from the
-  Plex SQLite database into PostgreSQL 16.
+  Plex SQLite database into one local SQLite file (default
+  `~/.local/share/musicseed/musicseed.db`) — no database server required.
 - Enriches popularity from ListenBrainz by MusicBrainz recording MBID, with Spotify as an optional
   fallback.
 - Uses Plex's own sonic analysis vectors (50-dimensional, read in memory at query time) for sonic
@@ -46,23 +47,21 @@ MusicSeed is a monorepo of independent apps that share one core library. Each ap
 - `api/`, `mcp/`, `web/` — future surfaces (HTTP API, MCP server, frontend). Not present yet; each
   will be a sibling app that also depends on `core`.
 
-Shared infrastructure (`docker-compose.yml`, `docs/`, `ruff.toml`) lives at the repo root.
+Shared infrastructure (`docs/`, `ruff.toml`, `scripts/`) lives at the repo root.
 
 ## Requirements
 
 - macOS on Apple Silicon
 - Python 3.11+ and uv
-- Docker (or another PostgreSQL 16 + pgvector setup)
 - Plex Media Server with a music library
 - Optional Spotify API credentials for fallback enrichment
 
 ## Quick Start
 
 ```bash
-docker-compose up -d          # shared Postgres + pgvector, from the repo root
-
 cd cli                        # the CLI app
 uv sync
+uv run musicseed init-db      # creates the SQLite database file
 uv run musicseed --help
 uv run musicseed status
 ```
@@ -84,5 +83,6 @@ Using the core library as a dependency: **[`core/README.md`](core/README.md)**.
 ## Logs And Data
 
 Logs are written under `core/logs/` (including `latest.log`) — the logger anchors to the core
-package's location. Local Plex database copies, PostgreSQL volumes, logs, and credentials are
-machine-local artifacts and are not portable project source.
+package's location. Local Plex database copies, the MusicSeed SQLite database, logs, and
+credentials are machine-local artifacts and are not portable project source. Backup of MusicSeed
+state is copying the single SQLite file.

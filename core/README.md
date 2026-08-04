@@ -61,6 +61,7 @@ python3 -m compileall -q src/musicseed
 
 `sonic.py` reads Plex's sonic analysis vectors straight from the Plex blobs database at query
 time; there is no embedding pipeline and no stored vector copy.
-DB-touching work needs `docker-compose up -d` from the repo root and a configured database.
+DB-touching work needs a configured `database.path`; `musicseed init-db` creates the SQLite
+file (default `~/.local/share/musicseed/musicseed.db`). No database server is required.
 
 See [`AGENTS.md`](AGENTS.md) for the full code map, service entry points, and conventions.

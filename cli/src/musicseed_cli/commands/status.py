@@ -18,7 +18,12 @@ def status() -> None:
         config_table = Table(title="Configuration")
         config_table.add_column("Setting", style="cyan")
         config_table.add_column("Value", style="green")
-        config_table.add_row("Database", f"{stat.db_host}:{stat.db_port}/{stat.db_name}")
+        if stat.db_size_bytes is not None:
+            size_mb = stat.db_size_bytes / (1024 * 1024)
+            db_value = f"{stat.db_path} ({size_mb:.1f} MB)"
+        else:
+            db_value = stat.db_path
+        config_table.add_row("Database", db_value)
         config_table.add_row("Plex URL", stat.plex_url)
         config_table.add_row("Plex DB", stat.plex_db)
         config_table.add_row("Plex Library", stat.plex_library)
@@ -91,7 +96,7 @@ def status() -> None:
         console.print()
 
     except Exception as e:
-        console.print(f"\n[yellow]Could not connect to database: {e}[/yellow]")
+        console.print(f"\n[yellow]Could not open database: {e}[/yellow]")
         console.print("Run 'musicseed init-db' to initialize the database.\n")
 
 

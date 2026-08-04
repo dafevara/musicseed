@@ -3,7 +3,6 @@
 import math
 
 from pydantic import BaseModel
-
 from rich.console import Console
 from rich.progress import (
     BarColumn,

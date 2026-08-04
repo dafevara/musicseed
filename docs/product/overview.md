@@ -52,11 +52,10 @@ Good recommendations should be:
 
 ## Current User Flows
 
-1. Start PostgreSQL with `docker-compose up -d`.
-2. Initialize and optimize the local schema.
-3. Import Plex metadata.
-4. Enrich ListenBrainz popularity for MBID-backed tracks.
-5. Optionally enrich Spotify metadata.
-6. Ensure Plex has sonically analyzed the library (`sonic-probe` to check, `sonic-refresh` to trigger).
-7. Run `recommend` with seed text or seed IDs to preview the list.
-8. Run `playlist --name "My Playlist"` with the same parameters to approve and create it in Plex.
+1. Initialize the local database (`init-db` creates the SQLite file) and optimize the schema.
+2. Import Plex metadata.
+3. Enrich ListenBrainz popularity for MBID-backed tracks.
+4. Optionally enrich Spotify metadata.
+5. Ensure Plex has sonically analyzed the library (`sonic-probe` to check, `sonic-refresh` to trigger).
+6. Run `recommend` with seed text or seed IDs to preview the list.
+7. Run `playlist --name "My Playlist"` with the same parameters to approve and create it in Plex.

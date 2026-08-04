@@ -6,7 +6,8 @@ MusicSeed runs locally from source. Infrastructure should remain boring and insp
 
 - Python 3.11+ packages under `core/src/musicseed` (library) and `cli/src/musicseed_cli` (CLI).
 - uv for dependency management and command execution.
-- PostgreSQL 16 from `docker-compose.yml`.
+- One local SQLite file for MusicSeed's own state (default
+  `~/.local/share/musicseed/musicseed.db`, WAL mode) — no database server.
 - Plex SQLite database as a read-only import source.
 - Plex blobs SQLite database as a read-only source of sonic analysis vectors (read at query time).
 - Optional Plex HTTP API for playlist creation (`core/src/musicseed/clients/plex_api.py`).
@@ -15,25 +16,25 @@ MusicSeed runs locally from source. Infrastructure should remain boring and insp
 
 ## Database
 
-The default Docker service uses:
-
-- Host: `localhost`
-- Port: `5432`
-- Database: `musicseed`
-- User: `musicseed`
-- Password: `musicseed`
+MusicSeed stores its state in a single SQLite file, configured by `database.path`
+(default `~/.local/share/musicseed/musicseed.db`). The engine runs in WAL mode with foreign
+keys enabled.
 
 Commands:
 
 ```bash
-docker-compose up -d
-uv run musicseed init-db
-uv run musicseed optimize-db
-uv run musicseed status
+uv run musicseed init-db       # creates the file (and parent dir) and tables
+uv run musicseed optimize-db   # search, queue, and tag indexes
+uv run musicseed status        # shows the DB path and file size
 ```
 
 `init-db` creates tables. `optimize-db` creates search, queue, and tag
 indexes. `ensure_schema()` applies lightweight additive updates for existing local databases.
+
+Backup and restore are file operations: copy `musicseed.db` (plus `-wal`/`-shm` if copying
+while in use). A one-shot migration from the retired Postgres setup lives at
+`scripts/migrate_pg_to_sqlite.py` (`uv run scripts/migrate_pg_to_sqlite.py` from the repo
+root).
 
 ## Configuration
 
@@ -81,7 +82,7 @@ Ask before running:
 - Full ListenBrainz or Spotify enrichment.
 - Triggering Plex's MusicAnalysis Butler task (`sonic-refresh`, `sonic-probe --trigger-butler`).
 - Any operation that writes or rewrites Plex playlists.
-- PostgreSQL volume deletion or data reset.
+- Deleting or replacing the MusicSeed SQLite database file.
 
 ## External APIs
 

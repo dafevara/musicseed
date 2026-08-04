@@ -12,7 +12,7 @@ rules, then routes you to the app you're working in. **Read the per-app `AGENTS.
 
 - Product: generate Plex playlists from seed tracks using local library metadata, popularity
   enrichment, Plex sonic analysis vectors (read at query time), and play history.
-- Runtime: Python 3.11+, SQLAlchemy, PostgreSQL 16, uv. Typer/Rich in the CLI.
+- Runtime: Python 3.11+, SQLAlchemy, SQLite (one local file), uv. Typer/Rich in the CLI.
 - Platform: macOS on Apple Silicon, run from source.
 - Recommendation signals (six): sonic, popularity, style, genre, era, novelty.
 
@@ -27,8 +27,8 @@ and `.venv`; run `uv` commands from inside the app directory.
 | `cli/` | `musicseed-cli` — Typer CLI (`musicseed`). Thin wrapper over core's services; depends on core via an editable path. | [`cli/AGENTS.md`](cli/AGENTS.md) |
 | `api/`, `mcp/`, `web/` | Future surfaces (HTTP API, MCP server, frontend). Not present yet; each will be a sibling app depending on `core`. | — |
 
-Shared at the repo root: `docker-compose.yml` (Postgres + pgvector), `ruff.toml` (lint config for
-all apps), `docs/`, `data/`, `logs/`.
+Shared at the repo root: `ruff.toml` (lint config for all apps), `docs/`, `data/`, `logs/`,
+`scripts/` (one-shot utilities, e.g. `migrate_pg_to_sqlite.py`).
 
 **Where logic goes:** all business logic lives in `core/` behind the surface-agnostic `services/`
 layer. App surfaces (cli, future api/mcp) only parse input, call a service, and format the result.
@@ -51,24 +51,29 @@ If you're adding recommendation/db/Plex logic to a surface, move it to `core`.
 - Music/recommendation domain concepts: `docs/domain/music-recommendation.md`.
 - Local services, config, logs, and verification commands: `docs/infra/local-runtime.md`.
 - Seed matching, candidate generation, scoring, playlist selection: `docs/resolvers/recommendation-resolvers.md`.
+- Visual dependency/workflow explainer (self-contained HTML, keep in sync when deps change):
+  `docs/musicseed-dependency-architecture.html`.
 - Historical plan and architecture: `docs/implementation-plan.md`, `docs/ard/001-initial-system-design.md`
   (partially superseded by `docs/ard/002-sonic-vectors-at-query-time.md`).
 
 ## Shared Commands
 
 ```bash
-docker-compose up -d                 # from repo root — Postgres + pgvector
-cd cli   && uv run musicseed status  # run the CLI from cli/
+cd cli   && uv run musicseed status  # run the CLI from cli/ (SQLite file, no server needed)
 cd core  && uv run ruff check src    # per-app lint (ruff.toml is shared at root)
 python3 -m compileall -q core/src/musicseed cli/src/musicseed_cli
 ```
+
+The MusicSeed database is a single SQLite file (default
+`~/.local/share/musicseed/musicseed.db`, WAL mode). `musicseed init-db` creates it; backup is
+copying the file.
 
 App-specific commands and verification live in each app's `AGENTS.md`.
 
 ## Repo-wide Safety Rules
 
-- Do not delete or rewrite `data/`, `logs/`, local Plex databases, or PostgreSQL volumes unless
-  the user explicitly asks.
+- Do not delete or rewrite `data/`, `logs/`, local Plex databases, or the MusicSeed SQLite
+  database file unless the user explicitly asks.
 - Do not run full-library import or enrichment jobs without user confirmation. Use
   `--limit`, `--dry-run`, and `--resume` when exploring behavior.
 - Do not expose Plex tokens, Spotify credentials, database passwords, local library file paths, or

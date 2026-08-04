@@ -4,8 +4,9 @@ The command-line interface for [MusicSeed](../README.md). It's a thin Typer/Rich
 [`musicseed-core`](../core): every command delegates to a core service. Installs the `musicseed`
 command.
 
-Run commands from this directory (or prefix with `uv run --project cli`). Start the shared
-database from the repo root first (`docker-compose up -d`).
+Run commands from this directory (or prefix with `uv run --project cli`). The database is a
+single SQLite file — `musicseed init-db` creates it (default
+`~/.local/share/musicseed/musicseed.db`); no server is needed.
 
 ## Setup
 

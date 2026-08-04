@@ -23,9 +23,8 @@ class EnrichmentCoverage(BaseModel):
 
 
 class LibraryStatus(BaseModel):
-    db_host: str
-    db_port: int
-    db_name: str
+    db_path: str
+    db_size_bytes: int | None
     plex_url: str
     plex_db: str
     plex_library: str
@@ -47,7 +46,7 @@ class ImportResult(BaseModel):
 
 
 def initialize_database() -> None:
-    """Create tables and extensions. Idempotent."""
+    """Create the SQLite database file and tables. Idempotent."""
     init_db()
 
 
@@ -143,10 +142,10 @@ def get_status() -> LibraryStatus:
         mood_count = session.query(Mood).count()
         style_count = session.query(Style).count()
 
+    db_path = config.database.path_expanded
     return LibraryStatus(
-        db_host=config.database.host,
-        db_port=config.database.port,
-        db_name=config.database.name,
+        db_path=str(db_path),
+        db_size_bytes=db_path.stat().st_size if db_path.exists() else None,
         plex_url=config.plex.url,
         plex_db=str(config.plex.db_path_expanded),
         plex_library=config.plex.library,

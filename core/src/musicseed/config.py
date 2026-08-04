@@ -20,18 +20,15 @@ def _expand_env_vars(value: Any) -> Any:
 
 
 class DatabaseConfig(BaseModel):
-    host: str = "localhost"
-    port: int = 5432
-    name: str = "musicseed"
-    user: str = "musicseed"
-    password: str = ""
+    path: str = "~/.local/share/musicseed/musicseed.db"
+
+    @property
+    def path_expanded(self) -> Path:
+        return Path(os.path.expanduser(self.path))
 
     @property
     def url(self) -> str:
-        return (
-            f"postgresql+psycopg://{self.user}:{self.password}"
-            f"@{self.host}:{self.port}/{self.name}"
-        )
+        return f"sqlite:///{self.path_expanded}"
 
 
 class PlexConfig(BaseModel):

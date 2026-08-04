@@ -11,6 +11,12 @@ Implementation plan for MusicSeed - a music recommendation CLI tool that creates
 > Plex sonic vectors at query time and stores no vectors — see
 > [ARD 002](ard/002-sonic-vectors-at-query-time.md). Keep this document as history; do not treat
 > its embedding/pgvector sections as current design.
+>
+> **Historical note (August 2026):** PostgreSQL + pgvector + Docker were removed entirely;
+> MusicSeed now uses a single local SQLite file. See
+> `musicseed-dependency-reduction-plan.md` at the repo root. Do not treat this document's
+> database sections (PostgreSQL setup, docker-compose, psycopg/pgvector deps) as current
+> design.
 
 ---
 

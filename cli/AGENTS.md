@@ -83,7 +83,7 @@ its lockfile re-resolves against the updated core.
 uv sync                                  # installs core editable + typer/rich
 uv run musicseed --help
 uv run ruff check src
-uv run musicseed status                  # needs `docker-compose up -d` from repo root + config
+uv run musicseed status                  # needs config (SQLite file; `init-db` creates it)
 ```
 
 Use limits when exercising slow/stateful paths:

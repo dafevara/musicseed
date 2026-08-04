@@ -14,8 +14,7 @@ def init_database() -> None:
     config = get_config()
 
     console.print("\n[bold]Initializing database[/bold]")
-    console.print(f"  Host: {config.database.host}:{config.database.port}")
-    console.print(f"  Database: {config.database.name}\n")
+    console.print(f"  File: {config.database.path_expanded}\n")
 
     try:
         with console.status("[bold green]Creating tables..."):
@@ -24,8 +23,8 @@ def init_database() -> None:
         console.print("  - All tables created\n")
     except Exception as e:
         console.print(f"[red]✗ Failed to initialize database: {e}[/red]")
-        console.print("\nMake sure PostgreSQL is running:")
-        console.print("  docker-compose up -d\n")
+        console.print("\nMake sure the database directory is writable:")
+        console.print(f"  {config.database.path_expanded.parent}\n")
         raise typer.Exit(1)
 
 

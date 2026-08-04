@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from typing import Generator
 
 from pydantic import BaseModel
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from musicseed.config import get_config
@@ -26,11 +26,20 @@ class IndexResult(BaseModel):
 
 
 def get_engine():
-    """Get or create the database engine."""
+    """Get or create the SQLite database engine."""
     global _engine
     if _engine is None:
         config = get_config()
-        _engine = create_engine(config.database.url, echo=False)
+        engine = create_engine(config.database.url, echo=False)
+
+        @event.listens_for(engine, "connect")
+        def _set_sqlite_pragmas(dbapi_connection, _connection_record) -> None:
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.close()
+
+        _engine = engine
     return _engine
 
 
@@ -58,34 +67,36 @@ def get_session() -> Generator[Session, None, None]:
 
 
 def init_db() -> None:
-    """Initialize the database schema."""
-    engine = get_engine()
+    """Initialize the database schema, creating the DB file's parent dir if needed."""
+    config = get_config()
+    config.database.path_expanded.parent.mkdir(parents=True, exist_ok=True)
 
-    # Create all tables
+    engine = get_engine()
     Base.metadata.create_all(engine)
     ensure_schema()
+
+
+# (table, column, column DDL) for lightweight additive migrations on existing files.
+_ADDITIVE_COLUMNS = [
+    ("tracks", "popularity_source", "VARCHAR(50)"),
+    ("tracks", "listenbrainz_listen_count", "BIGINT"),
+    ("tracks", "listenbrainz_listener_count", "INTEGER"),
+    ("tracks", "listenbrainz_matched", "BOOLEAN DEFAULT FALSE"),
+]
 
 
 def ensure_schema() -> None:
     """Apply lightweight additive schema updates for existing local databases."""
     engine = get_engine()
-    statements = [
-        "ALTER TABLE tracks ADD COLUMN IF NOT EXISTS popularity_source VARCHAR(50)",
-        "ALTER TABLE tracks ADD COLUMN IF NOT EXISTS listenbrainz_listen_count BIGINT",
-        "ALTER TABLE tracks ADD COLUMN IF NOT EXISTS listenbrainz_listener_count INTEGER",
-        (
-            "ALTER TABLE tracks ADD COLUMN IF NOT EXISTS "
-            "listenbrainz_matched BOOLEAN DEFAULT FALSE"
-        ),
-        # Sonic vectors are read from Plex at query time and no longer stored.
-        "DROP INDEX IF EXISTS idx_tracks_embedding",
-        "ALTER TABLE tracks DROP COLUMN IF EXISTS embedding",
-        "ALTER TABLE tracks DROP COLUMN IF EXISTS embedding_model",
-        "ALTER TABLE tracks DROP COLUMN IF EXISTS embedding_generated",
-    ]
     with engine.connect() as conn:
-        for statement in statements:
-            conn.execute(text(statement))
+        for table, column, column_ddl in _ADDITIVE_COLUMNS:
+            existing = {
+                row[1] for row in conn.execute(text(f"PRAGMA table_info({table})"))
+            }
+            if existing and column not in existing:
+                conn.execute(
+                    text(f"ALTER TABLE {table} ADD COLUMN {column} {column_ddl}")
+                )
         conn.commit()
 
 
@@ -94,7 +105,6 @@ def create_indexes() -> list[IndexResult]:
     engine = get_engine()
 
     indexes = [
-        ("extension_pg_trgm", "CREATE EXTENSION IF NOT EXISTS pg_trgm"),
         # Common queries
         (
             "idx_tracks_artist",
@@ -168,28 +178,13 @@ def create_indexes() -> list[IndexResult]:
         (
             "idx_tracks_listenbrainz_queue",
             "CREATE INDEX IF NOT EXISTS idx_tracks_listenbrainz_queue "
-            "ON tracks(id) INCLUDE (mbid) "
+            "ON tracks(id) "
             "WHERE mbid IS NOT NULL AND listenbrainz_matched IS NOT TRUE",
         ),
         (
             "idx_tracks_spotify_queue",
             "CREATE INDEX IF NOT EXISTS idx_tracks_spotify_queue "
             "ON tracks(id) WHERE spotify_matched IS NOT TRUE",
-        ),
-        (
-            "idx_artists_name_trgm",
-            "CREATE INDEX IF NOT EXISTS idx_artists_name_trgm "
-            "ON artists USING gin (name gin_trgm_ops)",
-        ),
-        (
-            "idx_albums_title_trgm",
-            "CREATE INDEX IF NOT EXISTS idx_albums_title_trgm "
-            "ON albums USING gin (title gin_trgm_ops)",
-        ),
-        (
-            "idx_tracks_title_trgm",
-            "CREATE INDEX IF NOT EXISTS idx_tracks_title_trgm "
-            "ON tracks USING gin (title gin_trgm_ops)",
         ),
     ]
 

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, Field
 
 from musicseed.db.models import Genre, Style, Track, TrackStats
 from musicseed.recommender.scoring import SeedProfile

@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     Boolean,
     DateTime,
@@ -15,7 +16,6 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -33,7 +33,7 @@ class Artist(Base):
     name_sort: Mapped[Optional[str]] = mapped_column(String(500))
 
     # External IDs
-    mbid: Mapped[Optional[str]] = mapped_column(UUID(as_uuid=False))
+    mbid: Mapped[Optional[str]] = mapped_column(String(36))
     spotify_id: Mapped[Optional[str]] = mapped_column(String(50))
 
     # Popularity
@@ -68,7 +68,7 @@ class Album(Base):
     label: Mapped[Optional[str]] = mapped_column(String(255))
 
     # External IDs
-    mbid: Mapped[Optional[str]] = mapped_column(UUID(as_uuid=False))
+    mbid: Mapped[Optional[str]] = mapped_column(String(36))
     spotify_id: Mapped[Optional[str]] = mapped_column(String(50))
     discogs_id: Mapped[Optional[int]] = mapped_column(Integer)
 
@@ -107,7 +107,7 @@ class Track(Base):
     file_hash: Mapped[Optional[str]] = mapped_column(String(64))
 
     # External IDs
-    mbid: Mapped[Optional[str]] = mapped_column(UUID(as_uuid=False))
+    mbid: Mapped[Optional[str]] = mapped_column(String(36))
     spotify_id: Mapped[Optional[str]] = mapped_column(String(50))
 
     # Popularity/enrichment signals
@@ -258,8 +258,8 @@ class Playlist(Base):
     description: Mapped[Optional[str]] = mapped_column(Text)
 
     # Generation parameters
-    seed_track_ids: Mapped[Optional[list[int]]] = mapped_column(ARRAY(Integer))
-    weights: Mapped[Optional[dict]] = mapped_column(JSONB)
+    seed_track_ids: Mapped[Optional[list[int]]] = mapped_column(JSON)
+    weights: Mapped[Optional[dict]] = mapped_column(JSON)
 
     # Plex reference
     plex_playlist_id: Mapped[Optional[int]] = mapped_column(Integer)

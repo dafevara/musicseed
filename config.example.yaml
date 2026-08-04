@@ -9,13 +9,8 @@
 # Values support ${ENV} expansion and ~ for home directory.
 
 database:
-  host: localhost
-  port: 5432
-  name: musicseed
-  user: musicseed
-  # Matches docker-compose.yml defaults for local dev only.
-  # Prefer: password: ${MUSICSEED_DB_PASSWORD}
-  password: musicseed
+  # Single local SQLite file; created by `musicseed init-db`. Backup = copy this file.
+  path: ~/.local/share/musicseed/musicseed.db
 
 plex:
   url: http://localhost:32400

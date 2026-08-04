@@ -54,9 +54,11 @@ Service entry points:
   `core/logs/`. Pass an explicit `log_dir` to override.
 - `db/models.py`: SQLAlchemy 2.0 ORM (Artist, Album, Track, tag tables, play history, stats,
   playlists). No vector columns: sonic vectors are not stored.
-- `db/session.py`: `get_engine`, `get_session_factory` (`expire_on_commit=False`), `get_session`
-  (commit/rollback/close context manager), `init_db`, `ensure_schema` (additive migrations),
-  `create_indexes`, `reset_engine` (dispose engine — the hook for tests/config reload).
+- `db/session.py`: `get_engine` (SQLite, sets `journal_mode=WAL` + `foreign_keys=ON` on
+  connect), `get_session_factory` (`expire_on_commit=False`), `get_session`
+  (commit/rollback/close context manager), `init_db` (creates the DB file's parent dir),
+  `ensure_schema` (additive migrations via `PRAGMA table_info`), `create_indexes`,
+  `reset_engine` (dispose engine — the hook for tests/config reload).
 - `importers/plex.py`: Plex SQLite metadata import. Track years fall back to the album year when
   Plex doesn't set one on the track row.
 - `enrichers/`: ListenBrainz, Spotify, MusicBrainz clients + the async enrichment pipeline.
@@ -86,9 +88,14 @@ Service entry points:
 
 ## Dependencies
 
-`rich`, `sqlalchemy>=2.0`, `psycopg[binary]`, `pyyaml`, `httpx`, `numpy`, `pydantic>=2.0`.
+`rich`, `sqlalchemy>=2.0`, `pyyaml`, `httpx`, `numpy`, `pydantic>=2.0`.
 After changing deps: `uv lock && uv sync`
 in `core/`, then re-lock dependent apps (`cd ../cli && uv lock`).
+
+The database is a single SQLite file (`database.path` in config, default
+`~/.local/share/musicseed/musicseed.db`). Postgres/pgvector were removed (see
+`musicseed-dependency-reduction-plan.md`); `scripts/migrate_pg_to_sqlite.py` migrates an old
+Postgres database one-shot.
 
 ## Verify (from `core/`)
 
@@ -98,7 +105,8 @@ python3 -m compileall -q src/musicseed
 uv run python -c "import musicseed; from musicseed.services import library, enrichment, recommend, populate; print('ok')"
 ```
 
-DB-touching work needs `docker-compose up -d` (from the repo root) and a configured database.
+DB-touching work needs a configured `database.path`; `musicseed init-db` creates the SQLite
+file. No server or containers are involved.
 
 ## Change guidelines
 

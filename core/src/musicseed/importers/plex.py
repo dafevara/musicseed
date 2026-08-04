@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Generator
 
 from pydantic import BaseModel
-
 from rich.console import Console
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
 from sqlalchemy.orm import Session

@@ -13,8 +13,7 @@ MusicSeed may hold, on the machine where it runs:
 - A Plex Media Server API token (playlist create/update)
 - Paths to the local Plex SQLite databases and music files
 - Optional Spotify client credentials
-- A PostgreSQL password for the local MusicSeed database
-- Library metadata, play history, and derived embeddings
+- Library metadata and play history (in the local SQLite database file)
 
 MusicSeed is designed to keep that data **local**. It does not upload your
 library catalog to a MusicSeed-operated service. Optional outbound calls go only
@@ -63,9 +62,8 @@ Never paste into public issues, PRs, discussions, or screenshots:
   secrets in YAML.
 - Keep `config.yaml`, `.env`, `data/`, `logs/`, and `*.db` out of git (see
   `.gitignore`).
-- The default `docker-compose.yml` Postgres password (`musicseed`) is for
-  **local development only**. Change it if the database port is reachable
-  beyond your machine.
+- The MusicSeed database is a local SQLite file containing your listening
+  history. Keep it on your machine, out of git, and out of shared backups.
 - Treat Plex tokens as account credentials; rotate them if they leak.
 - Do not run MusicSeed against a Plex server or database you do not own or
   administer.
