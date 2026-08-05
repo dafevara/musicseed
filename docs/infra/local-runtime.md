@@ -4,7 +4,7 @@ MusicSeed runs locally from source. Infrastructure should remain boring and insp
 
 ## Runtime Pieces
 
-- Python 3.11+ packages under `core/src/musicseed` (library) and `cli/src/musicseed_cli` (CLI).
+- Python 3.14+ packages under `core/src/musicseed` (library) and `cli/src/musicseed_cli` (CLI).
 - uv for dependency management and command execution.
 - One local SQLite file for MusicSeed's own state (default
   `~/.local/share/musicseed/musicseed.db`, WAL mode) — no database server.

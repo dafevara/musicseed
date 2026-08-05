@@ -52,7 +52,7 @@ Shared infrastructure (`docs/`, `ruff.toml`, `scripts/`) lives at the repo root.
 ## Requirements
 
 - macOS on Apple Silicon
-- Python 3.11+ and uv
+- Python 3.14+ and uv
 - Plex Media Server with a music library
 - Optional Spotify API credentials for fallback enrichment
 
