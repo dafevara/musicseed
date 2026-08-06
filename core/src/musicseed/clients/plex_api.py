@@ -13,6 +13,21 @@ class PlexAPIError(RuntimeError):
     """Raised for Plex API errors that should be surfaced to the user."""
 
 
+class ConnectionCheck(BaseModel):
+    """Result of probing the Plex server root endpoint (never raises).
+
+    ``error`` is a safe diagnostic string — it never contains the token.
+    """
+
+    model_config = {"frozen": True}
+
+    reachable: bool
+    authorized: bool
+    status_code: int | None
+    server_version: str | None
+    error: str | None
+
+
 class PlaylistResult(BaseModel):
     model_config = {"frozen": True}
 
@@ -92,6 +107,42 @@ class PlexClient:
     def _put(self, path: str, **params: str) -> dict:
         resp = self._send("PUT", path, **params)
         return resp.json() if resp.content else {}
+
+    def check_connection(self) -> ConnectionCheck:
+        """Probe the server root without raising; used by setup/discovery flows."""
+        try:
+            resp = httpx.get(f"{self._base}/", headers=self._headers, timeout=self._timeout)
+        except (httpx.ConnectError, httpx.TimeoutException) as e:
+            return ConnectionCheck(
+                reachable=False,
+                authorized=False,
+                status_code=None,
+                server_version=None,
+                error=f"Cannot reach Plex at {self._base} ({type(e).__name__}). "
+                "Is Plex Media Server running?",
+            )
+        except httpx.HTTPError as e:
+            return ConnectionCheck(
+                reachable=False,
+                authorized=False,
+                status_code=None,
+                server_version=None,
+                error=f"HTTP error contacting Plex at {self._base}: {e}",
+            )
+
+        version = None
+        if resp.status_code == 200:
+            try:
+                version = resp.json().get("MediaContainer", {}).get("version")
+            except ValueError:
+                pass
+        return ConnectionCheck(
+            reachable=True,
+            authorized=resp.status_code not in (401, 403),
+            status_code=resp.status_code,
+            server_version=version,
+            error=None if resp.status_code == 200 else f"Plex returned HTTP {resp.status_code}.",
+        )
 
     def machine_identifier(self) -> str:
         """Return the Plex server machine identifier (needed to build track URIs)."""

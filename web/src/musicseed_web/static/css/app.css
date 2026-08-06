@@ -68,3 +68,144 @@ code {
     padding: 0.1rem 0.35rem;
     font-size: 0.85em;
 }
+
+.site-nav {
+    margin-top: 0.75rem;
+    display: flex;
+    gap: 1rem;
+    font-size: 0.95rem;
+}
+
+.site-nav a {
+    color: var(--accent);
+    text-decoration: none;
+}
+
+.site-nav a:hover {
+    text-decoration: underline;
+}
+
+/* Setup wizard */
+
+.badge {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.1rem 0.55rem;
+    border-radius: 999px;
+    vertical-align: middle;
+}
+
+.badge.ok {
+    background: #e1f2e7;
+    color: #1e7a45;
+}
+
+.badge.problem {
+    background: #fbe9e7;
+    color: #b3362b;
+}
+
+.checks {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 1rem;
+}
+
+.guidance {
+    margin: 0.4rem 0 0;
+    color: var(--muted);
+    font-size: 0.92rem;
+}
+
+.setup-form {
+    display: grid;
+    gap: 0.85rem;
+    max-width: 30rem;
+}
+
+.setup-form label {
+    display: grid;
+    gap: 0.25rem;
+    font-size: 0.92rem;
+}
+
+.setup-form input {
+    padding: 0.5rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font: inherit;
+    background: #fff;
+    color: var(--fg);
+}
+
+.setup-form button {
+    justify-self: start;
+    padding: 0.5rem 1.1rem;
+    border: none;
+    border-radius: 6px;
+    font: inherit;
+    font-weight: 600;
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+}
+
+.setup-form button:hover {
+    filter: brightness(1.08);
+}
+
+.review {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 0.4rem 1rem;
+    margin: 0 0 1rem;
+}
+
+.review dt {
+    font-weight: 600;
+}
+
+.review dd {
+    margin: 0;
+}
+
+.flash {
+    padding: 0.65rem 1rem;
+    border-radius: 6px;
+    margin-bottom: 1rem;
+    font-size: 0.92rem;
+}
+
+.flash.ok {
+    background: #e1f2e7;
+    color: #1e7a45;
+    border: 1px solid #b7dfc4;
+}
+
+.flash.error {
+    background: #fbe9e7;
+    color: #b3362b;
+    border: 1px solid #f5c4bc;
+}
+
+.init-db-form {
+    margin-top: 1rem;
+}
+
+.init-db-form button {
+    padding: 0.5rem 1.1rem;
+    border: none;
+    border-radius: 6px;
+    font: inherit;
+    font-weight: 600;
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+}
+
+.init-db-form button:hover {
+    filter: brightness(1.08);
+}

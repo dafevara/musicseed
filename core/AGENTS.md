@@ -31,6 +31,11 @@ Service entry points:
 
 - `services/library.py`: `initialize_database`, `optimize_database`, `import_library`,
   `get_status`.
+- `services/discovery.py`: `discover` — read-only local environment probe (MusicSeed DB path,
+  Plex library/blobs DB candidates, Plex server reachability/auth/library). Returns frozen
+  Pydantic models with machine-readable `Reason` codes; expected failures are data, not
+  exceptions. Accepts per-call overrides (never mutates global config) and never includes the
+  Plex token in results. The setup wizard / dashboard consume this.
 - `services/enrichment.py`: `enrich_tracks` (**calls `asyncio.run()` internally — never call it
   from inside a running event loop; offload to a thread**).
 - `services/recommend.py`: `get_recommendations`, `create_playlist`.
@@ -70,7 +75,8 @@ Service entry points:
   `candidates.py` (`build_candidate_pool`), `playlist.py` (`Recommendation`, `recommend_tracks`,
   `resolve_seed_tracks` — raises `ValueError` on unresolved seeds), `populate.py`
   (`PopulateMethod = "average" | "frequency"`, `populate_playlist_recommendations`).
-- `clients/plex_api.py`: thin synchronous Plex HTTP client (httpx). Raises `PlexAPIError`.
+- `clients/plex_api.py`: thin synchronous Plex HTTP client (httpx). Raises `PlexAPIError`;
+  `check_connection()` is the non-raising probe used by discovery/setup flows.
 
 ## Particularities to respect
 
@@ -88,9 +94,9 @@ Service entry points:
 
 ## Dependencies
 
-`rich`, `sqlalchemy>=2.0`, `pyyaml`, `httpx`, `numpy`, `pydantic>=2.0`.
+`rich`, `sqlalchemy>=2.0`, `pyyaml`, `httpx`, `numpy`, `pydantic>=2.0`; dev group: `pytest`.
 After changing deps: `uv lock && uv sync`
-in `core/`, then re-lock dependent apps (`cd ../cli && uv lock`).
+in `core/`, then re-lock dependent apps (`cd ../cli && uv lock`, same for `web/`).
 
 The database is a single SQLite file (`database.path` in config, default
 `~/.local/share/musicseed/musicseed.db`). Postgres/pgvector were removed (see
@@ -100,9 +106,10 @@ Postgres database one-shot.
 ## Verify (from `core/`)
 
 ```bash
-uv run ruff check src
+uv run ruff check src tests
+uv run pytest tests -q                 # offline unit tests (tmp files + mocked Plex HTTP)
 python3 -m compileall -q src/musicseed
-uv run python -c "import musicseed; from musicseed.services import library, enrichment, recommend, populate; print('ok')"
+uv run python -c "import musicseed; from musicseed.services import library, enrichment, recommend, populate, discovery; print('ok')"
 ```
 
 DB-touching work needs a configured `database.path`; `musicseed init-db` creates the SQLite

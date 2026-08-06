@@ -1,0 +1,173 @@
+<div id="setup-results" hx-swap="outerHTML">
+
+{% macro status_badge(ok) -%}
+    {%- if ok -%}<span class="badge ok">ok</span>
+    {%- else -%}<span class="badge problem">needs attention</span>{%- endif -%}
+{%- endmacro %}
+
+{% macro db_guidance(check) -%}
+    {% if check.reason == 'not_found' %}
+        No file found at the usual location. If Plex lives somewhere custom on this machine,
+        enter the full path below.
+    {% elif check.reason == 'not_readable' %}
+        The file exists but this user can't read it. Check its permissions
+        (for example <code>ls -l</code> on the path) or run MusicSeed as the same user as Plex.
+    {% elif check.reason == 'invalid_sqlite' %}
+        A file exists at that path but it isn't a SQLite database — double-check the path.
+    {% elif check.reason == 'not_a_file' %}
+        That path exists but isn't a file — double-check the path.
+    {% else %}
+        {{ check.detail }}
+    {% endif %}
+{%- endmacro %}
+
+<section class="panel">
+    <h2>Discovery results</h2>
+    <ul class="checks">
+        <li>
+            {{ status_badge(result.musicseed_db.reason in ['ok', 'parent_missing']) }}
+            <strong>MusicSeed database</strong>
+            <code>{{ result.musicseed_db.path }}</code>
+            <span class="muted">({{ result.musicseed_db.source }})</span>
+            {% if result.musicseed_db.reason == 'parent_missing' %}
+            <p class="guidance">Nothing here yet — the database and its folder will be created
+                when you confirm setup in a later step.</p>
+            {% elif result.musicseed_db.ok and result.musicseed_db.creatable %}
+            <p class="guidance">Will be created here when you confirm setup in a later step.</p>
+            {% elif not result.musicseed_db.ok %}
+            <p class="guidance">{{ result.musicseed_db.detail }}
+                Fix the permissions or choose a different location below.</p>
+            {% endif %}
+        </li>
+        <li>
+            {{ status_badge(result.plex_library_db.ok) }}
+            <strong>Plex library database</strong>
+            {% if result.plex_library_db.selected %}
+            <code>{{ result.plex_library_db.selected.path }}</code>
+            <span class="muted">({{ result.plex_library_db.selected.source }})</span>
+            {% else %}
+            {% set c = result.plex_library_db.candidates[0] %}
+            <p class="guidance">{{ db_guidance(c) }}</p>
+            {% endif %}
+        </li>
+        <li>
+            {{ status_badge(result.plex_blobs_db.ok) }}
+            <strong>Plex blobs database</strong> <span class="muted">(sonic analysis data)</span>
+            {% if result.plex_blobs_db.selected %}
+            <code>{{ result.plex_blobs_db.selected.path }}</code>
+            <span class="muted">({{ result.plex_blobs_db.selected.source }})</span>
+            {% else %}
+            {% set c = result.plex_blobs_db.candidates[0] %}
+            <p class="guidance">{{ db_guidance(c) }}
+                It normally sits next to the library database with a
+                <code>.blobs.db</code> suffix.</p>
+            {% endif %}
+        </li>
+        <li>
+            {{ status_badge(result.plex_server.ok) }}
+            <strong>Plex server</strong>
+            <code>{{ result.plex_server.url }}</code>
+            <span class="muted">({{ result.plex_server.source }})</span>
+            {% if result.plex_server.ok %}
+            <p class="guidance">Connected — Plex {{ result.plex_server.server_version }},
+                music library “{{ result.plex_server.library }}” found.
+                Token: {{ 'configured' if result.plex_server.token_configured else 'not set' }}.</p>
+            {% else %}
+            <p class="guidance">
+            {% if result.plex_server.reason == 'unreachable' %}
+                Can't reach Plex at this address. Is Plex Media Server running? If it uses a
+                different host or port, enter the URL below.
+            {% elif result.plex_server.reason == 'missing_token' %}
+                Plex is running but requires a token, and none is configured. Paste your Plex
+                token below — it is only used for the check and is never stored or shown.
+            {% elif result.plex_server.reason == 'unauthorized' %}
+                Plex rejected the configured token. Paste a valid Plex token below.
+            {% elif result.plex_server.reason == 'library_not_found' %}
+                {{ result.plex_server.detail }} Enter the exact library name below.
+            {% else %}
+                {{ result.plex_server.detail }}
+            {% endif %}
+            </p>
+            {% endif %}
+        </li>
+    </ul>
+</section>
+
+{% if ready %}
+<section class="panel">
+    <h2>Review your setup</h2>
+
+    {% if db_init == 'done' %}
+    <div class="flash ok">Database created at <code>{{ result.musicseed_db.path }}</code>.</div>
+    {% elif db_init %}
+    <div class="flash error">{{ db_init }}</div>
+    {% endif %}
+
+    <dl class="review">
+        <dt>MusicSeed database</dt>
+        <dd><code>{{ result.musicseed_db.path }}</code>{% if not result.musicseed_db.exists %}
+            <span class="muted">(will be created)</span>{% endif %}</dd>
+        <dt>Plex library DB</dt>
+        <dd><code>{{ result.plex_library_db.selected.path }}</code></dd>
+        <dt>Plex blobs DB</dt>
+        <dd><code>{{ result.plex_blobs_db.selected.path }}</code></dd>
+        <dt>Plex server</dt>
+        <dd><code>{{ result.plex_server.url }}</code> — Plex {{ result.plex_server.server_version }}</dd>
+        <dt>Music library</dt>
+        <dd>{{ result.plex_server.library }}</dd>
+        <dt>Plex token</dt>
+        <dd>{{ '•••••••• (configured)' if result.plex_server.token_configured else 'not set' }}</dd>
+    </dl>
+
+    {% if db_init == 'done' %}
+    <p class="muted">The database is ready. Importing your library is the next setup step
+        (available in an upcoming release).</p>
+    {% else %}
+    <p class="muted">Nothing has been changed yet. Press the button below to create the
+        MusicSeed database at the path shown above. This is safe and idempotent — it never
+        replaces an existing database.</p>
+    <form hx-post="/setup/init-db" hx-target="#setup-results" hx-swap="outerHTML"
+          class="init-db-form">
+        <input type="hidden" name="musicseed_db_path" value="{{ result.musicseed_db.path }}">
+        <input type="hidden" name="plex_db_path" value="{{ result.plex_library_db.selected.path }}">
+        <input type="hidden" name="plex_url" value="{{ result.plex_server.url }}">
+        {% if result.plex_server.token_configured %}
+        <input type="hidden" name="plex_token" value="{{ form.get('plex_token', '') }}">
+        {% endif %}
+        <input type="hidden" name="plex_library" value="{{ result.plex_server.library }}">
+        <button type="submit">Initialize database</button>
+    </form>
+    {% endif %}
+</section>
+{% else %}
+<section class="panel">
+    <h2>Fix and retry</h2>
+    <p class="muted">Adjust any value and re-run the checks. Leave a field blank to keep the
+        automatic value. The token is never stored or displayed.</p>
+    <form hx-post="/setup/check" hx-target="#setup-results" hx-swap="outerHTML" class="setup-form">
+        <label>Plex server URL
+            <input type="text" name="plex_url" value="{{ form.get('plex_url', '') }}"
+                   placeholder="{{ result.plex_server.url }}">
+        </label>
+        <label>Plex token
+            <input type="password" name="plex_token" value="" autocomplete="off"
+                   placeholder="{{ 'configured' if result.plex_server.token_configured else 'not set' }}">
+        </label>
+        <label>Music library name
+            <input type="text" name="plex_library" value="{{ form.get('plex_library', '') }}"
+                   placeholder="{{ result.plex_server.library }}">
+        </label>
+        <label>Plex database path
+            <input type="text" name="plex_db_path" value="{{ form.get('plex_db_path', '') }}"
+                   placeholder="…/com.plexapp.plugins.library.db">
+        </label>
+        <label>MusicSeed database path
+            <input type="text" name="musicseed_db_path" value="{{ form.get('musicseed_db_path', '') }}"
+                   placeholder="{{ result.musicseed_db.path }}">
+        </label>
+        <button type="submit">Re-run checks</button>
+    </form>
+</section>
+{% endif %}
+
+</div>

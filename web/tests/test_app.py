@@ -1,12 +1,15 @@
 """Smoke tests for the MusicSeed web scaffold."""
 
+from conftest import make_discovery
 from fastapi.testclient import TestClient
 from musicseed_web.app import create_app
+from musicseed_web.routes import home
 
 client = TestClient(create_app())
 
 
-def test_index_serves_server_rendered_page() -> None:
+def test_index_serves_server_rendered_page(monkeypatch) -> None:
+    monkeypatch.setattr(home, "discover", lambda **kw: make_discovery())
     response = client.get("/")
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
