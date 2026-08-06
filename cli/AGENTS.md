@@ -12,9 +12,8 @@ the logic this app calls. This file covers the CLI app only.
 
 - Distribution name: `musicseed-cli`. Import package: `musicseed_cli`.
 - Installed command: **`musicseed`** → `musicseed_cli.app:app`.
-- Depends on `musicseed-core` via an **editable path source** in `pyproject.toml`
-  (`musicseed-core = { path = "../core", editable = true }`), so edits to core are picked up
-  without reinstalling.
+- Depends on `musicseed-core` and `musicseed-web` via **editable path sources** in
+  `pyproject.toml`, so edits to those apps are picked up without reinstalling.
 - Own `pyproject.toml` + `uv.lock` + `.venv`. Run `uv`/`musicseed` from inside `cli/` (or use
   `uv run --project cli musicseed …`).
 
@@ -26,8 +25,8 @@ the logic this app calls. This file covers the CLI app only.
   entry point (`musicseed_cli.app:app`); keep the `app` object importable from here.
 - `src/musicseed_cli/commands/`: **one module per command**, each exposing a plain command function
   plus a `register(app)` that attaches it. `commands/__init__.py` holds `register_all(app)`, which
-  registers all modules in the intended command order. Modules: `init_db`, `optimize_db`, `status`,
-  `import_library`, `sonic_probe`, `sonic_refresh`, `enrich`,
+  registers all modules in the intended command order. Modules: `web`, `init_db`, `optimize_db`,
+  `status`, `import_library`, `sonic_probe`, `sonic_refresh`, `enrich`,
   `recommend`, `playlist`, `playlists`, `populate`. To add a command, create a module with
   `register(app)` and list it in
   `commands/__init__.py`.
@@ -45,6 +44,7 @@ Imports from core are unchanged from the pre-monorepo layout (`from musicseed.co
 
 | Command | Calls |
 |---|---|
+| `web` | `musicseed_web.server.serve` (uvicorn; opens the browser via `on_started` once ready) |
 | `init-db` / `optimize-db` / `status` | `services.library.initialize_database` / `optimize_database` / `get_status` |
 | `import` | `services.library.import_library` |
 | `sonic-probe` (`--trigger`/`--trigger-butler` confirm before touching Plex) | `services.plex_analysis.get_sonic_status` / `probe_sonic_trigger` / `probe_butler_trigger` |
@@ -74,17 +74,26 @@ Imports from core are unchanged from the pre-monorepo layout (`from musicseed.co
 
 ## Dependencies
 
-`typer`, `rich`, `musicseed-core` (editable path). After changing core, run `uv lock` in `cli/` so
-its lockfile re-resolves against the updated core.
+`typer`, `rich`, `musicseed-core` + `musicseed-web` (editable paths); dev group: `pytest`.
+After changing core or web, run `uv lock` in `cli/` so its lockfile re-resolves against the
+updated apps.
 
 ## Run / verify (from `cli/`)
 
 ```bash
-uv sync                                  # installs core editable + typer/rich
+uv sync                                  # installs core + web editable + typer/rich
 uv run musicseed --help
 uv run ruff check src
+uv run pytest tests -q                   # command tests (no server, no browser, no DB)
 uv run musicseed status                  # needs config (SQLite file; `init-db` creates it)
 ```
+
+Note: `ruff check src` currently reports pre-existing I001/E501 issues in the older command
+modules; new code must at least pass on the files it touches.
+
+`musicseed web` serves the local web UI (see `web/AGENTS.md`) on `127.0.0.1:8788` by default
+and opens the browser once the server is ready; `--no-open` skips the browser for headless use
+and tests. Only loopback is bound unless `--host` is given explicitly.
 
 Use limits when exercising slow/stateful paths:
 

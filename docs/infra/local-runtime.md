@@ -4,7 +4,8 @@ MusicSeed runs locally from source. Infrastructure should remain boring and insp
 
 ## Runtime Pieces
 
-- Python 3.14+ packages under `core/src/musicseed` (library) and `cli/src/musicseed_cli` (CLI).
+- Python 3.14+ packages under `core/src/musicseed` (library), `cli/src/musicseed_cli` (CLI), and
+  `web/src/musicseed_web` (local web UI).
 - uv for dependency management and command execution.
 - One local SQLite file for MusicSeed's own state (default
   `~/.local/share/musicseed/musicseed.db`, WAL mode) — no database server.
@@ -61,7 +62,7 @@ output. Console output should summarize progress and outcome.
 These are cheap and should be used before heavier checks:
 
 ```bash
-python3 -m compileall -q core/src/musicseed cli/src/musicseed_cli
+python3 -m compileall -q core/src/musicseed cli/src/musicseed_cli web/src/musicseed_web
 uv run ruff check src
 uv run musicseed --help
 ```

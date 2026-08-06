@@ -25,7 +25,8 @@ and `.venv`; run `uv` commands from inside the app directory.
 |---|---|---|
 | `core/` | `musicseed-core` — all logic (import, enrich, sonic vectors, recommender, db, config). Importable as `musicseed`. Library only, no CLI. | [`core/AGENTS.md`](core/AGENTS.md) |
 | `cli/` | `musicseed-cli` — Typer CLI (`musicseed`). Thin wrapper over core's services; depends on core via an editable path. | [`cli/AGENTS.md`](cli/AGENTS.md) |
-| `api/`, `mcp/`, `web/` | Future surfaces (HTTP API, MCP server, frontend). Not present yet; each will be a sibling app depending on `core`. | — |
+| `web/` | `musicseed-web` — local web UI (FastAPI + Jinja + HTMX, server-rendered). Thin wrapper over core's services. | [`web/AGENTS.md`](web/AGENTS.md) |
+| `api/`, `mcp/` | Future surfaces (HTTP API, MCP server). Not present yet; each will be a sibling app depending on `core`. | — |
 
 Shared at the repo root: `ruff.toml` (lint config for all apps), `docs/`, `data/`, `logs/`,
 `scripts/` (one-shot utilities, e.g. `migrate_pg_to_sqlite.py`).
@@ -61,7 +62,7 @@ If you're adding recommendation/db/Plex logic to a surface, move it to `core`.
 ```bash
 cd cli   && uv run musicseed status  # run the CLI from cli/ (SQLite file, no server needed)
 cd core  && uv run ruff check src    # per-app lint (ruff.toml is shared at root)
-python3 -m compileall -q core/src/musicseed cli/src/musicseed_cli
+python3 -m compileall -q core/src/musicseed cli/src/musicseed_cli web/src/musicseed_web
 ```
 
 The MusicSeed database is a single SQLite file (default

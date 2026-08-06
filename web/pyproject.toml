@@ -1,7 +1,7 @@
 [project]
-name = "musicseed-cli"
+name = "musicseed-web"
 version = "0.1.0"
-description = "MusicSeed command-line interface for Plex playlist recommendations"
+description = "MusicSeed local web UI (FastAPI, Jinja, HTMX)"
 readme = "../README.md"
 license = "MIT"
 authors = [
@@ -9,27 +9,24 @@ authors = [
 ]
 requires-python = ">=3.14"
 dependencies = [
-    "typer>=0.9.0",
-    "rich>=13.0",
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "jinja2>=3.1",
     "musicseed-core",
-    "musicseed-web",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=8.0",
+    "httpx>=0.27",
 ]
-
-[project.scripts]
-musicseed = "musicseed_cli.app:app"
 
 [tool.uv.sources]
 musicseed-core = { path = "../core", editable = true }
-musicseed-web = { path = "../web", editable = true }
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/musicseed_cli"]
+packages = ["src/musicseed_web"]

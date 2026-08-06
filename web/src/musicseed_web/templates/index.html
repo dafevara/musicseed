@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="panel">
+    <h2>Welcome</h2>
+    <p>
+        MusicSeed is running. This is the local web surface for your Plex library:
+        setup, import, enrichment, and playlist recommendations will live here.
+    </p>
+</section>
+
+<section class="panel">
+    <h2>Server</h2>
+    <p>Health endpoint: <code>/healthz</code></p>
+    <p>
+        Server time:
+        <span id="server-clock"
+              hx-get="/fragments/clock"
+              hx-trigger="load, every 2s"
+              hx-swap="outerHTML">
+            <span class="muted">connecting…</span>
+        </span>
+    </p>
+    <p class="muted">The clock above updates via HTMX without a full page reload.</p>
+</section>
+{% endblock %}

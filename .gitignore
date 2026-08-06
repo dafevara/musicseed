@@ -45,3 +45,6 @@ logs/
 *.swp
 *~
 .gstack/
+.mcp.json
+.codex/config.toml
+opencode.json
