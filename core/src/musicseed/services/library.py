@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from pydantic import BaseModel
@@ -60,6 +61,7 @@ def import_library(
     plex_db_path: Path | None = None,
     library_name: str | None = None,
     full_import: bool = False,
+    progress_callback: Callable[[int, int, str], None] | None = None,
 ) -> ImportResult:
     """Import metadata from Plex database.
 
@@ -79,6 +81,7 @@ def import_library(
             plex_db_path=db_path,
             library_name=target_library,
             full_import=full_import,
+            progress_callback=progress_callback,
         )
 
     return ImportResult(**result)

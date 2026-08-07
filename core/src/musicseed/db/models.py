@@ -291,3 +291,23 @@ class PlaylistTrack(Base):
 
     playlist: Mapped["Playlist"] = relationship("Playlist", back_populates="tracks")
     track: Mapped["Track"] = relationship("Track")
+
+
+class Job(Base):
+    """A long-running, recoverable unit of work (import, enrich, etc.)."""
+
+    __tablename__ = "jobs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    kind: Mapped[str] = mapped_column(String(50), nullable=False)
+    state: Mapped[str] = mapped_column(String(30), nullable=False, default="pending")
+    progress_current: Mapped[int] = mapped_column(Integer, default=0)
+    progress_total: Mapped[int] = mapped_column(Integer, default=0)
+    checkpoint: Mapped[Optional[str]] = mapped_column(String(500))
+    error_summary: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)

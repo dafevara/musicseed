@@ -1,6 +1,8 @@
-"""Shared fixtures: canned DiscoveryResult objects so route tests never touch
-the real Plex installation, filesystem state, or network."""
+"""Shared fixtures: canned DiscoveryResult and DashboardSnapshot objects
+so route tests never touch the real Plex installation, filesystem state,
+or network."""
 
+from musicseed.services.dashboard import DashboardSnapshot
 from musicseed.services.discovery import (
     DatabasePathDiscovery,
     DiscoveryResult,
@@ -9,6 +11,7 @@ from musicseed.services.discovery import (
     PlexServerDiscovery,
     Reason,
 )
+from musicseed.services.library import EnrichmentCoverage, LibraryStatus
 
 
 def make_discovery(
@@ -68,4 +71,36 @@ def make_discovery(
         plex_blobs_db=blobs_db,
         plex_server=server,
         ready=ready,
+    )
+
+
+def make_dashboard(track_count: int = 5000, discovery=None) -> DashboardSnapshot:
+    discovery = discovery or make_discovery()
+    return DashboardSnapshot(
+        discovery=discovery,
+        library=LibraryStatus(
+            db_path="/tmp/fake/musicseed.db",
+            db_size_bytes=1048576,
+            plex_url="http://localhost:32400",
+            plex_db="/plex/library.db",
+            plex_library="Music",
+            artist_count=100,
+            album_count=200,
+            track_count=track_count,
+            play_count=500,
+            genre_count=30,
+            mood_count=10,
+            style_count=50,
+            enrichment=EnrichmentCoverage(
+                tracks_with_mbid=4000,
+                tracks_with_spotify=3000,
+                tracks_with_listenbrainz=4500,
+                tracks_with_sonic=4800,
+                spotify_attempted=3500,
+                listenbrainz_attempted=5000,
+            ),
+        ),
+        active_jobs=[],
+        recent_jobs=[],
+        last_sync=None,
     )

@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from musicseed.services.dashboard import get_dashboard
 from musicseed.services.discovery import discover
 
 from musicseed_web.render import templates
@@ -13,11 +14,10 @@ router = APIRouter()
 
 @router.get("/", response_class=HTMLResponse)
 def index(request: Request) -> HTMLResponse:
-    # Fresh installations (no MusicSeed database yet) go straight into setup.
-    # A configured installation can still reach /setup intentionally via nav.
     if not discover(check_server=False).musicseed_db.exists:
         return RedirectResponse("/setup", status_code=303)
-    return templates.TemplateResponse(request, "index.html")
+    snapshot = get_dashboard()
+    return templates.TemplateResponse(request, "dashboard.html", {"snapshot": snapshot})
 
 
 @router.get("/healthz")

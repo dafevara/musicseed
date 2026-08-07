@@ -1,0 +1,7 @@
+<section class="panel">
+    <h2>Could not start job</h2>
+    <div class="flash error">{{ error }}</div>
+    {% if 'already running' in error %}
+    <p class="muted">A job of the same kind is already in progress. Refreshing…</p>
+    {% endif %}
+</section>

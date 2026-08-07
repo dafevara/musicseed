@@ -119,10 +119,16 @@
         <dd>{{ '•••••••• (configured)' if result.plex_server.token_configured else 'not set' }}</dd>
     </dl>
 
-    {% if db_init == 'done' %}
-    <p class="muted">The database is ready. Importing your library is the next setup step
-        (available in an upcoming release).</p>
-    {% else %}
+    {% if db_init == 'done' and not job %}
+    <p class="muted">The database is ready. The next step imports your Plex library
+        and enriches tracks with external metadata.</p>
+    <form hx-post="/setup/start-work"
+          hx-target="#setup-results" hx-swap="outerHTML">
+        <input type="hidden" name="spotify_client_id" value="{{ form.get('spotify_client_id', '') }}">
+        <input type="hidden" name="spotify_client_secret" value="{{ form.get('spotify_client_secret', '') }}">
+        <button type="submit" class="action">Start import</button>
+    </form>
+    {% elif db_init != 'done' %}
     <p class="muted">Nothing has been changed yet. Press the button below to create the
         MusicSeed database at the path shown above. This is safe and idempotent — it never
         replaces an existing database.</p>
@@ -135,6 +141,8 @@
         <input type="hidden" name="plex_token" value="{{ form.get('plex_token', '') }}">
         {% endif %}
         <input type="hidden" name="plex_library" value="{{ result.plex_server.library }}">
+        <input type="hidden" name="spotify_client_id" value="{{ form.get('spotify_client_id', '') }}">
+        <input type="hidden" name="spotify_client_secret" value="{{ form.get('spotify_client_secret', '') }}">
         <button type="submit">Initialize database</button>
     </form>
     {% endif %}
@@ -164,6 +172,14 @@
         <label>MusicSeed database path
             <input type="text" name="musicseed_db_path" value="{{ form.get('musicseed_db_path', '') }}"
                    placeholder="{{ result.musicseed_db.path }}">
+        </label>
+        <label>Spotify client ID
+            <input type="text" name="spotify_client_id" value="{{ form.get('spotify_client_id', '') }}"
+                   placeholder="Spotify Web API client ID">
+        </label>
+        <label>Spotify client secret
+            <input type="password" name="spotify_client_secret" value="" autocomplete="off"
+                   placeholder="{{ 'configured' if form.get('spotify_client_id') else 'not set' }}">
         </label>
         <button type="submit">Re-run checks</button>
     </form>

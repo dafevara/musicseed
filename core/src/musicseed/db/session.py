@@ -37,6 +37,7 @@ def get_engine():
             cursor = dbapi_connection.cursor()
             cursor.execute("PRAGMA journal_mode=WAL")
             cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.execute("PRAGMA busy_timeout=15000")
             cursor.close()
 
         _engine = engine
@@ -86,8 +87,13 @@ _ADDITIVE_COLUMNS = [
 
 
 def ensure_schema() -> None:
-    """Apply lightweight additive schema updates for existing local databases."""
+    """Apply lightweight additive schema updates for existing local databases.
+
+    New tables are created via ``Base.metadata.create_all(checkfirst=True)``;
+    additive column migrations are handled per-table via the PRAGMA list.
+    """
     engine = get_engine()
+    Base.metadata.create_all(engine, checkfirst=True)
     with engine.connect() as conn:
         for table, column, column_ddl in _ADDITIVE_COLUMNS:
             existing = {

@@ -1,0 +1,59 @@
+<div id="dashboard-jobs"
+     hx-get="/dashboard/status"
+     hx-trigger="every 5s"
+     hx-swap="outerHTML">
+
+    {% if snapshot.active_jobs %}
+    <h3>Active</h3>
+    <ul class="checks">
+    {% for j in snapshot.active_jobs %}
+    <li>
+        <span class="badge running">{{ j.state }}</span>
+        <strong>{{ j.kind }}</strong>
+        {% if j.checkpoint %}<span class="muted">— {{ j.checkpoint }}</span>{% endif %}
+        <span class="muted">({{ j.progress_current }} / {{ j.progress_total }})</span>
+    </li>
+    {% endfor %}
+    </ul>
+    {% endif %}
+
+    {% if snapshot.last_sync %}
+    <p class="muted">Last sync:
+        {{ snapshot.last_sync.completed_at or snapshot.last_sync.updated_at }}</p>
+    {% endif %}
+
+    {% if snapshot.recent_jobs %}
+    <details>
+    <summary class="muted">Recent jobs ({{ snapshot.recent_jobs | length }})</summary>
+    <ul class="checks">
+    {% for j in snapshot.recent_jobs %}
+    <li>
+        <span class="badge {% if j.state in ['succeeded'] %}ok{% elif j.state in ['failed','canceled'] %}problem{% else %}running{% endif %}">{{ j.state }}</span>
+        <strong>{{ j.kind }}</strong>
+        {% if j.error_summary %}<span class="muted">— {{ j.error_summary }}</span>{% endif %}
+    </li>
+    {% endfor %}
+    </ul>
+    </details>
+    {% endif %}
+
+    {% set ns = namespace(import_active=false, enrich_active=false) %}
+    {% for j in snapshot.active_jobs %}
+    {% if j.kind == 'import' %}{% set ns.import_active = true %}{% endif %}
+    {% if j.kind == 'enrich' %}{% set ns.enrich_active = true %}{% endif %}
+    {% endfor %}
+
+    {% if snapshot.library.track_count > 0 and not ns.import_active %}
+    <form hx-post="/dashboard/sync" hx-target="#dashboard-jobs" hx-swap="outerHTML"
+          style="margin-top:0.5rem">
+        <button type="submit" class="action">Sync library</button>
+    </form>
+    {% endif %}
+
+    {% if snapshot.library.track_count > 0 and not ns.enrich_active %}
+    <form hx-post="/dashboard/enrich" hx-target="#dashboard-jobs" hx-swap="outerHTML"
+          style="margin-top:0.5rem">
+        <button type="submit" class="action">Enrich tracks</button>
+    </form>
+    {% endif %}
+</div>

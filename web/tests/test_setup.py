@@ -3,7 +3,7 @@
 All discovery is faked — no real Plex, filesystem, or network access.
 """
 
-from conftest import make_discovery
+from conftest import make_dashboard, make_discovery
 from fastapi.testclient import TestClient
 from musicseed.services.discovery import Reason
 from musicseed_web.app import create_app
@@ -38,9 +38,10 @@ def test_fresh_install_is_routed_to_setup(monkeypatch) -> None:
 
 def test_configured_install_renders_home(monkeypatch) -> None:
     _patch(monkeypatch, make_discovery())
+    monkeypatch.setattr(home, "get_dashboard", lambda: make_dashboard())
     response = client.get("/")
     assert response.status_code == 200
-    assert "Re-run setup" in response.text
+    assert "Plex connection" in response.text
 
 
 # ------------------------------------------------------------- wizard page

@@ -1,7 +1,10 @@
 """Plex SQLite database importer."""
 
+from __future__ import annotations
+
 import sqlite3
 import traceback
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Generator
@@ -381,6 +384,7 @@ def import_from_plex(
     plex_db_path: Path,
     library_name: str = "Music",
     full_import: bool = False,
+    progress_callback: "Callable[[int, int, str], None] | None" = None,
 ) -> dict[str, int]:
     """Import music library from Plex database.
 
@@ -451,6 +455,9 @@ def import_from_plex(
                 artist_map[plex_artist.id] = artist.id
                 progress.advance(artist_task)
 
+            if progress_callback:
+                progress_callback(imported["artists"], counts["artists"], "artists")
+
             # Import albums
             album_task = progress.add_task("Importing albums...", total=counts["albums"])
             for plex_album in importer.iter_albums():
@@ -479,6 +486,9 @@ def import_from_plex(
 
                 album_map[plex_album.id] = album.id
                 progress.advance(album_task)
+
+            if progress_callback:
+                progress_callback(imported["albums"], counts["albums"], "albums")
 
             # Import tracks
             track_task = progress.add_task("Importing tracks...", total=counts["tracks"])
@@ -567,6 +577,9 @@ def import_from_plex(
 
             # Commit tracks before play history
             session.commit()
+
+            if progress_callback:
+                progress_callback(imported["tracks"], counts["tracks"], "tracks")
 
             # Import play history
             history_task = progress.add_task(

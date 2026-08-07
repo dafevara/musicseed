@@ -1,0 +1,62 @@
+{% if job %}
+<div id="job-{{ job.id }}"
+     {% if job.state in ['running', 'pending', 'cancel_requested'] %}
+     hx-get="/jobs/{{ job.id }}/progress"
+     hx-trigger="every 2s"
+     hx-swap="outerHTML"
+     {% endif %}>
+    <section class="panel">
+        <h2>{{ job.kind | title }}</h2>
+        {% if job.state == 'succeeded' %}
+        <div class="flash ok">Complete — {{ job.checkpoint or '' }}</div>
+        {% elif job.state == 'failed' %}
+        <div class="flash error">{{ job.error_summary or 'Unknown error' }}</div>
+        {% elif job.state == 'canceled' %}
+        <div class="flash muted-callout">Canceled</div>
+        {% else %}
+        <p>{{ job.checkpoint or 'Working…' }}
+            {% if job.progress_total %}
+            <span class="muted">({{ job.progress_current }} / {{ job.progress_total }})</span>
+            {% endif %}
+        </p>
+        {% if job.progress_total %}
+        <div class="progress-bar"><div class="fill" style="width:{{ (job.progress_current / job.progress_total * 100) | int }}%"></div></div>
+        {% endif %}
+        {% if job.state == 'running' %}
+        <form hx-post="/jobs/{{ job.id }}/cancel" hx-swap="outerHTML" style="margin-top:0.5rem">
+            <button type="submit" class="action danger">Cancel</button>
+        </form>
+        {% endif %}
+        {% endif %}
+    </section>
+</div>
+{% else %}
+<section class="panel"><p class="muted">Job not found.</p></section>
+{% endif %}
+
+{% if job and job.state == 'succeeded' and job.kind == 'import' %}
+<div id="enrich-section">
+    <section class="panel">
+        <h2>Enrichment</h2>
+        <p>Enrichment fetches popularity and metadata from Spotify's Web API
+        using the credentials you provided during setup.</p>
+        <p class="muted">Tracks will be looked up to add popularity data
+        and cross-reference IDs. This may take several minutes.</p>
+        <form hx-post="/setup/start-enrich"
+              hx-target="#enrich-section" hx-swap="outerHTML">
+            <button type="submit" class="action">Continue with enrichment</button>
+        </form>
+    </section>
+</div>
+{% endif %}
+
+{% if job and job.state == 'succeeded' and job.kind == 'enrich' %}
+<section class="panel">
+    <h2>MusicSeed is ready</h2>
+    <p>Your Plex library has been imported and enriched. You can now:</p>
+    <ul>
+        <li><a href="/">Go to the dashboard</a> to review your library state.</li>
+        <li>Use <code>musicseed recommend</code> in the CLI to create playlists.</li>
+    </ul>
+</section>
+{% endif %}
