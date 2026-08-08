@@ -41,7 +41,9 @@ def test_configured_install_renders_home(monkeypatch) -> None:
     monkeypatch.setattr(home, "get_dashboard", lambda: make_dashboard())
     response = client.get("/")
     assert response.status_code == 200
-    assert "Plex connection" in response.text
+    # Plex health lives in the dashboard health strip.
+    assert "health-strip" in response.text
+    assert "Plex 1.41.0" in response.text
 
 
 # ------------------------------------------------------------- wizard page

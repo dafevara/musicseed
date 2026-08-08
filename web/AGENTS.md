@@ -32,7 +32,12 @@ the logic this app calls. This file covers the web app only.
   (the CLI uses it to time the browser launch). Surfaces start the app through this function,
   not by assembling uvicorn themselves.
 - `src/musicseed_web/render.py`: shared `Jinja2Templates` instance + `BASE_DIR` (avoids circular
-  imports between app assembly and route modules).
+  imports between app assembly and route modules). Registers `nav.nav_context` as a template
+  context processor, so every rendered template receives the navigation.
+- `src/musicseed_web/nav.py`: the shell's section list (`SECTIONS`) and `active_section(path)`,
+  which resolves the current section **from the request path, server-side** — there is no
+  client-side router. Sections without a screen yet carry no `href` and render as inert labels
+  rather than dead links. Add or activate a section here, not in `base.html`.
 - `src/musicseed_web/routes/`: **one module per page/flow**, each with an `APIRouter` named
   `router`. `home.py`: `/` (redirects fresh installs to `/setup` when the MusicSeed DB doesn't
   exist), `/healthz`, `/fragments/clock`. `setup.py`: the first-run wizard — `GET /setup`
@@ -41,8 +46,9 @@ the logic this app calls. This file covers the web app only.
   resolved values; safe on an existing database). Wizard routes only call core services
   (`discover`, `initialize_database`); they never touch the filesystem/Plex directly and never
   start import or enrichment.
-- `src/musicseed_web/templates/`: Jinja templates. `base.html` is the page shell (loads CSS +
-  vendored HTMX), `index.html` the root page, `setup.html` the wizard shell, and `_*.html` are
+- `src/musicseed_web/templates/`: Jinja templates. `base.html` is the page shell — header, the
+  section navigation, and a CSS grid of `header / nav / main` (loads CSS + vendored HTMX);
+  `index.html` the root page, `setup.html` the wizard shell, and `_*.html` are
   **HTMX partials** (fragments returned without the page shell — test them by asserting
   `"<html" not in response.text`). `_setup_results.html` renders the full discovery result:
   per-check badges + actionable guidance per `Reason` code, a review panel when ready, or the
