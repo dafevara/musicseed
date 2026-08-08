@@ -76,6 +76,7 @@
   .tag.gone { background: rgba(229,112,126,.12); color: var(--red); }
   .tag.core { background: rgba(110,168,254,.12); color: var(--accent); }
   .tag.cli { background: rgba(180,142,173,.12); color: var(--purple); }
+  .tag.web { background: rgba(229,192,123,.12); color: var(--amber); }
   .tag.opt { background: rgba(229,181,103,.12); color: var(--amber); }
 
   figure {
@@ -115,7 +116,8 @@ little as possible.</p>
 
 <div class="note">
   <strong>TL;DR install surface:</strong> Python 3.14+ and <code>uv</code>, six core packages,
-  two CLI packages, one SQLite file (created automatically), and read access to two Plex SQLite
+  two CLI packages, three web packages (plus a vendored HTMX file — no Node), one SQLite file
+  (created automatically), and read access to two Plex SQLite
   databases. That's the whole thing — no server, no containers, no native ML libraries.
 </div>
 
@@ -132,6 +134,11 @@ little as possible.</p>
       <path d="M 0 1 L 9 5 L 0 9 z" fill="#5fd0a5"/>
     </marker>
   </defs>
+
+  <!-- Web UI -->
+  <rect x="60" y="16" rx="8" width="250" height="58" fill="#1d212b" stroke="#e5c07b"/>
+  <text x="185" y="40" text-anchor="middle" class="box-label">musicseed-web</text>
+  <text x="185" y="58" text-anchor="middle" class="box-sub">FastAPI · Jinja · HTMX · thin wrapper</text>
 
   <!-- CLI -->
   <rect x="380" y="16" rx="8" width="250" height="58" fill="#1d212b" stroke="#b48ead"/>
@@ -178,8 +185,9 @@ little as possible.</p>
   <text x="905" y="220" text-anchor="middle" class="box-sub">rate-limited · enrichment only</text>
 
   <!-- edges -->
+  <line x1="245" y1="74" x2="330" y2="116" stroke="#6ea8fe" stroke-width="1.5" marker-end="url(#arr)"/>
   <line x1="505" y1="74" x2="505" y2="116" stroke="#6ea8fe" stroke-width="1.5" marker-end="url(#arr)"/>
-  <text x="515" y="100" class="flow-label">editable path dep · services only</text>
+  <text x="440" y="100" class="flow-label">editable path dep · services only</text>
 
   <path d="M 400 236 C 300 280, 180 300, 145 330" fill="none" stroke="#6ea8fe" stroke-width="1.5" marker-end="url(#arr)"/>
   <text x="215" y="290" class="flow-label">SQLAlchemy ORM</text>
@@ -211,9 +219,10 @@ little as possible.</p>
     <p>sqlalchemy, pyyaml, httpx, numpy, pydantic, rich — all pure-Python or widely pre-built wheels.</p>
   </div>
   <div class="card">
-    <h4>Python packages (CLI)</h4>
-    <p class="num">2 + core</p>
-    <p>typer, rich, and musicseed-core via an editable path. No other surface exists yet.</p>
+    <h4>Python packages (surfaces)</h4>
+    <p class="num">2 + 3 + core</p>
+    <p>cli: typer, rich · web: fastapi, uvicorn, jinja2 (+ vendored HTMX, no Node). Both depend
+    on musicseed-core via an editable path.</p>
   </div>
   <div class="card">
     <h4>External processes</h4>
@@ -236,6 +245,11 @@ little as possible.</p>
     <tr><td>pyyaml</td><td>config.yaml loading</td><td><span class="tag kept">kept</span> <span class="tag core">core</span></td></tr>
     <tr><td>rich</td><td>Progress rendering inside import/enrich pipelines</td><td><span class="tag kept">kept</span> <span class="tag core">core</span></td></tr>
     <tr><td>typer</td><td>CLI framework</td><td><span class="tag kept">kept</span> <span class="tag cli">cli</span></td></tr>
+    <tr><td>fastapi</td><td>Web request handling (local UI)</td><td><span class="tag kept">kept</span> <span class="tag web">web</span></td></tr>
+    <tr><td>uvicorn</td><td>ASGI server for the web app</td><td><span class="tag kept">kept</span> <span class="tag web">web</span></td></tr>
+    <tr><td>jinja2</td><td>Server-rendered templates</td><td><span class="tag kept">kept</span> <span class="tag web">web</span></td></tr>
+    <tr><td>python-multipart</td><td>HTML form parsing (setup wizard)</td><td><span class="tag kept">kept</span> <span class="tag web">web</span></td></tr>
+    <tr><td>htmx (vendored file)</td><td>Fragment updates without a JS build step</td><td><span class="tag kept">kept</span> <span class="tag web">web</span></td></tr>
     <tr class="removed"><td>essentia-tensorflow</td><td>Self-generated audio embeddings (MusiCNN)</td><td><span class="tag gone">removed · Phase 1</span></td></tr>
     <tr class="removed"><td>psycopg[binary]</td><td>PostgreSQL driver</td><td><span class="tag gone">removed · Phase 3</span></td></tr>
     <tr class="removed"><td>pgvector</td><td>Vector column type + cosine-distance query</td><td><span class="tag gone">removed · Phase 2</span></td></tr>
@@ -403,7 +417,7 @@ little as possible.</p>
 <table>
   <thead><tr><th>Gap</th><th>Notes</th></tr></thead>
   <tbody>
-    <tr><td>PyPI packaging</td><td>core + cli are separate distributions joined by an editable path; decide on one combined package or publish both.</td></tr>
+    <tr><td>PyPI packaging</td><td>core + cli + web are separate distributions joined by editable paths; decide on one combined package or publish them all.</td></tr>
     <tr><td>Plex DB discovery</td><td>db_path defaults are macOS-specific; Linux/Windows paths need documenting or auto-detection.</td></tr>
     <tr><td>Sonic analysis coverage</td><td>Recommendation quality depends on Plex having analyzed the library; <code>sonic-probe</code> reports coverage, <code>sonic-refresh</code> triggers the Butler task.</td></tr>
   </tbody>
@@ -411,7 +425,8 @@ little as possible.</p>
 
 <h2>5. Verify the current state</h2>
 <pre><code>cd core &amp;&amp; uv run ruff check src
-python3 -m compileall -q core/src/musicseed cli/src/musicseed_cli
+python3 -m compileall -q core/src/musicseed cli/src/musicseed_cli web/src/musicseed_web
+cd web &amp;&amp; uv run pytest tests -q       # web scaffold smoke tests (offline)
 cd cli &amp;&amp; uv run musicseed init-db      # creates the SQLite file
 uv run musicseed status                  # shows DB path + file size
 uv run musicseed recommend --seed-id 123 --limit 20 --explain</code></pre>

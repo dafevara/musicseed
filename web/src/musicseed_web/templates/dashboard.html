@@ -1,53 +1,66 @@
 {% extends "base.html" %}
-{% block title %}Dashboard · MusicSeed{% endblock %}
+{% block title %}Library · MusicSeed{% endblock %}
 
 {% block content %}
-<section class="panel">
-    <h2>Plex connection</h2>
-    {% if snapshot.discovery.plex_server.ok %}
-    <p><span class="badge ok">ok</span> Connected to Plex {{ snapshot.discovery.plex_server.server_version }}
-    — library “{{ snapshot.discovery.plex_server.library }}” found.
-    Token: {{ '••••••••' if snapshot.discovery.plex_server.token_configured else 'not set' }}.</p>
-    {% else %}
-    <p><span class="badge problem">needs attention</span> {{ snapshot.discovery.plex_server.detail or 'Plex is not reachable.' }}
-    <a href="/setup">Re-run setup</a>.</p>
-    {% endif %}
-</section>
+{% set lib = snapshot.library %}
+{% set plex = snapshot.discovery.plex_server %}
+{% set enrichment = lib.enrichment %}
+{% set tracks = lib.track_count | int %}
 
-<section class="panel">
-    <h2>Library</h2>
-    <div class="grid cols-4">
-        <div class="stat"><strong>{{ snapshot.library.track_count | int | default(0) }}</strong> tracks</div>
-        <div class="stat"><strong>{{ snapshot.library.album_count | int | default(0) }}</strong> albums</div>
-        <div class="stat"><strong>{{ snapshot.library.artist_count | int | default(0) }}</strong> artists</div>
-        <div class="stat"><strong>{{ snapshot.library.play_count | int | default(0) }}</strong> plays</div>
+<div class="health-strip">
+    <div class="health-item">
+        <p class="health-label">Plex</p>
+        {% if plex.ok %}
+        <p class="health-line">
+            <span class="badge ok">ok</span> Plex {{ plex.server_version }}
+        </p>
+        <p class="health-detail muted">
+            Library “{{ plex.library }}” · token
+            {{ 'configured' if plex.token_configured else 'not set' }}
+        </p>
+        {% else %}
+        <p class="health-line"><span class="badge problem">needs attention</span></p>
+        <p class="health-detail muted">
+            {{ plex.detail or 'Plex is not reachable.' }}
+            <a href="/setup">Re-run setup</a>.
+        </p>
+        {% endif %}
     </div>
-</section>
 
-<section class="panel">
-    <h2>Enrichment</h2>
-    {% set e = snapshot.library.enrichment %}
-    {% set t = snapshot.library.track_count | int | default(1) %}
-    <div class="meters">
-        {% for source in [
-            ('Spotify', e.tracks_with_spotify),
-            ('ListenBrainz', e.tracks_with_listenbrainz),
-            ('Sonic', e.tracks_with_sonic),
-        ] %}
-        <div class="enrich-meter">
-            <div class="meter-label">{{ source[0] }}
-                <span class="muted">{{ source[1] }} of {{ t }}</span>
-            </div>
-            <div class="progress-bar">
-                <div class="fill" style="width:{{ ((source[1] / t * 100) | int) if t else 0 }}%"></div>
-            </div>
+    <div class="health-item">
+        <p class="health-label">Library</p>
+        <div class="health-stats">
+            <div class="health-stat"><strong>{{ '{:,}'.format(tracks) }}</strong> tracks</div>
+            <div class="health-stat"><strong>{{ '{:,}'.format(lib.album_count | int) }}</strong> albums</div>
+            <div class="health-stat"><strong>{{ '{:,}'.format(lib.artist_count | int) }}</strong> artists</div>
+            <div class="health-stat"><strong>{{ '{:,}'.format(lib.play_count | int) }}</strong> plays</div>
         </div>
-        {% endfor %}
     </div>
-</section>
+
+    <div class="health-item">
+        <p class="health-label">Coverage</p>
+        <div class="health-meters">
+            {% for name, covered in [
+                ('Spotify', enrichment.tracks_with_spotify),
+                ('ListenBrainz', enrichment.tracks_with_listenbrainz),
+                ('Sonic', enrichment.tracks_with_sonic),
+            ] %}
+            {% set count = covered | int %}
+            <div class="health-meter">
+                <div class="meter-label">{{ name }}
+                    <span class="muted">{{ '{:,}'.format(count) }} of {{ '{:,}'.format(tracks) }}</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="fill" style="width:{{ ((count / tracks * 100) | round | int) if tracks else 0 }}%"></div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
 
 <section class="panel">
-    <h2>Jobs</h2>
+    <h2>Activity</h2>
     <div id="dashboard-jobs"
          hx-get="/dashboard/status"
          hx-trigger="load, every 5s"

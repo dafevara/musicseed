@@ -8,16 +8,36 @@
     <script src="{{ url_for('static', path='/js/htmx.min.js') }}" defer></script>
 </head>
 <body>
-    <header class="site-header">
-        <h1 class="site-title">MusicSeed</h1>
-        <p class="site-subtitle">Local-first Plex playlist recommendations</p>
-        <nav class="site-nav">
-            <a href="/">Home</a>
-            <a href="/setup">Setup</a>
+    <div class="app-shell">
+        <header class="site-header">
+            <a class="brand" href="/">MusicSeed</a>
+            <p class="site-tagline">Local-first Plex playlist recommendations</p>
+        </header>
+
+        <nav class="site-nav" aria-label="Sections">
+            <ul>
+                {% for section in nav_sections %}
+                <li>
+                    {% if section.available %}
+                    <a href="{{ section.href }}"
+                       class="nav-link{% if section.key == active_section %} is-active{% endif %}"
+                       {% if section.key == active_section %}aria-current="page"{% endif %}>
+                        <span class="nav-label">{{ section.label }}</span>
+                    </a>
+                    {% else %}
+                    <span class="nav-link is-unavailable" aria-disabled="true">
+                        <span class="nav-label">{{ section.label }}</span>
+                        <span class="nav-note">{{ section.note }}</span>
+                    </span>
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
         </nav>
-    </header>
-    <main class="site-main">
-        {% block content %}{% endblock %}
-    </main>
+
+        <main class="site-main">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
 </body>
 </html>
