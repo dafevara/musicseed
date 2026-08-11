@@ -7,7 +7,6 @@ here.
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-
 from musicseed.services.jobs import get_manager
 
 from musicseed_web.render import BASE_DIR

@@ -143,7 +143,7 @@
         <input type="hidden" name="plex_library" value="{{ result.plex_server.library }}">
         <input type="hidden" name="spotify_client_id" value="{{ form.get('spotify_client_id', '') }}">
         <input type="hidden" name="spotify_client_secret" value="{{ form.get('spotify_client_secret', '') }}">
-        <button type="submit">Initialize database</button>
+        <button type="submit" class="action">Initialize database</button>
     </form>
     {% endif %}
 </section>
@@ -181,7 +181,7 @@
             <input type="password" name="spotify_client_secret" value="" autocomplete="off"
                    placeholder="{{ 'configured' if form.get('spotify_client_id') else 'not set' }}">
         </label>
-        <button type="submit">Re-run checks</button>
+        <button type="submit" class="action">Re-run checks</button>
     </form>
 </section>
 {% endif %}

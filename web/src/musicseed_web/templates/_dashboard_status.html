@@ -53,7 +53,7 @@
     {% if snapshot.library.track_count > 0 and not ns.enrich_active %}
     <form hx-post="/dashboard/enrich" hx-target="#dashboard-jobs" hx-swap="outerHTML"
           style="margin-top:0.5rem">
-        <button type="submit" class="action">Enrich tracks</button>
+        <button type="submit" class="action secondary">Enrich tracks</button>
     </form>
     {% endif %}
 </div>
