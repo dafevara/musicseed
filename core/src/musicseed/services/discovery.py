@@ -13,7 +13,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from musicseed.clients.plex_api import PlexClient
+from musicseed.clients.plex import PlexClient
 from musicseed.config import Config, DatabaseConfig, PlexConfig, get_config
 
 _SQLITE_HEADER = b"SQLite format 3\x00"

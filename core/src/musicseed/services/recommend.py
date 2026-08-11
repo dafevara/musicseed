@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel
 
-from musicseed.clients.plex_api import PlaylistResult, PlexClient
+from musicseed.clients.plex import Playlist, PlexClient
 from musicseed.config import get_config
 from musicseed.db.models import Track
 from musicseed.db.session import get_session
@@ -27,7 +27,7 @@ class PlaylistCreateResult(BaseModel):
 
     seed_tracks: list[Track]
     recommendations: list[Recommendation]
-    playlist: PlaylistResult
+    playlist: Playlist
 
 
 def get_recommendations(

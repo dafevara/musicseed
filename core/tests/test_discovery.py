@@ -6,12 +6,12 @@ from pathlib import Path
 
 import httpx
 import pytest
-from musicseed.clients import plex_api
-from musicseed.clients.plex_api import (
+from musicseed.clients.plex import (
     ConnectionCheck,
     LibrarySectionResult,
     PlexClient,
 )
+from musicseed.clients.plex import client as plex_client
 from musicseed.config import Config, PlexConfig
 from musicseed.services import discovery
 from musicseed.services.discovery import Reason, discover
@@ -260,7 +260,7 @@ def test_token_never_appears_in_results(tmp_path: Path,
 
 def test_check_connection_ok(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        plex_api.httpx, "get",
+        plex_client.httpx, "get",
         lambda *a, **k: httpx.Response(
             200, json={"MediaContainer": {"version": "1.41.0"}}
         ),
@@ -272,7 +272,7 @@ def test_check_connection_ok(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_check_connection_unauthorized(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(plex_api.httpx, "get", lambda *a, **k: httpx.Response(401))
+    monkeypatch.setattr(plex_client.httpx, "get", lambda *a, **k: httpx.Response(401))
     check = PlexClient("http://localhost:32400", "bad-tok").check_connection()
     assert check.reachable
     assert not check.authorized
@@ -283,7 +283,7 @@ def test_check_connection_unreachable(monkeypatch: pytest.MonkeyPatch) -> None:
     def _raise(*a, **k):
         raise httpx.ConnectError("connection refused")
 
-    monkeypatch.setattr(plex_api.httpx, "get", _raise)
+    monkeypatch.setattr(plex_client.httpx, "get", _raise)
     check = PlexClient("http://localhost:32400", SECRET_TOKEN).check_connection()
     assert not check.reachable
     assert not check.authorized

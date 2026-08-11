@@ -1,7 +1,12 @@
-"""Backward-compatibility shim — re-exports from ``musicseed.clients.plex``.
+"""Plex Media Server HTTP API client.
 
-Prefer importing from ``musicseed.clients.plex`` directly in new code.
-This module is kept so existing imports continue to work.
+Built against the Plex Media Server OpenAPI spec (v0.2.0) from
+https://plexapi.dev — the spec is used as a reference for endpoint
+contracts and response shapes, not for code generation.
+
+Package layout
+    client.py   — PlexClient transport, auth, error handling
+    models.py   — Pydantic response/domain models (spec-aligned)
 """
 
 from musicseed.clients.plex.client import PlexAPIError, PlexClient

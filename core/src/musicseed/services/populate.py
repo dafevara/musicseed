@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel
 
-from musicseed.clients.plex_api import PlaylistResult, PlexClient
+from musicseed.clients.plex import Playlist, PlexClient
 from musicseed.config import get_config
 from musicseed.db.models import Track
 from musicseed.db.session import get_session
@@ -38,7 +38,7 @@ def _plex_client() -> PlexClient:
     return PlexClient(base_url=config.plex.url, token=config.plex.token)
 
 
-def list_plex_playlists() -> list[PlaylistResult]:
+def list_plex_playlists() -> list[Playlist]:
     """Return every audio playlist currently on the Plex server."""
     return _plex_client().list_playlists()
 
@@ -51,14 +51,15 @@ def _resolve_playlist_local_tracks(
     Raises NotFoundError if the playlist doesn't exist or none of its tracks
     are present in the local database.
     """
-    rating_key = client.find_playlist(playlist_name)
-    if rating_key is None:
+    playlist = client.find_playlist(playlist_name)
+    if playlist is None:
         raise NotFoundError(f"No Plex playlist named '{playlist_name}' was found.")
 
-    plex_ids = client.get_playlist_tracks(rating_key)
-    if not plex_ids:
+    items = client.get_playlist_tracks(playlist.rating_key)
+    if not items:
         raise NotFoundError(f"Playlist '{playlist_name}' has no tracks in Plex.")
 
+    plex_ids = [int(i.rating_key) for i in items]
     local_ids = [
         track_id
         for (track_id,) in session.query(Track.id).filter(Track.plex_id.in_(plex_ids))
@@ -68,7 +69,7 @@ def _resolve_playlist_local_tracks(
             f"None of the tracks in playlist '{playlist_name}' are in the local "
             "library. Import and enrich them first."
         )
-    return rating_key, len(plex_ids), local_ids
+    return playlist.rating_key, len(plex_ids), local_ids
 
 
 def get_populate_recommendations(

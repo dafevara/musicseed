@@ -19,7 +19,7 @@ from datetime import datetime, timedelta
 
 from pydantic import BaseModel
 
-from musicseed.clients.plex_api import LibrarySectionResult, PlexClient, SectionTrack
+from musicseed.clients.plex import LibrarySectionResult, MediaItem, PlexClient
 from musicseed.config import get_config
 from musicseed.exceptions import ConfigurationError, NotFoundError
 
@@ -137,12 +137,12 @@ def _resolve_music_section(
     )
 
 
-def _unanalyzed_albums(tracks: list[SectionTrack]) -> list[UnanalyzedAlbum]:
+def _unanalyzed_albums(tracks: list[MediaItem]) -> list[UnanalyzedAlbum]:
     """Group tracks by album and keep those with unanalyzed tracks, most recent first."""
-    by_album: dict[str, list[SectionTrack]] = {}
+    by_album: dict[str, list[MediaItem]] = {}
     for track in tracks:
-        if track.album_rating_key:
-            by_album.setdefault(track.album_rating_key, []).append(track)
+        if track.parent_rating_key:
+            by_album.setdefault(track.parent_rating_key, []).append(track)
 
     albums = []
     for album_key, album_tracks in by_album.items():
@@ -154,8 +154,8 @@ def _unanalyzed_albums(tracks: list[SectionTrack]) -> list[UnanalyzedAlbum]:
         albums.append(
             UnanalyzedAlbum(
                 rating_key=album_key,
-                title=first.album_title,
-                artist=first.artist_title,
+                title=first.parent_title,
+                artist=first.grandparent_title,
                 track_count=len(album_tracks),
                 unanalyzed_count=len(unanalyzed),
                 most_recent_added_at=max(added) if added else None,
@@ -267,8 +267,8 @@ def _run_trigger_probe(
     return SonicTriggerProbeResult(
         trigger_method=trigger_method,
         album_rating_key=album_rating_key,
-        album_title=before[0].album_title,
-        artist_title=before[0].artist_title,
+        album_title=before[0].parent_title,
+        artist_title=before[0].grandparent_title,
         track_count=len(before),
         analyzed_before=analyzed_before,
         analyzed_after=analyzed_after,
