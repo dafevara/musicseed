@@ -2,8 +2,8 @@
 
 `core/` is the reusable library that holds **all** of MusicSeed's logic: Plex import, metadata
 enrichment, the recommender, database access, and configuration. It has no
-user interface. Every app surface (the `cli/`, and future `api/`/`mcp/`) depends on this package
-and drives it through the `services/` layer.
+user interface. Every app surface (the `cli/`, `api/`, `web/`, and future `mcp/`) depends on
+this package and drives it through the `services/` layer.
 
 Read the root `AGENTS.md` first for product context, monorepo layout, and repo-wide safety rules.
 This file covers the core library only.
@@ -82,9 +82,10 @@ Service entry points:
 
 - **Result models embed raw ORM objects.** `Recommendation`, `RecommendationResult`, etc. use
   `model_config = {"arbitrary_types_allowed": True}` and hold live SQLAlchemy `Track` objects, so
-  they are **not directly JSON-serializable**. A JSON surface (the future `api/`) must project
-  `Track` into DTOs. Sessions use `expire_on_commit=False` and eager `selectinload`, so returned
-  `Track`s stay usable after the session closes — preserve both if you touch loading.
+  they are **not directly JSON-serializable**. The API surface (`api/routes/`) must project
+  `Track` into DTOs — see `routes/recommend.py` for the pattern. Sessions use
+  `expire_on_commit=False` and eager `selectinload`, so returned `Track`s stay usable after
+  the session closes — preserve both if you touch loading.
 - **Recommendation signals are exactly six**: sonic, popularity, style, genre, era, novelty. There
   is no "mood" signal (it was removed). `Weights`/`ScoreBreakdown` are frozen Pydantic models.
 - **`rich` is a real core dependency** — the import/enrich pipelines render progress with it.
@@ -123,5 +124,5 @@ file. No server or containers are involved.
   local project unless a real migration system is introduced intentionally.
 - Recommendation changes: preserve explainability — update `ScoreBreakdown` and the resolver docs
   when adding or changing a signal.
-- If you add a new service, expose it as a function returning a Pydantic model so the CLI (and
-  future API) can adopt it without reaching into `recommender/`/`db/` directly.
+- If you add a new service, expose it as a function returning a Pydantic model so every surface
+  (cli, api, web) can adopt it without reaching into `recommender/`/`db/` directly.

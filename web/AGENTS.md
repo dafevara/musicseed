@@ -1,10 +1,11 @@
 # musicseed-web — Agent Guide
 
 `web/` is the local web surface for MusicSeed: a **server-rendered** FastAPI app using Jinja
-templates and HTMX for incremental updates. Like the CLI, it is a **thin wrapper**: routes parse
-requests, call `musicseed-core`'s `services/` layer, and render results. No recommendation,
-database, or Plex logic lives here — if you find yourself adding business logic to a route, it
-belongs in `core`.
+templates and HTMX for incremental updates. It is a **thin rendering layer**: routes parse
+requests, call `musicseed-api`'s `handlers/` layer for orchestration, and render templates.
+The full REST API is mounted at `/api/` in the same process. No recommendation, database,
+or Plex logic lives here — if you find yourself adding business logic to a route, it belongs
+in `api/handlers/` or `core/services/`.
 
 Read the root `AGENTS.md` for product context and repo-wide safety rules, and `core/AGENTS.md` for
 the logic this app calls. This file covers the web app only.
@@ -14,8 +15,8 @@ the logic this app calls. This file covers the web app only.
 - Distribution name: `musicseed-web`. Import package: `musicseed_web`.
 - Stack: **FastAPI + Jinja2 + HTMX**. No Node build step, no frontend framework, no server
   database, no queue, no containers. Keep it that way.
-- Depends on `musicseed-core` via an **editable path source** in `pyproject.toml`
-  (`musicseed-core = { path = "../core", editable = true }`).
+- Depends on `musicseed-core` and `musicseed-api` via **editable path sources** in `pyproject.toml`
+  (`musicseed-core = { path = "../core", editable = true }`, `musicseed-api = { path = "../api", editable = true }`).
 - Own `pyproject.toml` + `uv.lock` + `.venv`. Run `uv` commands from inside `web/`.
 - Started via the CLI: **`musicseed web`** (in `cli/`) runs `musicseed_web.server.serve` on
   `127.0.0.1:8788` by default and opens the browser once the server reports ready
@@ -62,7 +63,7 @@ the logic this app calls. This file covers the web app only.
 
 ## Particularities to respect
 
-- **Thin surface only.** Routes call `musicseed.services` and render. Never import from
+- **Thin surface only.** Routes call `musicseed_api.handlers` and render. Never import from
   `musicseed_cli`, and never add Typer/Rich console output here.
 - **Core result models embed live ORM objects** and are not JSON-serializable (see
   `core/AGENTS.md`). For HTML this is fine (Jinja reads attributes); if you ever add a JSON route,
@@ -82,10 +83,10 @@ the logic this app calls. This file covers the web app only.
 
 ## Dependencies
 
-`fastapi`, `uvicorn`, `jinja2`, `python-multipart` (HTML form parsing), `musicseed-core`
-(editable path); dev group: `pytest`, `httpx`
-(for `TestClient`). After changing core, run `uv lock` in `web/` so its lockfile re-resolves
-against the updated core.
+`fastapi`, `uvicorn`, `jinja2`, `python-multipart` (HTML form parsing), `musicseed-core`,
+`musicseed-api` (editable paths); dev group: `pytest`, `httpx`
+(for `TestClient`). After changing core or api, run `uv lock` in `web/` so its lockfile
+re-resolves against the updated apps.
 
 ## Run / verify (from `web/`)
 

@@ -24,16 +24,20 @@ and `.venv`; run `uv` commands from inside the app directory.
 | Path | What | Guide |
 |---|---|---|
 | `core/` | `musicseed-core` — all logic (import, enrich, sonic vectors, recommender, db, config). Importable as `musicseed`. Library only, no CLI. | [`core/AGENTS.md`](core/AGENTS.md) |
-| `cli/` | `musicseed-cli` — Typer CLI (`musicseed`). Thin wrapper over core's services; depends on core via an editable path. | [`cli/AGENTS.md`](cli/AGENTS.md) |
-| `web/` | `musicseed-web` — local web UI (FastAPI + Jinja + HTMX, server-rendered). Thin wrapper over core's services. | [`web/AGENTS.md`](web/AGENTS.md) |
-| `api/`, `mcp/` | Future surfaces (HTTP API, MCP server). Not present yet; each will be a sibling app depending on `core`. | — |
+| `api/` | `musicseed-api` — REST API (FastAPI, JSON) + surface-agnostic orchestration handlers. Wraps core's services; consumed by the web UI and available to external integrations. | [`api/AGENTS.md`](api/AGENTS.md) |
+| `cli/` | `musicseed-cli` — Typer CLI (`musicseed`). Thin wrapper over core's services and api's handlers; depends on core and web via editable paths. | [`cli/AGENTS.md`](cli/AGENTS.md) |
+| `web/` | `musicseed-web` — local web UI (FastAPI + Jinja + HTMX, server-rendered). Thin rendering layer over api's handlers; no business logic. Mounts the full REST API at `/api/`. | [`web/AGENTS.md`](web/AGENTS.md) |
+| `mcp/` | Future surface (MCP server). Not present yet; will be a sibling app depending on `core` (and `api` if REST is the preferred transport). | — |
 
 Shared at the repo root: `ruff.toml` (lint config for all apps), `docs/`, `data/`, `logs/`,
 `scripts/` (one-shot utilities, e.g. `migrate_pg_to_sqlite.py`).
 
 **Where logic goes:** all business logic lives in `core/` behind the surface-agnostic `services/`
-layer. App surfaces (cli, future api/mcp) only parse input, call a service, and format the result.
-If you're adding recommendation/db/Plex logic to a surface, move it to `core`.
+layer. Multi-step orchestration (config manipulation, job lifecycle, error mapping) lives in
+`api/handlers/` — surface-agnostic functions that return Pydantic models so the CLI and web
+can share them. App surfaces (cli, web) only parse input, call a handler or service, and format
+the result. If you're adding recommendation/db/Plex logic to a surface or handler that could
+live in core, move it to `core/services/`.
 
 ## Harness Principles
 
@@ -60,9 +64,11 @@ If you're adding recommendation/db/Plex logic to a surface, move it to `core`.
 ## Shared Commands
 
 ```bash
-cd cli   && uv run musicseed status  # run the CLI from cli/ (SQLite file, no server needed)
-cd core  && uv run ruff check src    # per-app lint (ruff.toml is shared at root)
-python3 -m compileall -q core/src/musicseed cli/src/musicseed_cli web/src/musicseed_web
+cd cli   && uv run musicseed status   # run the CLI from cli/ (SQLite file, no server needed)
+cd api   && uv run ruff check src     # per-app lint (ruff.toml is shared at root)
+cd core  && uv run ruff check src
+cd web   && uv run pytest tests -q    # web smoke tests (offline, no Plex/DB needed)
+python3 -m compileall -q core/src/musicseed cli/src/musicseed_cli api/src/musicseed_api web/src/musicseed_web
 ```
 
 The MusicSeed database is a single SQLite file (default
