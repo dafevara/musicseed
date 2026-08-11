@@ -79,6 +79,11 @@ JSON. Handlers are the reusable part — routes are the HTTP-specific projection
   `discovery.py`, `library.py`, `enrichment.py`, `recommend.py`, `sonic.py`, `dashboard.py`,
   `jobs.py`.
 
+- `openapi.json`: hand-crafted OpenAPI 3.1 spec covering all 13 operations with 22
+  named schema components, descriptions, and server entries for both standalone and
+  web-mounted deployment. Use this for code generation or external integration docs —
+  it is the contract, not the auto-generated one.
+
 ## Particularities to respect
 
 - **Handlers never import FastAPI.** Keep them framework-free. Routes handle HTTP concerns
