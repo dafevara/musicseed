@@ -10,7 +10,7 @@ client = TestClient(create_app())
 
 def test_index_serves_server_rendered_page(monkeypatch) -> None:
     monkeypatch.setattr(home, "discover", lambda **kw: make_discovery())
-    monkeypatch.setattr(home, "get_dashboard", lambda: make_dashboard())
+    monkeypatch.setattr(home, "get_dashboard_snapshot", lambda: make_dashboard())
     response = client.get("/")
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")

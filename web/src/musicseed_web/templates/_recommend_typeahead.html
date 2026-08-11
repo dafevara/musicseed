@@ -1,0 +1,19 @@
+{% if tracks %}
+<ul class="typeahead-list">
+    {% for track in tracks %}
+    <li>
+        <button class="typeahead-item"
+                hx-post="/recommend/seeds"
+                hx-vals='{"action": "add", "track_id": {{ track.id }}, "seed_ids": "{{ seed_ids }}"}'
+                hx-target="#seed-chips"
+                hx-swap="innerHTML">
+            <strong>{{ track.artist.name if track.artist else 'Unknown Artist' }}</strong>
+            <span class="muted">&mdash; {{ track.title }}</span>
+            {% if track.album %}
+            <span class="muted">({{ track.album.title }}{% if track.year %}, {{ track.year }}{% endif %})</span>
+            {% endif %}
+        </button>
+    </li>
+    {% endfor %}
+</ul>
+{% endif %}

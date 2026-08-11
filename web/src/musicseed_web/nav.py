@@ -25,12 +25,12 @@ class Section:
         return self.href is not None
 
 
-#: Rendered in order on every page. ``Recommend``, ``Playlists``, and
-#: ``Activity`` get their screens in MUS-19, MUS-21, and MUS-22; until then
-#: they are shown as unavailable so the shell still expresses the full job.
+#: Rendered in order on every page. ``Playlists`` and ``Activity`` get their
+#: screens in MUS-21 and MUS-22; until then they are shown as unavailable so
+#: the shell still expresses the full job.
 SECTIONS: tuple[Section, ...] = (
     Section("library", "Library", "/"),
-    Section("recommend", "Recommend", note="soon"),
+    Section("recommend", "Recommend", "/recommend"),
     Section("playlists", "Playlists", note="soon"),
     Section("activity", "Activity", note="soon"),
     Section("settings", "Settings", "/setup"),
@@ -38,6 +38,7 @@ SECTIONS: tuple[Section, ...] = (
 
 #: Longest-prefix-first, so ``/dashboard/status`` resolves like ``/dashboard``.
 _PREFIXES: tuple[tuple[str, str], ...] = (
+    ("/recommend", "recommend"),
     ("/setup", "settings"),
     ("/dashboard", "library"),
 )

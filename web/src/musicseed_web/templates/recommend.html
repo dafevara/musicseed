@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Recommend · MusicSeed{% endblock %}
+
+{% block content %}
+<section class="panel">
+    <h2>Seed tracks</h2>
+    <p class="muted">Search for tracks to use as seeds for recommendations.</p>
+
+    <div class="seed-search">
+        <input type="search"
+               name="q"
+               placeholder="Search by artist or title&hellip;"
+               autocomplete="off"
+               hx-get="/recommend/typeahead"
+               hx-trigger="keyup changed delay:200ms"
+               hx-target="#typeahead-dropdown"
+               hx-swap="innerHTML"
+               hx-include="#seed-ids">
+        <div id="typeahead-dropdown" class="typeahead-dropdown"></div>
+    </div>
+
+    <div id="seed-chips">
+        {% include "_recommend_seeds.html" %}
+    </div>
+</section>
+
+<section class="panel">
+    <form id="recommend-form"
+          hx-post="/recommend/results"
+          hx-trigger="seedsChanged from:body, change"
+          hx-target="#recommend-results"
+          hx-swap="innerHTML"
+          hx-include="#seed-ids">
+
+        <h2>Filters</h2>
+        <div class="filter-grid">
+            <label>Limit
+                <input type="number" name="limit" value="50" min="1" max="200" style="width:5rem">
+            </label>
+            <label>Year from
+                <input type="number" name="year_min" value="" min="1900" max="2030"
+                       placeholder="any" style="width:5rem">
+            </label>
+            <label>Year to
+                <input type="number" name="year_max" value="" min="1900" max="2030"
+                       placeholder="any" style="width:5rem">
+            </label>
+            <label>Per artist
+                <input type="number" name="max_tracks_per_artist" value="3" min="1" max="20" style="width:5rem">
+            </label>
+            <label>Min score
+                <input type="number" name="min_score" value="" min="0" max="1" step="0.01"
+                       placeholder="any" style="width:5rem">
+            </label>
+        </div>
+    </form>
+</section>
+
+<div id="recommend-results">
+    {% include "_recommend_results.html" %}
+</div>
+{% endblock %}

@@ -236,6 +236,31 @@ wheels = [
 ]
 
 [[package]]
+name = "musicseed-api"
+version = "0.1.0"
+source = { editable = "../api" }
+dependencies = [
+    { name = "fastapi" },
+    { name = "musicseed-core" },
+    { name = "python-multipart" },
+    { name = "uvicorn" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi", specifier = ">=0.115" },
+    { name = "musicseed-core", editable = "../core" },
+    { name = "python-multipart", specifier = ">=0.0.9" },
+    { name = "uvicorn", specifier = ">=0.30" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "pytest", specifier = ">=8.0" },
+]
+
+[[package]]
 name = "musicseed-core"
 version = "0.1.0"
 source = { editable = "../core" }
@@ -268,6 +293,7 @@ source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
     { name = "jinja2" },
+    { name = "musicseed-api" },
     { name = "musicseed-core" },
     { name = "python-multipart" },
     { name = "uvicorn" },
@@ -283,6 +309,7 @@ dev = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "jinja2", specifier = ">=3.1" },
+    { name = "musicseed-api", editable = "../api" },
     { name = "musicseed-core", editable = "../core" },
     { name = "python-multipart", specifier = ">=0.0.9" },
     { name = "uvicorn", specifier = ">=0.30" },

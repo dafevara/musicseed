@@ -9,10 +9,11 @@ import re
 import pytest
 from conftest import make_dashboard, make_discovery
 from fastapi.testclient import TestClient
+from musicseed_api.handlers import discovery as api_discovery
 from musicseed_web.app import create_app
 from musicseed_web.nav import SECTIONS, active_section
-from musicseed_web.routes import dashboard as dashboard_routes
 from musicseed_web.routes import home
+from musicseed_web.routes import setup as setup_routes
 
 client = TestClient(create_app())
 
@@ -27,8 +28,9 @@ _UNAVAILABLE = [s for s in SECTIONS if not s.available]
 def _offline(monkeypatch) -> None:
     """Keep every page render away from Plex, the filesystem, and the network."""
     monkeypatch.setattr(home, "discover", lambda **kw: make_discovery())
-    monkeypatch.setattr(home, "get_dashboard", make_dashboard)
-    monkeypatch.setattr(dashboard_routes, "get_dashboard", make_dashboard)
+    monkeypatch.setattr(home, "get_dashboard_snapshot", make_dashboard)
+    monkeypatch.setattr(api_discovery, "run_discovery", lambda **kw: make_discovery())
+    monkeypatch.setattr(setup_routes, "run_discovery", lambda **kw: make_discovery())
 
 
 def _nav_of(path: str) -> str:

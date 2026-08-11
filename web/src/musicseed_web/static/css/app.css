@@ -558,3 +558,208 @@ a.nav-link:hover {
 summary.muted {
     cursor: pointer;
 }
+
+/* ── Recommend ──────────────────────────────────────────────────────── */
+
+.seed-search {
+    position: relative;
+    margin-bottom: var(--space-md);
+}
+
+.seed-search input[type="search"] {
+    width: 100%;
+    padding: var(--space-sm) 0.6rem;
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-md);
+    font: inherit;
+    font-size: var(--text-base);
+    background: var(--input-bg);
+    color: var(--input-fg);
+}
+
+.typeahead-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    max-height: 20rem;
+    overflow-y: auto;
+}
+
+.typeahead-dropdown:empty {
+    display: none;
+}
+
+.typeahead-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.typeahead-item {
+    display: block;
+    width: 100%;
+    padding: 0.55rem 0.75rem;
+    border: none;
+    background: none;
+    font: inherit;
+    font-size: var(--text-base);
+    text-align: left;
+    cursor: pointer;
+    color: var(--fg);
+    line-height: 1.4;
+}
+
+.typeahead-item:hover,
+.typeahead-item:focus {
+    background: var(--bg);
+}
+
+.seed-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+}
+
+.seed-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.35rem 0.25rem 0.65rem;
+    border-radius: var(--radius-full);
+    font-size: var(--text-sm);
+    background: var(--accent-secondary);
+    color: var(--accent-secondary-fg);
+}
+
+.seed-label {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 20rem;
+}
+
+.seed-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.25rem;
+    height: 1.25rem;
+    border: none;
+    border-radius: 50%;
+    font-size: 0.85rem;
+    line-height: 1;
+    cursor: pointer;
+    background: transparent;
+    color: var(--muted);
+    flex-shrink: 0;
+}
+
+.seed-remove:hover {
+    background: var(--accent-danger);
+    color: var(--accent-danger-fg);
+}
+
+.filter-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-md) var(--space-xl);
+}
+
+.filter-grid label {
+    display: grid;
+    gap: 0.2rem;
+    font-size: var(--text-sm);
+    color: var(--muted);
+}
+
+.filter-grid input {
+    padding: 0.35rem 0.5rem;
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-md);
+    font: inherit;
+    font-size: var(--text-base);
+    background: var(--input-bg);
+    color: var(--input-fg);
+}
+
+.recommendation-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.35rem;
+}
+
+.recommendation-item {
+    display: grid;
+    grid-template-columns: 1fr 6rem 3.5rem;
+    align-items: center;
+    gap: var(--space-md);
+    padding: 0.45rem 0.75rem;
+    border-radius: var(--radius-md);
+}
+
+.recommendation-item:nth-child(odd) {
+    background: var(--bg);
+}
+
+.rec-primary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 0.35rem;
+    min-width: 0;
+}
+
+.rec-artist {
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.rec-sep {
+    flex-shrink: 0;
+}
+
+.rec-title {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.rec-album {
+    font-size: var(--text-sm);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+.rec-score-bar {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.score-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--brand);
+}
+
+.rec-score {
+    font-size: var(--text-sm);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}

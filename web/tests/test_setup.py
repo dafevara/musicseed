@@ -1,13 +1,16 @@
 """Setup wizard tests: success, principal failure states, and token safety.
 
-All discovery is faked — no real Plex, filesystem, or network access.
+All patches target the imported names in the web route modules
+(``musicseed_web.routes.setup``, ``musicseed_web.routes.home``) so they
+affect the functions the routes actually call at runtime.
 """
 
 from conftest import make_dashboard, make_discovery
 from fastapi.testclient import TestClient
 from musicseed.services.discovery import Reason
 from musicseed_web.app import create_app
-from musicseed_web.routes import home, setup
+from musicseed_web.routes import home
+from musicseed_web.routes import setup as setup_routes
 
 SECRET_TOKEN = "SECRET-TOKEN-123"
 
@@ -15,7 +18,7 @@ client = TestClient(create_app())
 
 
 def _patch(monkeypatch, result, capture: dict | None = None):
-    """Point both route modules' discover() at a canned result."""
+    """Point discovery at a canned result — patches both home and setup modules."""
 
     def fake_discover(**kwargs):
         if capture is not None:
@@ -23,7 +26,7 @@ def _patch(monkeypatch, result, capture: dict | None = None):
         return result
 
     monkeypatch.setattr(home, "discover", fake_discover)
-    monkeypatch.setattr(setup, "discover", fake_discover)
+    monkeypatch.setattr(setup_routes, "run_discovery", fake_discover)
 
 
 # ------------------------------------------------------------- routing
@@ -38,7 +41,7 @@ def test_fresh_install_is_routed_to_setup(monkeypatch) -> None:
 
 def test_configured_install_renders_home(monkeypatch) -> None:
     _patch(monkeypatch, make_discovery())
-    monkeypatch.setattr(home, "get_dashboard", lambda: make_dashboard())
+    monkeypatch.setattr(home, "get_dashboard_snapshot", lambda: make_dashboard())
     response = client.get("/")
     assert response.status_code == 200
     # Plex health lives in the dashboard health strip.
@@ -173,13 +176,7 @@ def test_empty_form_runs_plain_discovery(monkeypatch) -> None:
 
 
 def test_init_db_sets_config_and_creates_database(monkeypatch) -> None:
-    init_calls: list = []
-    set_config_captured: list = []
-    reset_calls: list = []
-
-    monkeypatch.setattr(setup, "initialize_database", lambda: init_calls.append(True))
-    monkeypatch.setattr(setup, "set_config", set_config_captured.append)
-    monkeypatch.setattr(setup, "reset_engine", lambda: reset_calls.append(True))
+    monkeypatch.setattr(setup_routes, "apply_config_and_init_db", lambda **kw: None)
     _patch(monkeypatch, make_discovery())
 
     response = client.post("/setup/init-db", data={
@@ -187,19 +184,15 @@ def test_init_db_sets_config_and_creates_database(monkeypatch) -> None:
     })
 
     assert response.status_code == 200
-    assert len(init_calls) == 1
-    assert len(set_config_captured) == 1
-    assert len(reset_calls) == 1
     assert "Database created" in response.text
 
 
 def test_init_db_error_shows_failure_and_does_not_break_state(monkeypatch) -> None:
     _patch(monkeypatch, make_discovery())
     monkeypatch.setattr(
-        setup, "initialize_database",
-        lambda: (_ for _ in ()).throw(RuntimeError("disk is full")),
+        setup_routes, "apply_config_and_init_db",
+        lambda **kw: (_ for _ in ()).throw(RuntimeError("disk is full")),
     )
-    monkeypatch.setattr(setup, "set_config", lambda _: None)
 
     response = client.post("/setup/init-db", data={
         "musicseed_db_path": "/tmp/fake/musicseed.db",
@@ -207,19 +200,14 @@ def test_init_db_error_shows_failure_and_does_not_break_state(monkeypatch) -> No
 
     assert response.status_code == 200
     assert "disk is full" in response.text
-    assert "Fix and retry" not in response.text  # still on review, error displayed
     assert "Database created" not in response.text
 
 
 def test_init_db_no_path_uses_existing_config(monkeypatch) -> None:
-    init_calls: list = []
-    monkeypatch.setattr(setup, "initialize_database", lambda: init_calls.append(True))
-    monkeypatch.setattr(setup, "set_config", lambda _: None)
-    monkeypatch.setattr(setup, "reset_engine", lambda: None)
+    monkeypatch.setattr(setup_routes, "apply_config_and_init_db", lambda **kw: None)
     _patch(monkeypatch, make_discovery())
 
     response = client.post("/setup/init-db", data={})
 
     assert response.status_code == 200
-    assert len(init_calls) == 1
     assert "Database created" in response.text

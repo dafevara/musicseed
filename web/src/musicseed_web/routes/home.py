@@ -1,11 +1,16 @@
-"""Home page, health check, and small demo fragment routes."""
+"""Home page, health check, and small demo fragment routes.
+
+Thin surface: routes delegate to ``musicseed_api.handlers`` for all
+orchestration and call core services only for simple read-only probes
+where no orchestration is needed.
+"""
 
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from musicseed.services.dashboard import get_dashboard
 from musicseed.services.discovery import discover
+from musicseed_api.handlers.dashboard import get_dashboard_snapshot
 
 from musicseed_web.render import templates
 
@@ -16,7 +21,7 @@ router = APIRouter()
 def index(request: Request) -> HTMLResponse:
     if not discover(check_server=False).musicseed_db.exists:
         return RedirectResponse("/setup", status_code=303)
-    snapshot = get_dashboard()
+    snapshot = get_dashboard_snapshot()
     return templates.TemplateResponse(request, "dashboard.html", {"snapshot": snapshot})
 
 
