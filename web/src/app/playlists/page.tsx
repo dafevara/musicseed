@@ -33,7 +33,15 @@ export default function PlaylistsPage() {
   useEffect(() => {
     api.get<PlexPlaylist[]>("/playlists")
       .then(setPlaylists)
-      .catch(() => setError("Could not load playlists. Is Plex configured?"))
+      .catch((e) => {
+        const raw = String(e).replace("Error: ", "");
+        let detail = raw;
+        try {
+          const parsed = JSON.parse(raw);
+          detail = parsed.detail || raw;
+        } catch { /* not JSON */ }
+        setError(detail || "Could not load playlists.");
+      })
       .finally(() => setLoading(false));
   }, []);
 
