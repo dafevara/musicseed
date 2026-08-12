@@ -17,6 +17,36 @@ the API contract this app consumes. This file covers the web app only.
   standalone API at `http://127.0.0.1:8789` (see `next.config.ts`; override with `API_URL`).
 - No dependency on `musicseed-core` or `musicseed-cli` — the only channel to the backend is HTTP.
 
+## Why Next.js (deliberate)
+
+The app is a fully client-rendered SPA, so it does not use server components, SSR, or server
+actions. Next.js is kept for three concrete reasons rather than a static (Vite) build:
+
+1. **Same-origin API proxy with zero config.** `next dev` rewrites `/api/*` to the standalone
+   API, so the browser calls a same-origin `/api` path and there is no CORS setup and no
+   hardcoded `localhost` port in the client. This is the only runtime "server" capability used.
+2. **The app is already built on it.** Rewriting to Vite/static export would churn the working
+   surface with no user-facing benefit.
+3. **One-command local run.** `next dev` + `musicseed-api` is the documented flow (see below); a
+   static export served by the API is a possible future simplification, not a current need.
+
+The cost — a second runtime (Node) in development — is accepted for a single-user, run-from-source
+tool. If the surface ever needs SSR or server actions, Next.js already provides them.
+
+## Local startup (one documented flow)
+
+Run two processes; the browser only ever talks to `http://127.0.0.1:3000`:
+
+```bash
+# terminal 1 — API
+cd api && uv run musicseed-api          # serves JSON at http://127.0.0.1:8789
+
+# terminal 2 — web (proxies /api/* → :8789)
+cd web && npm run dev                   # http://127.0.0.1:3000
+```
+
+(Set `API_URL` to point the proxy at a different API address if needed.)
+
 ## Architecture
 
 Every page is a thin client that talks to the JSON API through `src/lib/api.ts`. The API client is
