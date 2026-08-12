@@ -2,7 +2,7 @@
 name = "musicseed-cli"
 version = "0.1.0"
 description = "MusicSeed command-line interface for Plex playlist recommendations"
-readme = "../README.md"
+readme = "README.md"
 license = "MIT"
 authors = [
     { name = "Daniel Valencia", email = "dafevara@gmail.com" }
