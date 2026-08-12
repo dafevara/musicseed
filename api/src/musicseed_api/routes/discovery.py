@@ -10,10 +10,18 @@ from musicseed_api.handlers.discovery import (
     apply_config_and_init_db,
     extract_overrides,
     run_discovery,
+    run_plex_discovery,
+    save_config_overrides,
     wizard_ready,
 )
 
 router = APIRouter(tags=["discovery"])
+
+
+@router.get("/discovery/plex-servers")
+def get_plex_servers() -> dict:
+    servers = run_plex_discovery()
+    return {"servers": [s.model_dump() for s in servers]}
 
 
 @router.get("/discovery")
@@ -71,5 +79,29 @@ def init_database(
         plex_db_path=plex_db_path,
     )
     apply_config_and_init_db(**overrides)
+    result = run_discovery()
+    return {"ready": wizard_ready(result), "result": result.model_dump()}
+
+
+@router.post("/discovery/config")
+def save_config(
+    musicseed_db_path: Annotated[str, Form()] = "",
+    spotify_client_id: Annotated[str, Form()] = "",
+    spotify_client_secret: Annotated[str, Form()] = "",
+    plex_url: Annotated[str, Form()] = "",
+    plex_token: Annotated[str, Form()] = "",
+    plex_library: Annotated[str, Form()] = "",
+    plex_db_path: Annotated[str, Form()] = "",
+) -> dict:
+    overrides, _form = extract_overrides(
+        musicseed_db_path=musicseed_db_path,
+        spotify_client_id=spotify_client_id,
+        spotify_client_secret=spotify_client_secret,
+        plex_url=plex_url,
+        plex_token=plex_token,
+        plex_library=plex_library,
+        plex_db_path=plex_db_path,
+    )
+    save_config_overrides(**overrides)
     result = run_discovery()
     return {"ready": wizard_ready(result), "result": result.model_dump()}

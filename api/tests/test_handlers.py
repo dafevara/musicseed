@@ -103,3 +103,65 @@ def test_apply_populate_passes_selected_track_ids(monkeypatch):
     result = playlists_module.apply_populate(playlist_name="Test", track_ids=[10, 20])
     assert captured["track_ids"] == [10, 20]
     assert result["added_count"] == 2
+
+
+def test_save_config_overrides_persists_without_init_db(tmp_path, monkeypatch):
+    import musicseed_api.handlers.discovery as discovery_handlers
+
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text("")
+    set_config(load_config(cfg_path))
+
+    called = []
+    monkeypatch.setattr(discovery_handlers, "initialize_database", lambda: called.append(True))
+
+    changed = discovery_handlers.save_config_overrides(
+        plex_url="http://plex.local:32400",
+        spotify_client_id="cid",
+        spotify_client_secret="secret",
+    )
+
+    assert changed
+    assert called == []  # saving config never initializes the database
+
+    config_module._config = None
+    config_module._config_path = None
+    reloaded = load_config(cfg_path)
+    assert reloaded.plex.url == "http://plex.local:32400"
+    assert reloaded.spotify.client_id == "cid"
+    assert reloaded.spotify.client_secret == "secret"
+
+
+def test_save_config_overrides_leaves_blank_fields_untouched(tmp_path):
+    import musicseed_api.handlers.discovery as discovery_handlers
+
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text("")
+    set_config(load_config(cfg_path))
+
+    changed = discovery_handlers.save_config_overrides()
+
+    assert not changed
+    assert config_module._config.plex.url == "http://localhost:32400"
+
+
+def test_apply_config_and_init_db_initializes(tmp_path, monkeypatch):
+    import musicseed_api.handlers.discovery as discovery_handlers
+
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text("")
+    set_config(load_config(cfg_path))
+
+    called = []
+    monkeypatch.setattr(discovery_handlers, "initialize_database", lambda: called.append(True))
+    discovery_handlers.apply_config_and_init_db(plex_url="http://plex.local:32400")
+    assert called == [True]
+
+
+def test_run_plex_discovery_delegates(monkeypatch):
+    import musicseed_api.handlers.discovery as discovery_handlers
+
+    monkeypatch.setattr(
+        discovery_handlers, "discover_plex_servers", lambda timeout: "servers"
+    )
+    assert discovery_handlers.run_plex_discovery() == "servers"

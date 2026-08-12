@@ -5,6 +5,7 @@ Plex server and no real database.
 """
 
 import musicseed_api.routes.dashboard as dashboard_routes
+import musicseed_api.routes.discovery as discovery_routes
 import musicseed_api.routes.enrichment as enrichment_routes
 import musicseed_api.routes.library as library_routes
 import musicseed_api.routes.playlists as playlists_routes
@@ -13,6 +14,7 @@ import musicseed_api.routes.sonic as sonic_routes
 from fastapi.testclient import TestClient
 from musicseed.recommender.scoring import ScoreBreakdown, SonicCoverage, Weights
 from musicseed.services.library import EnrichmentCoverage, LibraryStatus
+from musicseed.services.plex_discovery import DiscoveredPlexServer
 from musicseed_api.app import create_app
 from pydantic import BaseModel
 
@@ -154,3 +156,46 @@ def test_preview_route_passes_weights(monkeypatch):
     assert resp.status_code == 200
     assert captured["weights"].sonic == 0.5
     assert captured["weights"].popularity == 0.2
+
+
+def test_plex_servers_route(monkeypatch):
+    servers = [
+        DiscoveredPlexServer(
+            name="Living Room", host="192.168.1.5", port=32400,
+            version="1.41.0.9000", machine_identifier="abc",
+        )
+    ]
+    monkeypatch.setattr(discovery_routes, "run_plex_discovery", lambda: servers)
+    resp = TestClient(create_app()).get("/discovery/plex-servers")
+    assert resp.status_code == 200
+    body = resp.json()["servers"]
+    assert body[0]["name"] == "Living Room"
+    assert body[0]["host"] == "192.168.1.5"
+    assert body[0]["port"] == 32400
+
+
+def test_save_config_route_persists_without_init(monkeypatch):
+    captured = {}
+
+    def fake_save_config_overrides(**kwargs):
+        captured.update(kwargs)
+
+    class FakeResult:
+        def model_dump(self):
+            return {"ok": True}
+
+    monkeypatch.setattr(discovery_routes, "save_config_overrides", fake_save_config_overrides)
+    monkeypatch.setattr(discovery_routes, "run_discovery", lambda: FakeResult())
+    monkeypatch.setattr(discovery_routes, "wizard_ready", lambda result: False)
+    resp = TestClient(create_app()).post(
+        "/discovery/config",
+        data={
+            "plex_url": "http://plex.local:32400",
+            "plex_token": "tok",
+            "spotify_client_id": "cid",
+        },
+    )
+    assert resp.status_code == 200
+    assert captured["plex_url"] == "http://plex.local:32400"
+    assert captured["plex_token"] == "tok"
+    assert captured["spotify_client_id"] == "cid"

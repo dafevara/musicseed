@@ -44,7 +44,9 @@ JSON. Handlers are the reusable part — routes are the HTTP-specific projection
 | Handler | Orchestrates |
 |---|---|
 | `handlers/discovery.run_discovery` | `services.discovery.discover` (with key filtering) |
-| `handlers/discovery.apply_config_and_init_db` | `config.get_config` / `set_config` → `db.session.reset_engine` → `services.library.initialize_database` |
+| `handlers/discovery.run_plex_discovery` | `services.plex_discovery.discover_plex_servers` |
+| `handlers/discovery.save_config_overrides` | `config.get_config` → `save_config` → `db.session.reset_engine` (persist only — no DB init) |
+| `handlers/discovery.apply_config_and_init_db` | `save_config_overrides` → `services.library.initialize_database` |
 | `handlers/library.get_library_status` | `services.library.get_status` |
 | `handlers/library.run_import_job` | `services.jobs.update_progress` → `services.library.import_library` |
 | `handlers/enrichment.save_spotify_creds` | `config.get_config` / `set_config` |
