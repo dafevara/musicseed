@@ -30,16 +30,52 @@ export interface PlexServerCheck {
   detail: string | null;
 }
 
+export interface DiscoveredPlexServer {
+  name: string;
+  host: string;
+  port: number;
+  product: string;
+  version: string | null;
+  machine_identifier: string | null;
+  scheme: string;
+}
+
+export interface SpotifyCredentialsCheck {
+  configured: boolean;
+  client_id_set: boolean;
+  client_secret_set: boolean;
+}
+
+export interface EnrichmentDiscovery {
+  spotify: SpotifyCredentialsCheck;
+  listenbrainz_requires_key: boolean;
+}
+
+export interface FirstRunStatus {
+  no_config: boolean;
+  db_missing: boolean;
+  library_empty: boolean;
+  is_first_run: boolean;
+  reasons: string[];
+}
+
 export interface DiscoveryResult {
   musicseed_db: CheckResult;
   plex_library_db: CheckResult;
   plex_blobs_db: CheckResult;
   plex_server: PlexServerCheck;
+  enrichers: EnrichmentDiscovery;
+  first_run: FirstRunStatus;
+  missing_inputs: string[];
 }
 
 export interface DiscoveryResponse {
   ready: boolean;
   result: DiscoveryResult;
+}
+
+export interface PlexServersResponse {
+  servers: DiscoveredPlexServer[];
 }
 
 // ── Dashboard ──────────────────────────────
