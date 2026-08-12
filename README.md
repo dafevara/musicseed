@@ -43,9 +43,12 @@ MusicSeed is a monorepo of independent apps that share one core library. Each ap
 - **[`core/`](core/README.md)** — `musicseed-core`, the reusable library (import, enrichment,
   sonic vectors, recommender, db, config). Importable as `musicseed`. All logic lives here; no UI.
 - **[`cli/`](cli/README.md)** — `musicseed-cli`, the Typer command-line app. Depends on `core` via
-  an editable path dependency. **This is how you use MusicSeed today.**
-- `api/`, `mcp/`, `web/` — future surfaces (HTTP API, MCP server, frontend). Not present yet; each
-  will be a sibling app that also depends on `core`.
+  an editable path dependency.
+- **[`api/`](api/AGENTS.md)** — `musicseed-api`, the FastAPI JSON REST API (port 8789) plus
+  surface-agnostic orchestration handlers.
+- **[`web/`](web/AGENTS.md)** — `musicseed-web`, the Next.js + React web UI (port 3000). It is a
+  thin rendering layer over the API.
+- `mcp/` — future surface (MCP server). Not present yet.
 
 Shared infrastructure (`docs/`, `ruff.toml`, `scripts/`) lives at the repo root.
 
@@ -53,6 +56,7 @@ Shared infrastructure (`docs/`, `ruff.toml`, `scripts/`) lives at the repo root.
 
 - macOS on Apple Silicon
 - Python 3.14+ and uv
+- Node.js and npm (for the web UI only)
 - Plex Media Server with a music library
 - Optional Spotify API credentials for fallback enrichment
 
@@ -65,6 +69,18 @@ uv run musicseed init-db      # creates the SQLite database file
 uv run musicseed --help
 uv run musicseed status
 ```
+
+## Web UI (development)
+
+One command starts both the API and the web UI; the browser opens at
+`http://127.0.0.1:3000`:
+
+```bash
+./scripts/dev.sh
+```
+
+This runs `musicseed-api` on `127.0.0.1:8789` and `next dev` on `127.0.0.1:3000` (the Next dev
+server proxies `/api/*` to the API). To run them by hand, see [`web/AGENTS.md`](web/AGENTS.md).
 
 Full CLI usage and configuration: **[`cli/README.md`](cli/README.md)**.
 Using the core library as a dependency: **[`core/README.md`](core/README.md)**.

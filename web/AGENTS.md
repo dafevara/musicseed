@@ -35,7 +35,15 @@ tool. If the surface ever needs SSR or server actions, Next.js already provides 
 
 ## Local startup (one documented flow)
 
-Run two processes; the browser only ever talks to `http://127.0.0.1:3000`:
+One command from the repo root starts both processes; the browser only ever talks to
+`http://127.0.0.1:3000`:
+
+```bash
+./scripts/dev.sh
+```
+
+This runs `musicseed-api` on `127.0.0.1:8789` and `next dev` on `127.0.0.1:3000` (proxying
+`/api/*` → the API). To run the two by hand:
 
 ```bash
 # terminal 1 — API
