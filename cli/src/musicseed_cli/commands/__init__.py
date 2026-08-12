@@ -18,11 +18,9 @@ from musicseed_cli.commands import (
     sonic_probe,
     sonic_refresh,
     status,
-    web,
 )
 
 _MODULES = (
-    web,
     init_db,
     optimize_db,
     status,

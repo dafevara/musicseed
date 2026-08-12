@@ -83,6 +83,7 @@ _ADDITIVE_COLUMNS = [
     ("tracks", "listenbrainz_listen_count", "BIGINT"),
     ("tracks", "listenbrainz_listener_count", "INTEGER"),
     ("tracks", "listenbrainz_matched", "BOOLEAN DEFAULT FALSE"),
+    ("jobs", "result_summary", "TEXT"),
 ]
 
 

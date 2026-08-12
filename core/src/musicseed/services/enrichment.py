@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 
 from musicseed.config import get_config
 from musicseed.db.session import ensure_schema, get_session
@@ -18,6 +19,7 @@ def enrich_tracks(
     album: str | None = None,
     resume: bool = False,
     concurrency: int = 5,
+    progress_callback: Callable[[int, int, str], None] | None = None,
 ) -> EnrichmentStats:
     """Enrich tracks with external metadata from Spotify or ListenBrainz.
 
@@ -48,5 +50,6 @@ def enrich_tracks(
                 album=album,
                 unattempted_only=resume,
                 concurrency=concurrency,
+                progress_callback=progress_callback,
             )
         )

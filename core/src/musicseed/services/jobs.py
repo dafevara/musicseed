@@ -49,6 +49,7 @@ def _job_to_dict(job: Job) -> dict:
         "progress_total": job.progress_total,
         "checkpoint": job.checkpoint,
         "error_summary": job.error_summary,
+        "result_summary": job.result_summary,
         "created_at": job.created_at,
         "updated_at": job.updated_at,
         "started_at": job.started_at,
@@ -89,13 +90,15 @@ def update_progress(job_id: int, current: int, total: int = 0, checkpoint: str =
             job.checkpoint = checkpoint
 
 
-def complete_job(job_id: int) -> None:
+def complete_job(job_id: int, result_summary: str = "") -> None:
     with get_session() as session:
         job = session.get(Job, job_id)
         if job is None:
             return
         job.state = JobState.SUCCEEDED
         job.completed_at = _now()
+        if result_summary:
+            job.result_summary = result_summary
 
 
 def fail_job(job_id: int, error_summary: str) -> None:
@@ -244,7 +247,7 @@ class JobManager:
             job = get_job(job_id)
             if job and job["state"] == JobState.CANCEL_REQUESTED:
                 cancel_job(job_id)
-            else:
+            elif job and job["state"] != JobState.SUCCEEDED:
                 complete_job(job_id)
         except Exception as e:
             if self.should_cancel(job_id):

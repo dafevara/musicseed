@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from musicseed.db.models import Artist, Track
 from musicseed.db.session import get_session
+from musicseed.recommender.scoring import Weights
 from musicseed.services.recommend import RecommendationResult, get_recommendations
 from sqlalchemy.orm import joinedload
 
@@ -49,7 +50,6 @@ def typeahead_search(query: str, exclude_ids: list[int] | None = None) -> list[T
             )
             .filter(~Track.id.in_(exclude) if exclude else True)
             .order_by(Track.title)
-            .limit(10)
             .all()
         )
 
@@ -61,6 +61,7 @@ def run_recommendations(
     year_max: int | None = None,
     max_tracks_per_artist: int = 3,
     min_score: float | None = None,
+    weights: Weights | None = None,
 ) -> RecommendationResult:
     """Run the full recommendation pipeline for a set of seed track ids."""
     if not seed_ids:
@@ -72,4 +73,5 @@ def run_recommendations(
         year_max=year_max,
         max_tracks_per_artist=max_tracks_per_artist,
         min_score=min_score,
+        weights=weights,
     )

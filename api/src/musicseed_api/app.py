@@ -15,6 +15,7 @@ from musicseed_api.routes import (
     enrichment,
     jobs,
     library,
+    playlists,
     recommend,
     sonic,
 )
@@ -29,6 +30,7 @@ def create_app() -> FastAPI:
     app.include_router(sonic.router)
     app.include_router(dashboard.router)
     app.include_router(jobs.router)
+    app.include_router(playlists.router)
     return app
 
 

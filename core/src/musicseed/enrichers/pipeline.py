@@ -1,6 +1,7 @@
 """Enrichment pipeline for batch processing tracks."""
 
 import math
+from collections.abc import Callable
 
 from pydantic import BaseModel
 from rich.console import Console
@@ -168,18 +169,21 @@ async def enrich_tracks_with_listenbrainz(
     listenbrainz_client: ListenBrainzClient,
     progress: Progress,
     batch_size: int,
+    progress_callback: Callable[[int, int, str], None] | None = None,
 ) -> tuple[int, int, int]:
     """Enrich tracks with ListenBrainz recording listen/user counts."""
+    total = len(tracks)
     task = progress.add_task(
         "[cyan]Fetching ListenBrainz popularity...",
-        total=len(tracks),
+        total=total,
     )
 
     matched = 0
     unmatched = 0
     errors = 0
+    processed = 0
 
-    for start in range(0, len(tracks), batch_size):
+    for start in range(0, total, batch_size):
         batch = tracks[start : start + batch_size]
         mbids = [track["mbid"] for track in batch]
         id_by_mbid = {track["mbid"]: track["id"] for track in batch}
@@ -190,6 +194,7 @@ async def enrich_tracks_with_listenbrainz(
                 track = session.get(Track, id_by_mbid[result.recording_mbid])
                 if track is None:
                     progress.advance(task)
+                    processed += 1
                     continue
 
                 track.listenbrainz_matched = True
@@ -200,11 +205,15 @@ async def enrich_tracks_with_listenbrainz(
                 else:
                     unmatched += 1
                 progress.advance(task)
+                processed += 1
 
             session.commit()
+            if progress_callback:
+                progress_callback(processed, total, "enriching via ListenBrainz…")
         except Exception as e:
             logger.error(f"ListenBrainz batch failed: {e}")
             errors += len(batch)
+            processed += len(batch)
             progress.advance(task, advance=len(batch))
 
     normalize_listenbrainz_popularity(session)
@@ -216,6 +225,7 @@ async def enrich_tracks(
     tracks: list[dict],
     spotify_client: SpotifyClient,
     progress: Progress,
+    progress_callback: Callable[[int, int, str], None] | None = None,
 ) -> tuple[int, int, int]:
     """Enrich tracks via Spotify search.
 
@@ -224,13 +234,15 @@ async def enrich_tracks(
         tracks: List of tracks to search
         spotify_client: Spotify client (with throttling)
         progress: Rich progress bar
+        progress_callback: Optional callback(current, total, message) for job progress
 
     Returns:
         Tuple of (matched count, unmatched count, error count)
     """
+    total = len(tracks)
     task = progress.add_task(
         "[cyan]Searching Spotify (1 req/sec)...",
-        total=len(tracks),
+        total=total,
     )
 
     matched = 0
@@ -270,10 +282,17 @@ async def enrich_tracks(
 
         progress.advance(task)
 
+        processed = matched + unmatched + errors
+
         # Commit periodically to save progress
-        if (matched + unmatched + errors) % 100 == 0:
+        if processed % 100 == 0:
             session.commit()
             logger.info(f"Progress: {matched} matched, {unmatched} unmatched, {errors} errors")
+            if progress_callback:
+                progress_callback(processed, total, "enriching via Spotify…")
+
+    if progress_callback:
+        progress_callback(matched + unmatched + errors, total, "enriching via Spotify…")
 
     session.commit()
     return matched, unmatched, errors
@@ -290,6 +309,7 @@ async def run_spotify_enrichment(
     requests_per_second: float = 1.0,
     artist: str | None = None,
     album: str | None = None,
+    progress_callback: Callable[[int, int, str], None] | None = None,
 ) -> EnrichmentStats:
     """Run the enrichment pipeline via Spotify search."""
     logger.info("Starting Spotify enrichment pipeline")
@@ -303,15 +323,18 @@ async def run_spotify_enrichment(
         album=album,
     )
 
+    total = len(tracks)
     if not tracks:
         console.print("[yellow]No tracks to process[/yellow]")
         return EnrichmentStats(total=0, matched=0, unmatched=0, errors=0)
 
-    console.print(f"  Tracks to process: {len(tracks):,}")
-    estimated_time = len(tracks) / requests_per_second
+    console.print(f"  Tracks to process: {total:,}")
+    estimated_time = total / requests_per_second
     hours = int(estimated_time // 3600)
     minutes = int((estimated_time % 3600) // 60)
     console.print(f"  Estimated time: {hours}h {minutes}m (at {requests_per_second} req/sec)\n")
+
+    completed = [0]
 
     with Progress(
         SpinnerColumn(),
@@ -328,14 +351,20 @@ async def run_spotify_enrichment(
             requests_per_second=requests_per_second,
         ) as spotify_client:
             matched, unmatched, errors = await enrich_tracks(
-                session, tracks, spotify_client, progress
+                session, tracks, spotify_client, progress,
+                progress_callback=progress_callback,
             )
+
+            completed[0] = matched + unmatched + errors
+
+    if progress_callback:
+        progress_callback(completed[0], total, "enriching via Spotify…")
 
     logger.info(
         f"Spotify enrichment complete: {matched} matched, "
         f"{unmatched} unmatched, {errors} errors"
     )
-    return EnrichmentStats(total=len(tracks), matched=matched, unmatched=unmatched, errors=errors)
+    return EnrichmentStats(total=total, matched=matched, unmatched=unmatched, errors=errors)
 
 
 async def run_listenbrainz_enrichment(
@@ -346,6 +375,7 @@ async def run_listenbrainz_enrichment(
     requests_per_second: float = 1.0,
     artist: str | None = None,
     album: str | None = None,
+    progress_callback: Callable[[int, int, str], None] | None = None,
 ) -> EnrichmentStats:
     """Run ListenBrainz popularity enrichment for tracks with MBIDs."""
     logger.info("Starting ListenBrainz enrichment pipeline")
@@ -358,12 +388,13 @@ async def run_listenbrainz_enrichment(
         artist=artist,
         album=album,
     )
+    total = len(tracks)
     if not tracks:
         console.print("[yellow]No tracks with MusicBrainz recording IDs to process[/yellow]")
         return EnrichmentStats(total=0, matched=0, unmatched=0, errors=0)
 
-    console.print(f"  Tracks with MBIDs to process: {len(tracks):,}")
-    estimated_batches = math.ceil(len(tracks) / max(batch_size, 1))
+    console.print(f"  Tracks with MBIDs to process: {total:,}")
+    estimated_batches = math.ceil(total / max(batch_size, 1))
     estimated_time = estimated_batches / requests_per_second
     minutes = int(estimated_time // 60)
     seconds = int(estimated_time % 60)
@@ -389,13 +420,14 @@ async def run_listenbrainz_enrichment(
                 listenbrainz_client,
                 progress,
                 max(batch_size, 1),
+                progress_callback=progress_callback,
             )
 
     logger.info(
         f"ListenBrainz enrichment complete: {matched} with popularity, "
         f"{unmatched} without popularity data, {errors} errors"
     )
-    return EnrichmentStats(total=len(tracks), matched=matched, unmatched=unmatched, errors=errors)
+    return EnrichmentStats(total=total, matched=matched, unmatched=unmatched, errors=errors)
 
 
 async def run_enrichment(
@@ -410,6 +442,7 @@ async def run_enrichment(
     requests_per_second: float = 1.0,
     artist: str | None = None,
     album: str | None = None,
+    progress_callback: Callable[[int, int, str], None] | None = None,
 ) -> EnrichmentStats:
     """Run enrichment for the selected source."""
     if source == "spotify":
@@ -424,6 +457,7 @@ async def run_enrichment(
             requests_per_second=requests_per_second,
             artist=artist,
             album=album,
+            progress_callback=progress_callback,
         )
     if source == "listenbrainz":
         return await run_listenbrainz_enrichment(
@@ -434,5 +468,6 @@ async def run_enrichment(
             requests_per_second=requests_per_second,
             artist=artist,
             album=album,
+            progress_callback=progress_callback,
         )
     raise ValueError(f"Unknown enrichment source: {source}")

@@ -1,0 +1,290 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --brand: #b57a00;
+  --bg: #f7f6f3;
+  --fg: #1a1d23;
+  --muted: #5f6773;
+  --panel: #ffffff;
+  --border: #e2e0da;
+  --status-ok: #1e7a45;
+  --status-ok-bg: #e1f2e7;
+  --status-problem: #b91c1c;
+  --status-problem-bg: #fbe9e7;
+  --status-running: #1a5dc7;
+  --status-running-bg: #e8f0fe;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --brand: #d4a017;
+    --bg: #181a1f;
+    --fg: #e1e3e8;
+    --muted: #9098a6;
+    --panel: #22252e;
+    --border: #343840;
+    --status-ok: #4ade80;
+    --status-ok-bg: #14291a;
+    --status-problem: #f87171;
+    --status-problem-bg: #2d1515;
+    --status-running: #60a5fa;
+    --status-running-bg: #13223b;
+  }
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+/* ── Badges ─────────────────────────────────── */
+.badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  vertical-align: middle;
+}
+.badge-ok {
+  background: var(--status-ok-bg);
+  color: var(--status-ok);
+}
+.badge-problem {
+  background: var(--status-problem-bg);
+  color: var(--status-problem);
+}
+.badge-running {
+  background: var(--status-running-bg);
+  color: var(--status-running);
+}
+
+/* ── Progress bar ───────────────────────────── */
+.progress-bar {
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.progress-bar .fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--brand);
+  transition: width 0.3s ease;
+}
+
+/* ── Flash messages ─────────────────────────── */
+.flash {
+  padding: 0.65rem 1rem;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+  font-size: 0.92rem;
+}
+.flash-ok {
+  background: var(--status-ok-bg);
+  color: var(--status-ok);
+  border: 1px solid color-mix(in srgb, var(--status-ok) 30%, transparent);
+}
+.flash-error {
+  background: var(--status-problem-bg);
+  color: var(--status-problem);
+  border: 1px solid color-mix(in srgb, var(--status-problem) 30%, transparent);
+}
+
+/* ── Buttons ────────────────────────────────── */
+.btn {
+  display: inline-block;
+  padding: 0.4rem 1.1rem;
+  border: none;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: filter 0.15s;
+}
+.btn:hover {
+  filter: brightness(1.08);
+}
+.btn-primary {
+  background: var(--brand);
+  color: #fff;
+}
+.btn-secondary {
+  background: var(--border);
+  color: var(--fg);
+}
+.btn-danger {
+  background: var(--status-problem);
+  color: #fff;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Form inputs ────────────────────────────── */
+input[type="text"],
+input[type="search"],
+input[type="password"],
+input[type="number"] {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 0.95rem;
+  background: var(--panel);
+  color: var(--fg);
+  outline: none;
+}
+input:focus {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand) 20%, transparent);
+}
+
+/* ── Utility ────────────────────────────────── */
+.muted {
+  color: var(--muted);
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.25rem 1.5rem;
+}
+
+code {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.1rem 0.35rem;
+  font-size: 0.85em;
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}
+
+/* ── Activity timeline ──────────────────────── */
+
+.activity-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.activity-row {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  padding: 0.75rem 0;
+}
+
+.activity-row + .activity-row {
+  border-top: 1px solid var(--border);
+}
+
+.activity-dot {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-top: 0.35rem;
+}
+.activity-dot-ok {
+  background: var(--status-ok);
+}
+.activity-dot-problem {
+  background: var(--status-problem);
+}
+.activity-dot-running {
+  background: var(--status-running);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.activity-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.activity-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.activity-kind {
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+.activity-status {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+}
+.activity-status-succeeded {
+  background: var(--status-ok-bg);
+  color: var(--status-ok);
+}
+.activity-status-failed,
+.activity-status-canceled {
+  background: var(--status-problem-bg);
+  color: var(--status-problem);
+}
+.activity-status-running,
+.activity-status-pending {
+  background: var(--status-running-bg);
+  color: var(--status-running);
+}
+
+.activity-checkpoint {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.activity-progress {
+  margin-top: 0.4rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.activity-progress .progress-bar {
+  flex: 1;
+  max-width: 220px;
+}
+
+.activity-progress-label {
+  font-size: 0.78rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.activity-eta {
+  color: var(--muted);
+}
+
+.activity-result {
+  margin-top: 0.25rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.activity-time {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
