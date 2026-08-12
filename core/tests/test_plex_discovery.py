@@ -29,43 +29,30 @@ SSDP_REPLY = (
     "\r\n"
 ).encode()
 
-ACCOUNT_RESOURCES = [
-    {
-        "name": "Caladan",
-        "product": "Plex Media Server",
-        "productVersion": "1.43.3.10828",
-        "clientIdentifier": "3309a4b35976865b17593c74cb3f5b447c520cbf",
-        "provides": "server",
-        "Connection": [
-            {
-                "protocol": "http", "address": "192.168.80.10", "port": 32400,
-                "local": "1", "relay": "0",
-            },
-            {
-                "protocol": "http", "address": "203.0.113.5", "port": 32400,
-                "local": "0", "relay": "0",
-            },
-        ],
-    },
-    {
-        "name": "Garage",
-        "product": "Plex Media Server",
-        "productVersion": "1.40.5.8897",
-        "clientIdentifier": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "provides": "server",
-        "Connection": [
-            {
-                "protocol": "http", "address": "192.168.1.50", "port": 32400,
-                "local": "0", "relay": "0",
-            },
-        ],
-    },
-    {
-        "name": "Roku TV",
-        "provides": "client,player",
-        "Connection": [{"protocol": "http", "address": "192.168.80.99", "port": 8324}],
-    },
-]
+ACCOUNT_RESOURCES_XML = """\
+<MediaContainer size="3">
+  <Device name="Caladan" product="Plex Media Server" productVersion="1.43.3.10828"
+      clientIdentifier="3309a4b35976865b17593c74cb3f5b447c520cbf" provides="server">
+    <Connection protocol="http" address="100.73.64.125" port="32400" local="0"/>
+    <Connection protocol="http" address="192.168.139.3" port="32400" local="1"/>
+    <Connection protocol="http" address="192.168.107.0" port="32400" local="1"/>
+    <Connection protocol="http" address="192.168.80.10" port="32400" local="1"/>
+    <Connection protocol="http" address="192.168.155.0" port="32400" local="1"/>
+  </Device>
+  <Device name="tpi-plex" product="Plex Media Server" productVersion="1.41.7.9717"
+      clientIdentifier="3a2ce8fe80eda6bf330a41d60e2b35e568aa51a5" provides="server">
+    <Connection protocol="http" address="172.31.0.1" port="32400" local="1"/>
+    <Connection protocol="http" address="172.18.0.1" port="32400" local="1"/>
+    <Connection protocol="http" address="172.19.0.1" port="32400" local="1"/>
+    <Connection protocol="http" address="172.17.0.1" port="32400" local="1"/>
+    <Connection protocol="http" address="192.168.1.50" port="32400" local="1"/>
+    <Connection protocol="http" address="100.64.146.128" port="32400" local="0"/>
+  </Device>
+  <Device name="Roku TV" product="Plexamp" provides="client,player">
+    <Connection protocol="http" address="192.168.80.99" port="8324" local="1"/>
+  </Device>
+</MediaContainer>
+"""
 
 
 class FakeSocket:
@@ -157,26 +144,25 @@ def test_discover_sends_both_probes(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_account_discovery_parses_servers(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         plex_discovery.httpx, "get",
-        lambda *a, **k: httpx.Response(
-            200, json=ACCOUNT_RESOURCES,
-            request=httpx.Request("GET", plex_discovery.PLEX_TV_RESOURCES_URL),
-        ),
+        lambda *a, **k: httpx.Response(200, text=ACCOUNT_RESOURCES_XML),
     )
     servers = plex_discovery.discover_plex_account_servers("tok")
-    assert [s.name for s in servers] == ["Caladan", "Garage"]
-    caladan = servers[0]
-    assert caladan.host == "192.168.80.10"  # prefers local=1 connection
-    assert caladan.port == 32400
+    hosts = sorted(s.host for s in servers)
+    # Docker bridges and .0 network addresses are filtered; client is skipped.
+    assert hosts == ["192.168.1.50", "192.168.139.3", "192.168.80.10"]
+    tpi = next(s for s in servers if s.host == "192.168.1.50")
+    assert tpi.name == "tpi-plex"
+    assert tpi.machine_identifier == "3a2ce8fe80eda6bf330a41d60e2b35e568aa51a5"
+    caladan = next(s for s in servers if s.host == "192.168.80.10")
+    assert caladan.name == "Caladan"
     assert caladan.version == "1.43.3.10828"
-    assert caladan.machine_identifier == "3309a4b35976865b17593c74cb3f5b447c520cbf"
-    assert servers[1].host == "192.168.1.50"
 
 
 def test_account_discovery_no_token_returns_empty(monkeypatch: pytest.MonkeyPatch) -> None:
     called = []
     monkeypatch.setattr(
         plex_discovery.httpx, "get",
-        lambda *a, **k: called.append(True) or httpx.Response(200, json=[]),
+        lambda *a, **k: called.append(True) or httpx.Response(200, text=""),
     )
     assert plex_discovery.discover_plex_account_servers("") == []
     assert called == []
@@ -190,6 +176,18 @@ def test_account_discovery_error_returns_empty(monkeypatch: pytest.MonkeyPatch) 
     assert plex_discovery.discover_plex_account_servers("tok") == []
 
 
+def test_account_discovery_parses_xml(monkeypatch: pytest.MonkeyPatch) -> None:
+    # plex.tv returns XML even when Accept: application/json is sent.
+    monkeypatch.setattr(
+        plex_discovery.httpx, "get",
+        lambda *a, **k: httpx.Response(200, text=ACCOUNT_RESOURCES_XML),
+    )
+    servers = plex_discovery.discover_plex_account_servers("tok")
+    assert any(s.host == "192.168.1.50" for s in servers)
+    assert all(s.host != "172.17.0.1" for s in servers)  # Docker bridge filtered
+    assert all(s.host != "192.168.107.0" for s in servers)  # network address filtered
+
+
 def test_discover_merges_local_and_account(monkeypatch: pytest.MonkeyPatch) -> None:
     replies = [(GDM_REPLY, ("192.168.80.10", 32414))]
     monkeypatch.setattr(
@@ -197,11 +195,11 @@ def test_discover_merges_local_and_account(monkeypatch: pytest.MonkeyPatch) -> N
     )
     monkeypatch.setattr(
         plex_discovery.httpx, "get",
-        lambda *a, **k: httpx.Response(
-            200, json=ACCOUNT_RESOURCES,
-            request=httpx.Request("GET", plex_discovery.PLEX_TV_RESOURCES_URL),
-        ),
+        lambda *a, **k: httpx.Response(200, text=ACCOUNT_RESOURCES_XML),
     )
     servers = discover_plex_servers(timeout=1.0, token="tok")
-    # Caladan found locally (GDM) and via account — deduped to one; Garage added.
-    assert [s.host for s in servers] == ["192.168.1.50", "192.168.80.10"]
+    hosts = [s.host for s in servers]
+    # Caladan deduped across local (GDM) and account; tpi-plex added at 192.168.1.50.
+    assert "192.168.1.50" in hosts
+    assert "192.168.80.10" in hosts
+    assert "172.17.0.1" not in hosts

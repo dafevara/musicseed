@@ -24,6 +24,7 @@ import re
 import socket
 import time
 from urllib.parse import urlparse
+from xml.etree import ElementTree
 
 import httpx
 from pydantic import BaseModel
@@ -185,17 +186,64 @@ def _discover_local_servers(
         sock.close()
 
 
-def _pick_connection(connections: list[dict]) -> dict | None:
-    """Choose the best reachable address for a server (local, then non-relay)."""
-    if not connections:
-        return None
-    for conn in connections:
-        if str(conn.get("local")) == "1" and str(conn.get("relay")) != "1":
-            return conn
-    for conn in connections:
-        if str(conn.get("relay")) != "1":
-            return conn
-    return connections[0]
+def _is_docker_bridge(address: str) -> bool:
+    """True for Docker's default bridge allocation (172.16.0.0/12)."""
+    octets = address.split(".")
+    if len(octets) != 4 or octets[0] != "172" or not octets[1].isdigit():
+        return False
+    return 16 <= int(octets[1]) <= 31
+
+
+def _is_network_junk(address: str) -> bool:
+    """True for IPv4 network/broadcast addresses (last octet 0 or 255)."""
+    octets = address.split(".")
+    return len(octets) == 4 and octets[3].isdigit() and int(octets[3]) in (0, 255)
+
+
+def _account_server_entries(device: ElementTree.Element) -> list[DiscoveredPlexServer]:
+    """Build one entry per best-ranked connection for a single account server."""
+    name = device.get("name") or ""
+    product = device.get("product") or "Plex Media Server"
+    version = device.get("productVersion")
+    machine_id = device.get("clientIdentifier")
+
+    connections = [
+        c
+        for c in device.findall("Connection")
+        if str(c.get("relay")) != "1" and (c.get("address") or "").strip()
+    ]
+
+    def rank(conn: ElementTree.Element) -> int:
+        address = (conn.get("address") or "").strip()
+        local = str(conn.get("local")) == "1"
+        if local and not _is_network_junk(address) and not _is_docker_bridge(address):
+            return 0
+        if local:
+            return 1
+        return 2
+
+    best = min((rank(c) for c in connections), default=2)
+    chosen = [c for c in connections if rank(c) == best]
+
+    entries: list[DiscoveredPlexServer] = []
+    for conn in chosen:
+        address = (conn.get("address") or "").strip()
+        try:
+            port = int(conn.get("port") or 32400)
+        except (TypeError, ValueError):
+            port = 32400
+        entries.append(
+            DiscoveredPlexServer(
+                name=name or address,
+                host=address,
+                port=port,
+                product=product,
+                version=version,
+                machine_identifier=machine_id,
+                scheme=conn.get("protocol") or "http",
+            )
+        )
+    return entries
 
 
 def discover_plex_account_servers(
@@ -215,38 +263,21 @@ def discover_plex_account_servers(
             headers={"X-Plex-Token": token, "Accept": "application/json"},
             timeout=timeout,
         )
-        resp.raise_for_status()
-        devices = resp.json()
-    except (httpx.HTTPError, ValueError):
+    except httpx.HTTPError:
+        return []
+    if resp.status_code != 200:
+        return []
+    # plex.tv returns XML here even when JSON is requested — parse the XML.
+    try:
+        root = ElementTree.fromstring(resp.text)
+    except ElementTree.ParseError:
         return []
 
     servers: list[DiscoveredPlexServer] = []
-    for device in devices:
-        if not isinstance(device, dict):
-            continue
+    for device in root.findall("Device"):
         if "server" not in (device.get("provides") or "").split(","):
             continue
-        conn = _pick_connection(device.get("Connection") or [])
-        if conn is None:
-            continue
-        address = str(conn.get("address") or "").strip()
-        if not address:
-            continue
-        try:
-            port = int(conn.get("port") or 32400)
-        except (TypeError, ValueError):
-            port = 32400
-        servers.append(
-            DiscoveredPlexServer(
-                name=device.get("name") or address,
-                host=address,
-                port=port,
-                product=device.get("product") or "Plex Media Server",
-                version=device.get("productVersion"),
-                machine_identifier=device.get("clientIdentifier"),
-                scheme=conn.get("protocol") or "http",
-            )
-        )
+        servers.extend(_account_server_entries(device))
     return servers
 
 
