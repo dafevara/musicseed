@@ -7,7 +7,6 @@
     "license": { "name": "MIT" }
   },
   "servers": [
-    { "url": "http://127.0.0.1:8788/api", "description": "Mounted in the web UI (musicseed web)" },
     { "url": "http://127.0.0.1:8789", "description": "Standalone API server (musicseed-api)" }
   ],
   "tags": [
