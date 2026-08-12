@@ -29,16 +29,7 @@ def typeahead(
 ) -> list[dict]:
     exclude_ids = parse_seed_ids(exclude)
     tracks = typeahead_search(q, exclude_ids)
-    return [
-        {
-            "id": t.id,
-            "title": t.title,
-            "artist": t.artist.name if t.artist else None,
-            "album": t.album.title if t.album else None,
-            "year": t.year,
-        }
-        for t in tracks
-    ]
+    return [t.model_dump() for t in tracks]
 
 
 @router.post("/recommend")
