@@ -170,6 +170,7 @@ async def enrich_tracks_with_listenbrainz(
     progress: Progress,
     batch_size: int,
     progress_callback: Callable[[int, int, str], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> tuple[int, int, int]:
     """Enrich tracks with ListenBrainz recording listen/user counts."""
     total = len(tracks)
@@ -182,8 +183,13 @@ async def enrich_tracks_with_listenbrainz(
     unmatched = 0
     errors = 0
     processed = 0
+    cancelled = False
 
     for start in range(0, total, batch_size):
+        if should_cancel is not None and should_cancel():
+            cancelled = True
+            logger.info("Cancellation requested — stopping ListenBrainz enrichment")
+            break
         batch = tracks[start : start + batch_size]
         mbids = [track["mbid"] for track in batch]
         id_by_mbid = {track["mbid"]: track["id"] for track in batch}
@@ -216,7 +222,8 @@ async def enrich_tracks_with_listenbrainz(
             processed += len(batch)
             progress.advance(task, advance=len(batch))
 
-    normalize_listenbrainz_popularity(session)
+    if not cancelled:
+        normalize_listenbrainz_popularity(session)
     return matched, unmatched, errors
 
 
@@ -226,6 +233,7 @@ async def enrich_tracks(
     spotify_client: SpotifyClient,
     progress: Progress,
     progress_callback: Callable[[int, int, str], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> tuple[int, int, int]:
     """Enrich tracks via Spotify search.
 
@@ -235,6 +243,7 @@ async def enrich_tracks(
         spotify_client: Spotify client (with throttling)
         progress: Rich progress bar
         progress_callback: Optional callback(current, total, message) for job progress
+        should_cancel: Optional callback returning True when the job was canceled
 
     Returns:
         Tuple of (matched count, unmatched count, error count)
@@ -250,6 +259,9 @@ async def enrich_tracks(
     errors = 0
 
     for track_data in tracks:
+        if should_cancel is not None and should_cancel():
+            logger.info("Cancellation requested — stopping Spotify enrichment")
+            break
         try:
             result = await spotify_client.match_track(
                 title=track_data["title"],
@@ -310,6 +322,7 @@ async def run_spotify_enrichment(
     artist: str | None = None,
     album: str | None = None,
     progress_callback: Callable[[int, int, str], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> EnrichmentStats:
     """Run the enrichment pipeline via Spotify search."""
     logger.info("Starting Spotify enrichment pipeline")
@@ -353,6 +366,7 @@ async def run_spotify_enrichment(
             matched, unmatched, errors = await enrich_tracks(
                 session, tracks, spotify_client, progress,
                 progress_callback=progress_callback,
+                should_cancel=should_cancel,
             )
 
             completed[0] = matched + unmatched + errors
@@ -376,6 +390,7 @@ async def run_listenbrainz_enrichment(
     artist: str | None = None,
     album: str | None = None,
     progress_callback: Callable[[int, int, str], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> EnrichmentStats:
     """Run ListenBrainz popularity enrichment for tracks with MBIDs."""
     logger.info("Starting ListenBrainz enrichment pipeline")
@@ -421,6 +436,7 @@ async def run_listenbrainz_enrichment(
                 progress,
                 max(batch_size, 1),
                 progress_callback=progress_callback,
+                should_cancel=should_cancel,
             )
 
     logger.info(
@@ -443,6 +459,7 @@ async def run_enrichment(
     artist: str | None = None,
     album: str | None = None,
     progress_callback: Callable[[int, int, str], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> EnrichmentStats:
     """Run enrichment for the selected source."""
     if source == "spotify":
@@ -458,6 +475,7 @@ async def run_enrichment(
             artist=artist,
             album=album,
             progress_callback=progress_callback,
+            should_cancel=should_cancel,
         )
     if source == "listenbrainz":
         return await run_listenbrainz_enrichment(
@@ -469,5 +487,6 @@ async def run_enrichment(
             artist=artist,
             album=album,
             progress_callback=progress_callback,
+            should_cancel=should_cancel,
         )
     raise ValueError(f"Unknown enrichment source: {source}")

@@ -133,3 +133,42 @@ def test_non_existent_job_graceful() -> None:
     request_cancel(99999)
     update_progress(99999, 1, 1)
     assert get_job(99999) is None
+
+
+def test_cancel_stops_worker_cooperatively() -> None:
+    """A worker polling should_cancel stops and the job lands in ``canceled``."""
+    import threading
+
+    from musicseed.services.jobs import get_manager
+
+    manager = get_manager()
+    calls: list[int] = []
+    cancel_seen = threading.Event()
+
+    def target(job_id: int) -> None:
+        for i in range(20):
+            calls.append(i)
+            time.sleep(0.01)
+            if manager.should_cancel(job_id):
+                cancel_seen.set()
+                return
+        complete_job(job_id, "finished all batches")
+
+    jid = manager.submit("test-cancel", target)
+
+    deadline = time.time() + 5
+    while len(calls) < 3 and time.time() < deadline:
+        time.sleep(0.01)
+
+    manager.request_cancel(jid)
+
+    deadline = time.time() + 5
+    state = get_job(jid)["state"]
+    terminal = (JobState.CANCELED, JobState.SUCCEEDED, JobState.FAILED)
+    while state not in terminal and time.time() < deadline:
+        time.sleep(0.01)
+        state = get_job(jid)["state"]
+
+    assert cancel_seen.is_set()
+    assert len(calls) < 20
+    assert get_job(jid)["state"] == JobState.CANCELED

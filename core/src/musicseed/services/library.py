@@ -62,6 +62,7 @@ def import_library(
     library_name: str | None = None,
     full_import: bool = False,
     progress_callback: Callable[[int, int, str], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> ImportResult:
     """Import metadata from Plex database.
 
@@ -82,6 +83,7 @@ def import_library(
             library_name=target_library,
             full_import=full_import,
             progress_callback=progress_callback,
+            should_cancel=should_cancel,
         )
 
     return ImportResult(**result)

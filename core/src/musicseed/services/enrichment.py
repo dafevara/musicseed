@@ -20,6 +20,7 @@ def enrich_tracks(
     resume: bool = False,
     concurrency: int = 5,
     progress_callback: Callable[[int, int, str], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> EnrichmentStats:
     """Enrich tracks with external metadata from Spotify or ListenBrainz.
 
@@ -51,5 +52,6 @@ def enrich_tracks(
                 unattempted_only=resume,
                 concurrency=concurrency,
                 progress_callback=progress_callback,
+                should_cancel=should_cancel,
             )
         )

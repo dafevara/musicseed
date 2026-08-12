@@ -6,7 +6,7 @@ import json
 
 from musicseed.config import get_config, save_config
 from musicseed.services.enrichment import enrich_tracks
-from musicseed.services.jobs import complete_job, update_progress
+from musicseed.services.jobs import complete_job, get_manager, update_progress
 
 ENRICH_KIND = "enrich"
 
@@ -27,6 +27,14 @@ def run_enrich_job(job_id: int) -> None:
     """Job target: enrich tracks via Spotify and update job progress."""
     update_progress(job_id, 0, 1, "enriching via Spotify…")
 
+    cancelled = [False]
+
+    def should_cancel() -> bool:
+        if get_manager().should_cancel(job_id):
+            cancelled[0] = True
+            return True
+        return False
+
     def on_progress(current: int, total: int, message: str) -> None:
         update_progress(job_id, current, total, message)
 
@@ -36,7 +44,12 @@ def run_enrich_job(job_id: int) -> None:
         batch_size=10,
         concurrency=10,
         progress_callback=on_progress,
+        should_cancel=should_cancel,
     )
+
+    if cancelled[0]:
+        update_progress(job_id, stats.matched, stats.total, "cancelled")
+        return
 
     checkpoint = f"Enriched {stats.matched:,} of {stats.total:,} tracks"
     update_progress(

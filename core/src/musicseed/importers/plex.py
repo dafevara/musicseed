@@ -385,6 +385,7 @@ def import_from_plex(
     library_name: str = "Music",
     full_import: bool = False,
     progress_callback: "Callable[[int, int, str], None] | None" = None,
+    should_cancel: "Callable[[], bool] | None" = None,
 ) -> dict[str, int]:
     """Import music library from Plex database.
 
@@ -393,12 +394,17 @@ def import_from_plex(
         plex_db_path: Path to Plex SQLite database
         library_name: Name of the music library in Plex
         full_import: If True, delete existing data first
+        should_cancel: Optional callback returning True when the job was canceled.
+            Checked between import phases and periodically within the track loop.
 
     Returns:
         Dictionary with import counts
     """
     logger.info(f"Starting Plex import from {plex_db_path}")
     logger.debug(f"Library: {library_name}, full_import: {full_import}")
+
+    def _cancelled() -> bool:
+        return should_cancel is not None and should_cancel()
 
     importer = PlexImporter(plex_db_path, library_name)
 
@@ -433,6 +439,10 @@ def import_from_plex(
         ) as progress:
             # Import artists
             artist_task = progress.add_task("Importing artists...", total=counts["artists"])
+            if _cancelled():
+                logger.info("Cancellation requested before artists import")
+                session.commit()
+                return imported
             for plex_artist in importer.iter_artists():
                 # Check if already exists
                 existing = session.query(Artist).filter_by(plex_id=plex_artist.id).first()
@@ -459,6 +469,10 @@ def import_from_plex(
                 progress_callback(imported["artists"], counts["artists"], "artists")
 
             # Import albums
+            if _cancelled():
+                logger.info("Cancellation requested after artists import")
+                session.commit()
+                return imported
             album_task = progress.add_task("Importing albums...", total=counts["albums"])
             for plex_album in importer.iter_albums():
                 existing = session.query(Album).filter_by(plex_id=plex_album.id).first()
@@ -491,8 +505,16 @@ def import_from_plex(
                 progress_callback(imported["albums"], counts["albums"], "albums")
 
             # Import tracks
+            if _cancelled():
+                logger.info("Cancellation requested after albums import")
+                session.commit()
+                return imported
             track_task = progress.add_task("Importing tracks...", total=counts["tracks"])
             for plex_track in importer.iter_tracks():
+                if imported["tracks"] % 500 == 0 and _cancelled():
+                    logger.info("Cancellation requested during tracks import")
+                    session.commit()
+                    return imported
                 existing = session.query(Track).filter_by(plex_id=plex_track.id).first()
                 track = existing or Track()
                 track.title = plex_track.title
@@ -582,6 +604,10 @@ def import_from_plex(
                 progress_callback(imported["tracks"], counts["tracks"], "tracks")
 
             # Import play history
+            if _cancelled():
+                logger.info("Cancellation requested after tracks import")
+                session.commit()
+                return imported
             history_task = progress.add_task(
                 "Importing play history...", total=counts["play_history"]
             )
