@@ -37,7 +37,6 @@ Good recommendations should be:
 - Public SaaS, multi-user support, or horizontal scalability.
 - Replacing Plex, Plexamp, or the user's music file organization.
 - Real-time recommendation serving.
-- Web UI or mobile app for v1.
 - Perfect external catalog matching.
 - Complex observability stacks, queues, distributed workers, or hosted deployment.
 
@@ -51,6 +50,11 @@ Good recommendations should be:
   candidate sources, score breakdowns, and selection constraints.
 
 ## Current User Flows
+
+The web UI (Next.js) is the default onboarding path. The first-run wizard discovers the Plex
+server on the local network (GDM + SSDP), initializes the database, and optionally runs
+enrichment; a persistent settings view holds credentials (Plex token, Spotify keys). The CLI
+flows below remain the power-user path:
 
 1. Initialize the local database (`init-db` creates the SQLite file) and optimize the schema.
 2. Import Plex metadata.

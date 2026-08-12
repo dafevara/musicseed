@@ -120,8 +120,9 @@ so publishing MusicSeed as open source means a new user needs as little as possi
   <strong>TL;DR install surface:</strong> Python 3.14+ and <code>uv</code> (for core/api/cli)
   plus Node for the optional web UI; six core packages, two CLI packages, three API packages,
   and a Next.js + React web app — one SQLite file (created automatically), and read access to
-  two Plex SQLite databases. That's the whole thing — no server, no containers, no native ML
-  libraries.
+  two Plex SQLite databases. Local-network Plex discovery (GDM + SSDP) is stdlib
+  <code>socket</code> only — no extra dependency. That's the whole thing — no server, no
+  containers, no native ML libraries.
 </div>
 
 <!-- ============================ BIG PICTURE ============================ -->
@@ -160,7 +161,7 @@ so publishing MusicSeed as open source means a new user needs as little as possi
   <!-- Core -->
   <rect x="300" y="230" rx="8" width="410" height="120" fill="#1d212b" stroke="#6ea8fe" stroke-width="1.5"/>
   <text x="505" y="254" text-anchor="middle" class="box-label">musicseed-core (import name: musicseed)</text>
-  <text x="505" y="271" text-anchor="middle" class="box-sub">services/ · importers/ · enrichers/ · recommender/ · sonic.py</text>
+  <text x="505" y="271" text-anchor="middle" class="box-sub">services/ · importers/ · enrichers/ · recommender/ · sonic.py · plex_discovery.py</text>
   <text x="505" y="299" text-anchor="middle" class="box-sub">deps: sqlalchemy · pyyaml · httpx · numpy · pydantic · rich</text>
   <text x="505" y="319" text-anchor="middle" class="box-sub">all business logic lives here — no UI, no Typer, no HTTP</text>
 
@@ -432,6 +433,9 @@ so publishing MusicSeed as open source means a new user needs as little as possi
     <p><code>cd cli &amp;&amp; uv sync</code></p>
     <p><code>cp config.example.yaml ~/.config/musicseed/config.yaml</code></p>
     <p><code>uv run musicseed init-db &amp;&amp; uv run musicseed import</code></p>
+    <p>…or run the web UI: <code>./scripts/dev.sh</code> and open
+    <code>http://127.0.0.1:3000</code> — the first-run wizard discovers Plex on the local
+    network, initializes the database, and walks through import/enrichment.</p>
   </div>
 </div>
 
@@ -440,7 +444,7 @@ so publishing MusicSeed as open source means a new user needs as little as possi
   <thead><tr><th>Gap</th><th>Notes</th></tr></thead>
   <tbody>
     <tr><td>PyPI packaging</td><td>core + cli + web are separate distributions joined by editable paths; decide on one combined package or publish them all.</td></tr>
-    <tr><td>Plex DB discovery</td><td>db_path defaults are macOS-specific; Linux/Windows paths need documenting or auto-detection.</td></tr>
+    <tr><td>Plex DB discovery</td><td>Server discovery is solved (GDM/SSDP over stdlib socket); the on-disk <code>db_path</code> defaults are still macOS-specific, so Linux/Windows paths need documenting or auto-detection.</td></tr>
     <tr><td>Sonic analysis coverage</td><td>Recommendation quality depends on Plex having analyzed the library; <code>sonic-probe</code> reports coverage, <code>sonic-refresh</code> triggers the Butler task.</td></tr>
   </tbody>
 </table>

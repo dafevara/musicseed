@@ -38,7 +38,7 @@ Sensors are feedback mechanisms that tell an agent whether work is valid.
 Computational sensors:
 
 ```bash
-python3 -m compileall -q core/src/musicseed cli/src/musicseed_cli web/src/musicseed_web
+python3 -m compileall -q core/src/musicseed cli/src/musicseed_cli api/src/musicseed_api
 uv run ruff check src
 uv run musicseed --help
 ```

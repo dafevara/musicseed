@@ -5,7 +5,9 @@ MusicSeed runs locally from source. Infrastructure should remain boring and insp
 ## Runtime Pieces
 
 - Python 3.14+ packages under `core/src/musicseed` (library), `cli/src/musicseed_cli` (CLI), and
-  `web/src/musicseed_web` (local web UI).
+  `api/src/musicseed_api` (REST API).
+- A Next.js + React + TypeScript web UI under `web/` (client-rendered SPA) that talks to the API
+  over HTTP.
 - uv for dependency management and command execution.
 - One local SQLite file for MusicSeed's own state (default
   `~/.local/share/musicseed/musicseed.db`, WAL mode) — no database server.
@@ -47,6 +49,26 @@ Config lookup order:
 
 Environment variables and `~` are expanded. Keep credentials out of repo-local tracked files.
 
+## Web UI, First-Run Wizard, And Settings
+
+The web UI is the default onboarding path. One command starts the API and the web dev server
+together (`./scripts/dev.sh`): the API on `127.0.0.1:8789` and Next.js on `127.0.0.1:3000`,
+proxying `/api/*` to the API.
+
+- **First-run wizard** (`/setup`): detects the Plex server (local-network discovery plus a
+  manual URL), initializes the database, and optionally runs import and enrichment. Non-setup
+  pages (dashboard, recommend, playlists) redirect back here while the library is missing or
+  empty.
+- **Settings** (`/settings`): a persistent view for Plex URL/token/library, the Plex database
+  path, the MusicSeed database path, and Spotify credentials. Saving persists config without
+  starting any import, enrichment, or database initialization.
+- **Plex discovery**: passive, read-only, stdlib-only. GDM multicast on `239.0.0.250:32414`
+  with an SSDP fallback on `239.255.255.250:1900` (`urn:plex-com:service:pms:1`). No extra
+  dependency.
+
+Relevant API routes: `GET /discovery`, `GET /discovery/plex-servers`,
+`POST /discovery/check`, `POST /discovery/config` (save-only), `POST /discovery/init-db`.
+
 ## Logging
 
 The CLI configures file logging through `core/src/musicseed/logging_config.py`.
@@ -62,7 +84,7 @@ output. Console output should summarize progress and outcome.
 These are cheap and should be used before heavier checks:
 
 ```bash
-python3 -m compileall -q core/src/musicseed cli/src/musicseed_cli web/src/musicseed_web
+python3 -m compileall -q core/src/musicseed cli/src/musicseed_cli api/src/musicseed_api
 uv run ruff check src
 uv run musicseed --help
 ```
