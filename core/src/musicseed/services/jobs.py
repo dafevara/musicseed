@@ -19,6 +19,7 @@ from enum import StrEnum
 from musicseed.config import get_config
 from musicseed.db.models import Job
 from musicseed.db.session import ensure_schema, get_session
+from musicseed.exceptions import JobConflictError
 
 
 class JobKind(StrEnum):
@@ -267,9 +268,11 @@ class JobManager:
                 if j and j["state"] in (JobState.RUNNING, JobState.PENDING):
                     active_kinds.add(j["kind"])
             if kind in active_kinds:
-                raise ValueError(f"A {kind} job is already running — wait for it to finish.")
+                raise JobConflictError(
+                    f"A {kind} job is already running — wait for it to finish."
+                )
             if len(self._active) >= self._max:
-                raise RuntimeError(
+                raise JobConflictError(
                     f"Already at the maximum of {self._max} concurrent jobs."
                 )
 

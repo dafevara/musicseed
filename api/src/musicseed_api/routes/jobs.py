@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
+from musicseed.exceptions import NotFoundError
 
 from musicseed_api.handlers.jobs import cancel_job, get_job_progress
 
@@ -13,7 +14,7 @@ router = APIRouter(tags=["jobs"])
 def job_status(job_id: int) -> dict:
     job = get_job_progress(job_id)
     if job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise NotFoundError(f"Job {job_id} not found")
     return job
 
 
@@ -21,6 +22,6 @@ def job_status(job_id: int) -> dict:
 def job_cancel(job_id: int) -> dict:
     job = get_job_progress(job_id)
     if job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise NotFoundError(f"Job {job_id} not found")
     cancel_job(job_id)
     return get_job_progress(job_id) or {}

@@ -10,7 +10,8 @@ from musicseed.services.jobs import get_job, get_manager
 def submit_job(kind: str, target: Callable[..., None], *args, **kwargs) -> int:
     """Submit a new job to the in-process runner. Returns the job id.
 
-    Raises ``ValueError`` when a job of the same kind is already running.
+    Raises ``JobConflictError`` when a job of the same kind is already
+    running or the concurrency pool is full.
     """
     return get_manager().submit(kind, target, *args, **kwargs)
 

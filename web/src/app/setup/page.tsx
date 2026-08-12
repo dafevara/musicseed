@@ -86,13 +86,7 @@ export default function SetupPage() {
       });
       await bootstrap();
     } catch (e) {
-      const raw = String(e);
-      try {
-        const parsed = JSON.parse(raw.replace("Error: ", ""));
-        setDbError(parsed?.detail || raw);
-      } catch {
-        setDbError(raw.replace("Error: ", ""));
-      }
+      setDbError(String(e).replace("Error: ", ""));
       setPhase("db_init_error");
     }
   }

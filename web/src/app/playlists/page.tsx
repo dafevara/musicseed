@@ -38,13 +38,7 @@ export default function PlaylistsPage() {
     api.get<PlexPlaylist[]>("/playlists")
       .then(setPlaylists)
       .catch((e) => {
-        const raw = String(e).replace("Error: ", "");
-        let detail = raw;
-        try {
-          const parsed = JSON.parse(raw);
-          detail = parsed.detail || raw;
-        } catch { /* not JSON */ }
-        setError(detail || "Could not load playlists.");
+        setError(String(e).replace("Error: ", "") || "Could not load playlists.");
       })
       .finally(() => setLoading(false));
   }, []);

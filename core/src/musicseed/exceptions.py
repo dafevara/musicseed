@@ -11,3 +11,7 @@ class ConfigurationError(MusicSeedError):
 
 class NotFoundError(MusicSeedError):
     """A requested resource (seed track, file, playlist) could not be found."""
+
+
+class JobConflictError(MusicSeedError):
+    """A job of the requested kind is already running."""

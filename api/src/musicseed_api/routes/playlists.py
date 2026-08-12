@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Form, HTTPException, Query
-from musicseed.exceptions import ConfigurationError, NotFoundError
 from musicseed.recommender.scoring import Weights
 
 from musicseed_api.handlers.playlists import (
@@ -21,10 +20,7 @@ router = APIRouter(tags=["playlists"])
 
 @router.get("/playlists")
 def list_playlists() -> list[dict]:
-    try:
-        return get_playlists()
-    except ConfigurationError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    return get_playlists()
 
 
 @router.post("/playlists/create")
@@ -60,22 +56,15 @@ def create_playlist(
             weight_kwargs[key] = float(param)
     weights = Weights(**weight_kwargs) if weight_kwargs else None
 
-    try:
-        return create_playlist_from_seeds(
-            name=name.strip(),
-            seed_ids=ids,
-            limit=limit,
-            weights=weights,
-            year_min=y_min,
-            year_max=y_max,
-            max_tracks_per_artist=max_tracks_per_artist,
-        )
-    except ConfigurationError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    except NotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    return create_playlist_from_seeds(
+        name=name.strip(),
+        seed_ids=ids,
+        limit=limit,
+        weights=weights,
+        year_min=y_min,
+        year_max=y_max,
+        max_tracks_per_artist=max_tracks_per_artist,
+    )
 
 
 @router.get("/playlists/{name}/preview")
@@ -88,20 +77,13 @@ def preview(
 ) -> dict:
     y_min = int(year_min) if year_min else None
     y_max = int(year_max) if year_max else None
-    try:
-        return preview_populate(
-            playlist_name=name,
-            limit=limit,
-            year_min=y_min,
-            year_max=y_max,
-            max_tracks_per_artist=max_tracks_per_artist,
-        )
-    except ConfigurationError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    except NotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    return preview_populate(
+        playlist_name=name,
+        limit=limit,
+        year_min=y_min,
+        year_max=y_max,
+        max_tracks_per_artist=max_tracks_per_artist,
+    )
 
 
 @router.post("/playlists/{name}/populate")
@@ -130,18 +112,11 @@ def populate(
             weight_kwargs[key] = float(param)
     weights = Weights(**weight_kwargs) if weight_kwargs else None
 
-    try:
-        return apply_populate(
-            playlist_name=name,
-            limit=limit,
-            weights=weights,
-            year_min=y_min,
-            year_max=y_max,
-            max_tracks_per_artist=max_tracks_per_artist,
-        )
-    except ConfigurationError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    except NotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    return apply_populate(
+        playlist_name=name,
+        limit=limit,
+        weights=weights,
+        year_min=y_min,
+        year_max=y_max,
+        max_tracks_per_artist=max_tracks_per_artist,
+    )
