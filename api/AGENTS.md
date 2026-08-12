@@ -125,11 +125,14 @@ against the updated core. Surfaces that depend on api (`web/`) must also re-lock
 uv sync                                  # installs core editable + fastapi/uvicorn
 uv run uvicorn musicseed_api.app:app --reload   # serve at http://127.0.0.1:8000
 curl http://127.0.0.1:8000/discovery     # JSON discovery result (no /api prefix standalone)
-uv run ruff check src
-uv run pytest tests -q                   # (tests not yet added — coming with MUS-22)
+uv run ruff check src tests
+uv run pytest tests -q                   # offline suite — stubs Plex/DB, no real data
 python3 -m compileall -q src/musicseed_api
 ```
 
-The JSON routes touch the database and Plex (through core services) — tests will need the
-fixture layer from MUS-13. Until then, verify handlers import cleanly and the web surface's
-58 tests (which exercise every handler through `TestClient`) pass.
+The test suite (`tests/`) covers every route module and the framework-free handler
+layer with `TestClient`. It stubs Plex and DB access at the handler/service boundary
+(via `monkeypatch`), so it runs offline with no Plex server and no real database. The
+`tests/conftest.py` fixture resets config and the DB engine between tests; anything that
+touches the real database or Plex should still be exercised through core's own fixtures
+(see `core/AGENTS.md`).

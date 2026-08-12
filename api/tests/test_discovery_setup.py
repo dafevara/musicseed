@@ -1,23 +1,10 @@
 """Setup-flow tests: config persistence of validated Plex overrides + empty DB."""
 
 import musicseed.config as config_module
-import pytest
 from fastapi.testclient import TestClient
 from musicseed.config import load_config, set_config
-from musicseed.db.session import reset_engine
 from musicseed_api.app import create_app
 from musicseed_api.handlers.discovery import apply_config_and_init_db
-
-
-@pytest.fixture(autouse=True)
-def isolated_config():
-    config_module._config = None
-    config_module._config_path = None
-    reset_engine()
-    yield
-    config_module._config = None
-    config_module._config_path = None
-    reset_engine()
 
 
 def _seed_config(tmp_path) -> None:
