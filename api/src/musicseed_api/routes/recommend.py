@@ -85,4 +85,5 @@ def recommend(
             }
             for r in result.recommendations
         ],
+        "sonic_coverage": result.sonic_coverage.model_dump(),
     }

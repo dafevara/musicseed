@@ -176,26 +176,53 @@ def load_sonic_vectors(
 
 # Global instance (lazy loaded), mirroring the config module's pattern.
 _vectors: SonicVectors | None = None
+# Signature of the Plex blobs database files at the time ``_vectors`` was
+# loaded, so a change (newly analyzed tracks) invalidates the cache.
+_vectors_signature: tuple | None = None
+
+
+def _blobs_signature(blobs_db_path: Path) -> tuple:
+    """A cheap fingerprint of the blobs DB (main + WAL) used to detect change.
+
+    Plex appends sonic blobs to the WAL file before checkpointing, so both
+    files are inspected; ``(mtime, size)`` per file is enough to notice a new
+    analysis without re-reading the database.
+    """
+    parts: list[tuple[float, int] | None] = []
+    for candidate in (blobs_db_path, Path(f"{blobs_db_path}-wal")):
+        try:
+            st = candidate.stat()
+            parts.append((st.st_mtime, st.st_size))
+        except OSError:
+            parts.append(None)
+    return tuple(parts)
 
 
 def get_sonic_vectors() -> SonicVectors:
     """Get the global sonic vector store, loading it on first use.
 
     Cached because recommendation flows (notably playlist population) run many
-    seed queries in one process and must not re-read Plex each time.
+    seed queries in one process and must not re-read Plex each time. The cache
+    reloads whenever the underlying blobs database changes, so newly analyzed
+    tracks contribute to scoring without a process restart.
     """
-    global _vectors
-    if _vectors is None:
-        config = get_config()
-        _vectors = load_sonic_vectors(
-            plex_db_path=config.plex.db_path_expanded,
-            blobs_db_path=config.plex.blobs_db_path_expanded,
-            library_name=config.plex.library,
-        )
+    global _vectors, _vectors_signature
+    config = get_config()
+    blobs_db_path = config.plex.blobs_db_path_expanded
+    signature = _blobs_signature(blobs_db_path)
+    if _vectors is not None and signature == _vectors_signature:
+        return _vectors
+    _vectors = load_sonic_vectors(
+        plex_db_path=config.plex.db_path_expanded,
+        blobs_db_path=blobs_db_path,
+        library_name=config.plex.library,
+    )
+    _vectors_signature = signature
     return _vectors
 
 
 def reset_sonic_vectors() -> None:
     """Drop the cached vectors (useful for testing or config changes)."""
-    global _vectors
+    global _vectors, _vectors_signature
     _vectors = None
+    _vectors_signature = None

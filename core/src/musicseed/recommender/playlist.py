@@ -13,6 +13,7 @@ from musicseed.db.models import Artist, Track
 from musicseed.recommender.candidates import build_candidate_pool
 from musicseed.recommender.scoring import (
     ScoreBreakdown,
+    SonicCoverage,
     Weights,
     build_seed_profile,
     calculate_score,
@@ -127,8 +128,12 @@ def recommend_tracks(
     year_max: int | None = None,
     max_tracks_per_artist: int = 3,
     min_score: float | None = None,
-) -> tuple[list[Track], list[Recommendation]]:
-    """Generate recommendations using multi-source candidates and constrained selection."""
+) -> tuple[list[Track], list[Recommendation], SonicCoverage]:
+    """Generate recommendations using multi-source candidates and constrained selection.
+
+    Returns ``(seed_tracks, selected, sonic_coverage)`` where ``sonic_coverage``
+    reports how many candidate tracks had a real Plex sonic vector.
+    """
 
     if limit <= 0:
         raise ValueError("limit must be greater than zero")
@@ -149,7 +154,7 @@ def recommend_tracks(
     )
 
     if not candidate_pool.track_ids:
-        return seed_tracks, []
+        return seed_tracks, [], SonicCoverage(candidates=0, with_vector=0)
 
     candidates = (
         session.query(Track)
@@ -157,6 +162,13 @@ def recommend_tracks(
         .filter(Track.id.in_(candidate_pool.track_ids))
         .all()
     )
+
+    with_vector = sum(
+        1
+        for track in candidates
+        if track.plex_id is not None and vectors.get(track.plex_id) is not None
+    )
+    coverage = SonicCoverage(candidates=len(candidates), with_vector=with_vector)
 
     scored = [
         Recommendation(
@@ -183,4 +195,4 @@ def recommend_tracks(
         if len(selected) >= limit:
             break
 
-    return seed_tracks, selected
+    return seed_tracks, selected, coverage

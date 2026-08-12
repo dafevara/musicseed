@@ -36,6 +36,7 @@ export default function RecommendPage() {
   const [seeds, setSeeds] = useState<TypeaheadTrack[]>([]);
   const [seedIds, setSeedIds] = useState<number[]>([]);
   const [results, setResults] = useState<RecommendationItem[]>([]);
+  const [sonicCoverage, setSonicCoverage] = useState<{ candidates: number; with_vector: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -95,10 +96,12 @@ export default function RecommendPage() {
         }
         const data = await api.post<RecommendResponse>("/recommend", body);
         setResults(data.recommendations);
+        setSonicCoverage(data.sonic_coverage ?? null);
         setError(null);
       } catch (e) {
         setError(String(e));
         setResults([]);
+        setSonicCoverage(null);
       } finally {
         setLoading(false);
       }
@@ -245,6 +248,14 @@ export default function RecommendPage() {
         <p className="muted">
           No recommendations found. Try adjusting the filters or using different seed tracks.
         </p>
+      )}
+
+      {!loading && sonicCoverage && sonicCoverage.with_vector === 0 && (
+        <div className="flash flash-warn">
+          No candidate tracks have Plex sonic analysis yet, so the Sonic dimension is
+          scoring neutrally. Run sonic analysis in Plex (or &ldquo;Refresh analysis&rdquo;
+          on the dashboard) to enable it.
+        </div>
       )}
 
       <RecommendResults items={results} />

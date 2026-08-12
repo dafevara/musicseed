@@ -119,6 +119,7 @@ export interface RecommendationItem {
 export interface RecommendResponse {
   seed_track_ids: number[];
   recommendations: RecommendationItem[];
+  sonic_coverage?: { candidates: number; with_vector: number };
 }
 
 export interface PopulatePreview {

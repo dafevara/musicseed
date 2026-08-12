@@ -43,7 +43,7 @@ def populate_average(
     Tracks already in the playlist are excluded automatically because they are
     the seed set, and `recommend_tracks` never returns seed tracks.
     """
-    _, recommendations = recommend_tracks(
+    _, recommendations, _ = recommend_tracks(
         session,
         seed_ids=playlist_track_ids,
         limit=limit,
@@ -82,7 +82,7 @@ def populate_frequency(
     votes: dict[int, list[tuple[int, ScoreBreakdown, Track]]] = defaultdict(list)
 
     for seed_id in playlist_track_ids:
-        _, recs = recommend_tracks(
+        _, recs, _ = recommend_tracks(
             session,
             seed_ids=[seed_id],
             limit=per_seed_limit,

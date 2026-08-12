@@ -8,6 +8,7 @@ from musicseed.services.plex_analysis import (
     get_sonic_status,
     refresh_sonic_analysis,
 )
+from musicseed.sonic import reset_sonic_vectors
 
 
 def get_sonic_coverage(
@@ -22,8 +23,12 @@ def trigger_sonic_refresh(
     days: int = 7,
     wait_seconds: float = 900.0,
 ) -> SonicRefreshResult:
-    return refresh_sonic_analysis(
+    result = refresh_sonic_analysis(
         library_name,
         days=days,
         wait_seconds=wait_seconds,
     )
+    # The Butler task may have analyzed new tracks; drop the cached matrix so
+    # the next scoring run reflects them.
+    reset_sonic_vectors()
+    return result

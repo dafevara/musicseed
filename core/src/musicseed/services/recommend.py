@@ -8,7 +8,7 @@ from musicseed.db.models import Track
 from musicseed.db.session import get_session
 from musicseed.exceptions import ConfigurationError, NotFoundError
 from musicseed.recommender.playlist import Recommendation, recommend_tracks
-from musicseed.recommender.scoring import Weights
+from musicseed.recommender.scoring import SonicCoverage, Weights
 
 
 class RecommendationResult(BaseModel):
@@ -18,6 +18,7 @@ class RecommendationResult(BaseModel):
 
     seed_tracks: list[Track]
     recommendations: list[Recommendation]
+    sonic_coverage: SonicCoverage
 
 
 class PlaylistCreateResult(BaseModel):
@@ -48,7 +49,7 @@ def get_recommendations(
     """
     try:
         with get_session() as session:
-            seed_tracks, recommendations = recommend_tracks(
+            seed_tracks, recommendations, sonic_coverage = recommend_tracks(
                 session,
                 seed_texts=seed_texts,
                 seed_ids=seed_ids,
@@ -59,7 +60,11 @@ def get_recommendations(
                 max_tracks_per_artist=max_tracks_per_artist,
                 min_score=min_score,
             )
-        return RecommendationResult(seed_tracks=seed_tracks, recommendations=recommendations)
+        return RecommendationResult(
+            seed_tracks=seed_tracks,
+            recommendations=recommendations,
+            sonic_coverage=sonic_coverage,
+        )
     except ValueError as exc:
         raise NotFoundError(str(exc)) from exc
 

@@ -21,3 +21,16 @@ def test_sonic_refresh_is_post_only():
 
     assert "post" in paths["/sonic/refresh"]
     assert "get" not in paths["/sonic/refresh"]
+
+
+def test_trigger_sonic_refresh_resets_vector_cache(monkeypatch):
+    import musicseed_api.handlers.sonic as sonic_handler
+
+    called = []
+    monkeypatch.setattr(sonic_handler, "refresh_sonic_analysis", lambda *a, **k: "ok")
+    monkeypatch.setattr(sonic_handler, "reset_sonic_vectors", lambda: called.append(1))
+
+    result = sonic_handler.trigger_sonic_refresh()
+
+    assert result == "ok"
+    assert called == [1]

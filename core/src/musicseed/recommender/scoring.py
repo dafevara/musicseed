@@ -57,6 +57,20 @@ class ScoreBreakdown(BaseModel):
     novelty: float
 
 
+class SonicCoverage(BaseModel):
+    """How many scored candidates actually had a Plex sonic vector.
+
+    A candidate without a vector scores a neutral ``0.5`` on the sonic
+    dimension, indistinguishable from a genuine mid-similarity match. Surfacing
+    this count lets a caller tell a flattened dimension from real coverage.
+    """
+
+    model_config = {"frozen": True}
+
+    candidates: int
+    with_vector: int
+
+
 def _as_vector(value: object) -> np.ndarray | None:
     if value is None:
         return None
