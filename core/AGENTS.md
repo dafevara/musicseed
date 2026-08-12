@@ -36,6 +36,11 @@ Service entry points:
   Pydantic models with machine-readable `Reason` codes; expected failures are data, not
   exceptions. Accepts per-call overrides (never mutates global config) and never includes the
   Plex token in results. The setup wizard / dashboard consume this.
+- `services/plex_discovery.py`: `discover_plex_servers` — passive, read-only local-network
+  Plex discovery (GDM multicast on `239.0.0.250:32414` + SSDP fallback on `239.255.255.250:1900`,
+  stdlib `socket` only). Returns `list[DiscoveredPlexServer]` (empty when nothing responds,
+  never raises). A separate, opt-in probe — not part of `discovery.discover()`. The first-run
+  wizard consumes it.
 - `services/enrichment.py`: `enrich_tracks` (**calls `asyncio.run()` internally — never call it
   from inside a running event loop; offload to a thread**).
 - `services/recommend.py`: `get_recommendations`, `create_playlist`.
