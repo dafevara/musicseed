@@ -312,3 +312,4 @@ class Job(Base):
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     result_summary: Mapped[Optional[str]] = mapped_column(Text)
+    pid: Mapped[Optional[int]] = mapped_column(Integer)

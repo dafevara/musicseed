@@ -9,6 +9,7 @@ left in a ``running`` state from a prior process into ``interrupted``.
 
 from __future__ import annotations
 
+import os
 import threading
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -65,7 +66,7 @@ def create_job(kind: str) -> int:
     """Insert a new ``pending`` job and return its id."""
     with get_session() as session:
         ensure_schema()
-        job = Job(kind=kind, state=JobState.PENDING)
+        job = Job(kind=kind, state=JobState.PENDING, pid=os.getpid())
         session.add(job)
         session.flush()
         return job.id
@@ -131,12 +132,14 @@ def cancel_job(job_id: int) -> None:
 
 def get_job(job_id: int) -> dict | None:
     with get_session() as session:
+        ensure_schema()
         job = session.get(Job, job_id)
         return _job_to_dict(job) if job else None
 
 
 def list_jobs(limit: int = 20) -> list[dict]:
     with get_session() as session:
+        ensure_schema()
         jobs = (
             session.query(Job)
             .order_by(Job.created_at.desc())
@@ -148,6 +151,7 @@ def list_jobs(limit: int = 20) -> list[dict]:
 
 def get_latest_job(kind: str) -> dict | None:
     with get_session() as session:
+        ensure_schema()
         job = (
             session.query(Job)
             .filter(Job.kind == kind)
@@ -159,6 +163,7 @@ def get_latest_job(kind: str) -> dict | None:
 
 def get_active_jobs() -> list[dict]:
     with get_session() as session:
+        ensure_schema()
         jobs = (
             session.query(Job)
             .filter(Job.state.in_([JobState.RUNNING, JobState.PENDING]))
@@ -167,8 +172,28 @@ def get_active_jobs() -> list[dict]:
         return [_job_to_dict(j) for j in jobs]
 
 
+def _pid_alive(pid: int | None) -> bool:
+    """Best-effort liveness check for a recorded owner pid (POSIX only)."""
+    if pid is None:
+        return False  # legacy row, owner unknown — treat as dead
+    if pid == os.getpid():
+        return True
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except OSError:
+        return True  # exists but not ours (e.g. PermissionError) — treat as alive
+    return True
+
+
 def reconcile_running_jobs() -> None:
-    """On process start, mark any ``running`` jobs as ``interrupted``."""
+    """Mark ``running`` jobs from dead processes as ``interrupted``.
+
+    A job is only interrupted when its recorded owner pid is no longer alive,
+    so starting one process while another genuinely runs a job leaves that job
+    untouched.
+    """
     with get_session() as session:
         ensure_schema()
         orphans = (
@@ -177,7 +202,8 @@ def reconcile_running_jobs() -> None:
             .all()
         )
         for job in orphans:
-            job.state = JobState.INTERRUPTED
+            if not _pid_alive(job.pid):
+                job.state = JobState.INTERRUPTED
 
 
 # ------------------------------------------------------------------ manager
@@ -186,27 +212,24 @@ def reconcile_running_jobs() -> None:
 class JobManager:
     """In-process runner with a bounded concurrency pool.
 
-    Workers are daemon threads. Cancel is cooperative (``should_cancel``
-    — workers must poll it at safe checkpoints).
+    Workers are daemon threads. Job state lives in the ``jobs`` table (shared
+    across processes); the in-memory bookkeeping only tracks this process's
+    threads and concurrency. Cancel is cooperative (``should_cancel`` reads the
+    DB — workers poll it at safe checkpoints).
     """
 
     def __init__(self, max_concurrent: int = 2) -> None:
         self._max = max_concurrent
         self._active: dict[int, threading.Thread] = {}
-        self._cancel_flags: set[int] = set()
         self._lock = threading.Lock()
 
     def submit(self, kind: str, target: Callable[..., None], *args, **kwargs) -> int:
+        active_kinds = {j["kind"] for j in get_active_jobs()}
+        if kind in active_kinds:
+            raise JobConflictError(
+                f"A {kind} job is already running — wait for it to finish."
+            )
         with self._lock:
-            active_kinds = set()
-            for jid in self._active:
-                j = get_job(jid)
-                if j and j["state"] in (JobState.RUNNING, JobState.PENDING):
-                    active_kinds.add(j["kind"])
-            if kind in active_kinds:
-                raise JobConflictError(
-                    f"A {kind} job is already running — wait for it to finish."
-                )
             if len(self._active) >= self._max:
                 raise JobConflictError(
                     f"Already at the maximum of {self._max} concurrent jobs."
@@ -224,24 +247,18 @@ class JobManager:
         return job_id
 
     def request_cancel(self, job_id: int) -> None:
-        with self._lock:
-            self._cancel_flags.add(job_id)
         request_cancel(job_id)
 
     def should_cancel(self, job_id: int) -> bool:
-        with self._lock:
-            return job_id in self._cancel_flags
+        job = get_job(job_id)
+        return job is not None and job["state"] == JobState.CANCEL_REQUESTED
 
     def shutdown(self) -> None:
-        """Cancel every active job and wait briefly for threads to finish."""
+        """Request cancellation of every active job (threads are daemons)."""
         with self._lock:
             job_ids = list(self._active.keys())
-            for jid in job_ids:
-                self._cancel_flags.add(jid)
-                request_cancel(jid)
-        # Mark any remaining running jobs as interrupted (they won't
-        # come back after process exit, and daemon threads will die).
-        reconcile_running_jobs()
+        for jid in job_ids:
+            request_cancel(jid)
 
     def _worker(self, job_id: int, kind: str, target: Callable, args, kwargs) -> None:
         try:
@@ -260,7 +277,6 @@ class JobManager:
         finally:
             with self._lock:
                 self._active.pop(job_id, None)
-                self._cancel_flags.discard(job_id)
 
 
 # Module-level singleton (lazy, reconciled on first access)

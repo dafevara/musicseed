@@ -4,7 +4,9 @@ import time
 
 import pytest
 from musicseed.config import Config, set_config
-from musicseed.db.session import init_db, reset_engine
+from musicseed.db.models import Job
+from musicseed.db.session import get_session, init_db, reset_engine
+from musicseed.exceptions import JobConflictError
 from musicseed.services.jobs import (
     JobState,
     cancel_job,
@@ -108,9 +110,18 @@ def test_get_active_jobs() -> None:
 def test_reconcile_marks_running_as_interrupted() -> None:
     jid = create_job("doomed")
     start_job(jid)
-    assert get_job(jid)["state"] == JobState.RUNNING
+    # Simulate a job owned by a now-dead process (pid that cannot be alive).
+    with get_session() as session:
+        session.get(Job, jid).pid = 2 ** 22
     reconcile_running_jobs()
     assert get_job(jid)["state"] == JobState.INTERRUPTED
+
+
+def test_reconcile_leaves_own_running_job_alone() -> None:
+    jid = create_job("mine")
+    start_job(jid)
+    reconcile_running_jobs()
+    assert get_job(jid)["state"] == JobState.RUNNING
 
 
 def test_jobs_persist_across_sessions() -> None:
@@ -172,3 +183,29 @@ def test_cancel_stops_worker_cooperatively() -> None:
     assert cancel_seen.is_set()
     assert len(calls) < 20
     assert get_job(jid)["state"] == JobState.CANCELED
+
+
+def test_submit_blocks_kind_owned_by_another_process() -> None:
+    """A running job created outside this manager (another process) blocks submit."""
+    from musicseed.services.jobs import get_manager
+
+    jid = create_job("import")
+    start_job(jid)  # running, but not in this manager's thread pool
+
+    manager = get_manager()
+    with pytest.raises(JobConflictError):
+        manager.submit("import", lambda job_id: None)
+
+
+def test_should_cancel_reads_database_state() -> None:
+    """Cancellation is observed from the DB, not an in-memory flag."""
+    from musicseed.services.jobs import JobManager
+
+    jid = create_job("import")
+    start_job(jid)
+
+    fresh = JobManager()  # brand-new manager, no in-memory state
+    assert fresh.should_cancel(jid) is False
+
+    request_cancel(jid)  # DB write only
+    assert fresh.should_cancel(jid) is True
