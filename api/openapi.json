@@ -3,7 +3,7 @@
   "info": {
     "title": "MusicSeed API",
     "version": "0.1.0",
-    "description": "REST API for MusicSeed — a personal, local-first music recommendation tool for Plex libraries. Every operation is available as a JSON endpoint. The web UI mounts this API at `/api/` in-process; standalone development runs on port 8789.",
+    "description": "REST API for MusicSeed — a personal, local-first music recommendation tool for Plex libraries. Every operation is available as a JSON endpoint. The Next.js web UI proxies `/api/*` to this server in development; standalone development runs on port 8789.",
     "license": { "name": "MIT" }
   },
   "servers": [

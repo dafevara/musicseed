@@ -17,11 +17,11 @@ for the logic this app calls. This file covers the API app only.
   underneath is framework-free and importable by any surface.
 - Depends on `musicseed-core` via an **editable path source** in `pyproject.toml`
   (`musicseed-core = { path = "../core", editable = true }`). No dependency on `musicseed-web`
-  or `musicseed-cli` — this is the layer they consume, not the other way around.
+  or `musicseed-cli` — the web surface consumes this API over HTTP.
 - Own `pyproject.toml` + `uv.lock` + `.venv`. Run `uv` commands from inside `api/`.
 - Started standalone via `uv run uvicorn musicseed_api.app:app` (port 8000) or the
-  `musicseed-api` script entry point (port 8789). In production the web surface mounts the
-  API routers in-process at `/api/` — no separate process needed.
+  `musicseed-api` script entry point (port 8789). The Next.js web surface is a separate
+  process that proxies `/api/*` to this server in development (see `web/AGENTS.md`).
 
 ## Architecture: the `handlers/` seam
 
@@ -62,27 +62,26 @@ JSON. Handlers are the reusable part — routes are the HTTP-specific projection
 ## Code Map
 
 - `src/musicseed_api/app.py`: **app assembly only** — `create_app()` mounts the JSON route
-  modules (without a URL prefix — the web surface applies `/api` at mount time). The
-  module-level `app = create_app()` is the ASGI entry point (`musicseed_api.app:app`); keep
-  it importable.
+  modules and registers the central exception handlers (the single error contract mapping
+  typed core exceptions to HTTP status codes). The module-level `app = create_app()` is the
+  ASGI entry point (`musicseed_api.app:app`); keep it importable.
 - `src/musicseed_api/server.py`: **public server entry point** — `serve(host, port, on_started)`
-  wraps uvicorn programmatically (same pattern as `musicseed_web.server`). `main()` is the
-  `musicseed-api` script entry point (port 8789 by default) for standalone development.
+  wraps uvicorn programmatically. `main()` is the `musicseed-api` script entry point (port 8789
+  by default) for standalone development.
 - `src/musicseed_api/handlers/`: **orchestration layer** — one module per domain. No HTTP
   framework imports anywhere. Every function is callable from any surface. Modules:
   `discovery.py`, `library.py`, `enrichment.py`, `dashboard.py`, `recommend.py`, `sonic.py`,
   `jobs.py`. Shared constants (`IMPORT_KIND`, `ENRICH_KIND`, `DB_BLOCKERS`, `DISCOVERY_KEYS`)
   live in the handler that owns them — import them directly rather than duplicating.
 - `src/musicseed_api/routes/`: **JSON endpoints** — one module per domain, each with an
-  `APIRouter` named `router` (no prefix — the web surface mounts them at `/api/`). These are
+  `APIRouter` named `router` (no prefix). These are
   thin wrappers: parse HTTP (Form, Query, path params), call a handler, return JSON. Modules:
   `discovery.py`, `library.py`, `enrichment.py`, `recommend.py`, `sonic.py`, `dashboard.py`,
-  `jobs.py`.
+  `jobs.py`, `playlists.py`.
 
-- `openapi.json`: hand-crafted OpenAPI 3.1 spec covering all 13 operations with 22
-  named schema components, descriptions, and server entries for both standalone and
-  web-mounted deployment. Use this for code generation or external integration docs —
-  it is the contract, not the auto-generated one.
+- `openapi.json`: hand-crafted OpenAPI 3.1 spec covering the JSON operations with named
+  schema components and descriptions. Use this for code generation or external integration
+  docs — it is the contract, not the auto-generated one.
 
 ## Particularities to respect
 
@@ -103,10 +102,9 @@ JSON. Handlers are the reusable part — routes are the HTTP-specific projection
   positional arg (the `JobManager` convention). They call `update_progress` at checkpoints
   so the UI can render progress. They are synchronous, blocking functions — the manager
   runs them in daemon threads.
-- **Route prefixes are applied by the consumer.** API routes have no URL prefix. The web
-  surface mounts them at `/api/` via `app.mount("/api", api_app)`. The standalone server
-  serves them at the root. Do not add a prefix to route modules — the caller owns the mount
-  point.
+- **Route prefixes are applied by the consumer.** API routes have no URL prefix. The Next.js
+  web dev server rewrites `/api/*` to this server (standalone on `:8789`). Do not add a prefix
+  to route modules — the caller owns the mount point.
 - **Secrets in routes.** Token and credential fields arrive via POST bodies (`Form`), are
   passed to handlers, and are never placed in JSON responses. The discovery route's
   `extract_overrides` helper separates secrets from sticky form values — secrets go to

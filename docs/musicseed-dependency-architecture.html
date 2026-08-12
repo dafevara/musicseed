@@ -102,24 +102,26 @@
 
 <h1>MusicSeed — Dependency &amp; Workflow Architecture</h1>
 <p class="subtitle">
-  Post API-layer extraction · September 2026 ·
+  React web surface + standalone REST API · August 2026 ·
   <span class="badge green">SQLite only</span>
   <span class="badge green">No Docker</span>
   <span class="badge green">No ML runtime</span>
   <span class="badge blue">REST API</span>
+  <span class="badge blue">Next.js web</span>
 </p>
 
 <p>This document explains <strong>every dependency MusicSeed relies on today</strong> — Python
 packages, data stores, network services — and <strong>how data flows</strong> through the four
-main workflows (import, enrich, sonic retrieval, recommend) and the two surfaces (CLI, web via
-API). It exists to track how small the install surface has become, so publishing MusicSeed as
-open source means a new user needs as little as possible.</p>
+main workflows (import, enrich, sonic retrieval, recommend) and the two surfaces (CLI, and the
+Next.js web UI via the REST API). It exists to track how small the install surface has become,
+so publishing MusicSeed as open source means a new user needs as little as possible.</p>
 
 <div class="note">
-  <strong>TL;DR install surface:</strong> Python 3.14+ and <code>uv</code>, six core packages,
-  two CLI packages, three web packages, three API packages (plus a vendored HTMX file — no Node),
-  one SQLite file (created automatically), and read access to two Plex SQLite
-  databases. That's the whole thing — no server, no containers, no native ML libraries.
+  <strong>TL;DR install surface:</strong> Python 3.14+ and <code>uv</code> (for core/api/cli)
+  plus Node for the optional web UI; six core packages, two CLI packages, three API packages,
+  and a Next.js + React web app — one SQLite file (created automatically), and read access to
+  two Plex SQLite databases. That's the whole thing — no server, no containers, no native ML
+  libraries.
 </div>
 
 <!-- ============================ BIG PICTURE ============================ -->
@@ -141,8 +143,8 @@ open source means a new user needs as little as possible.</p>
 
   <!-- Web UI -->
   <rect x="20" y="16" rx="8" width="200" height="58" fill="#1d212b" stroke="#e5c07b"/>
-  <text x="120" y="40" text-anchor="middle" class="box-label">musicseed-web</text>
-  <text x="120" y="58" text-anchor="middle" class="box-sub">Jinja · HTMX · rendering only</text>
+  <text x="120" y="40" text-anchor="middle" class="box-label">Browser → musicseed-web</text>
+  <text x="120" y="58" text-anchor="middle" class="box-sub">Next.js · React · TypeScript</text>
 
   <!-- CLI -->
   <rect x="250" y="16" rx="8" width="200" height="58" fill="#1d212b" stroke="#b48ead"/>
@@ -194,19 +196,17 @@ open source means a new user needs as little as possible.</p>
   <text x="905" y="310" text-anchor="middle" class="box-sub">Spotify (optional fallback)</text>
   <text x="905" y="334" text-anchor="middle" class="box-sub">rate-limited · enrichment only</text>
 
-  <!-- edges: surfaces → api -->
+  <!-- edges: web → api (JSON over HTTP) -->
   <line x1="180" y1="74" x2="260" y2="116" stroke="#b48ead" stroke-width="1.5" marker-end="url(#arrPurple)"/>
-  <line x1="350" y1="74" x2="320" y2="116" stroke="#b48ead" stroke-width="1.5" marker-end="url(#arrPurple)"/>
-  <text x="210" y="100" class="flow-label">handlers</text>
-  <text x="370" y="100" class="flow-label">handlers</text>
+  <text x="205" y="100" class="flow-label">JSON / HTTP</text>
 
   <!-- edges: api → core -->
   <line x1="380" y1="188" x2="460" y2="230" stroke="#6ea8fe" stroke-width="1.5" marker-end="url(#arr)"/>
   <text x="395" y="215" class="flow-label">services only</text>
 
-  <!-- edges: CLI → core (direct for simple ops) -->
+  <!-- edges: CLI → core (direct, all ops) -->
   <line x1="420" y1="74" x2="540" y2="230" stroke="#6ea8fe" stroke-width="1" stroke-dasharray="4,4" marker-end="url(#arr)"/>
-  <text x="490" y="145" class="flow-label">services (direct, simple ops)</text>
+  <text x="490" y="145" class="flow-label">services (direct)</text>
 
   <path d="M 400 350 C 300 370, 180 380, 145 388" fill="none" stroke="#6ea8fe" stroke-width="1.5" marker-end="url(#arr)"/>
   <text x="215" y="370" class="flow-label">SQLAlchemy ORM</text>
@@ -226,9 +226,10 @@ open source means a new user needs as little as possible.</p>
 <figcaption>
   Everything MusicSeed touches. Green borders are read-only SQLite files owned by Plex;
   the blue-bordered file is the only writable store. Amber is network I/O. Purple is the
-  API orchestration layer — consumed by both CLI (for complex operations) and web (for all
-  operations). Removed in the dependency reduction: PostgreSQL server, Docker, pgvector,
-  psycopg, essentia-tensorflow, and all audio-file reads.
+  API orchestration layer — the browser UI reaches it over HTTP (Next.js proxy), while the
+  CLI calls core services directly. Removed in the dependency reduction: PostgreSQL server,
+  Docker, pgvector, psycopg, essentia-tensorflow, Jinja/HTMX server rendering, and all
+  audio-file reads.
 </figcaption>
 </figure>
 
@@ -240,9 +241,9 @@ open source means a new user needs as little as possible.</p>
   </div>
   <div class="card">
     <h4>Python packages (surfaces)</h4>
-    <p class="num">2 + 3 + 3 + core</p>
-    <p>cli: typer, rich · api: fastapi, uvicorn, python-multipart · web: fastapi, uvicorn, jinja2 (+ vendored HTMX, no Node).
-    Web depends on api; both depend on core via editable paths.</p>
+    <p class="num">2 + 3 + Node</p>
+    <p>cli: typer, rich · api: fastapi, uvicorn, python-multipart · web: next, react, react-dom
+    (Node). Web talks to api over HTTP; api and cli depend on core via editable paths.</p>
   </div>
   <div class="card">
     <h4>External processes</h4>
@@ -265,11 +266,12 @@ open source means a new user needs as little as possible.</p>
     <tr><td>pyyaml</td><td>config.yaml loading</td><td><span class="tag kept">kept</span> <span class="tag core">core</span></td></tr>
     <tr><td>rich</td><td>Progress rendering inside import/enrich pipelines</td><td><span class="tag kept">kept</span> <span class="tag core">core</span></td></tr>
     <tr><td>typer</td><td>CLI framework</td><td><span class="tag kept">kept</span> <span class="tag cli">cli</span></td></tr>
-    <tr><td>fastapi</td><td>API + web request handling</td><td><span class="tag kept">kept</span> <span class="tag web">api</span> <span class="tag web">web</span></td></tr>
-    <tr><td>uvicorn</td><td>ASGI server for API and web app</td><td><span class="tag kept">kept</span> <span class="tag web">api</span> <span class="tag web">web</span></td></tr>
-    <tr><td>jinja2</td><td>Server-rendered templates</td><td><span class="tag kept">kept</span> <span class="tag web">web</span></td></tr>
-    <tr><td>python-multipart</td><td>HTML form parsing (setup wizard, credential forms)</td><td><span class="tag kept">kept</span> <span class="tag web">api</span> <span class="tag web">web</span></td></tr>
-    <tr><td>htmx (vendored file)</td><td>Fragment updates without a JS build step</td><td><span class="tag kept">kept</span> <span class="tag web">web</span></td></tr>
+    <tr><td>fastapi</td><td>REST API request handling</td><td><span class="tag kept">kept</span> <span class="tag web">api</span></td></tr>
+    <tr><td>uvicorn</td><td>ASGI server for the API</td><td><span class="tag kept">kept</span> <span class="tag web">api</span></td></tr>
+    <tr><td>python-multipart</td><td>HTML form parsing (setup wizard, credential forms)</td><td><span class="tag kept">kept</span> <span class="tag web">api</span></td></tr>
+    <tr><td>next / react / react-dom</td><td>Next.js + React client-rendered web UI (Node)</td><td><span class="tag kept">kept</span> <span class="tag web">web</span></td></tr>
+    <tr class="removed"><td>jinja2</td><td>Server-rendered templates</td><td><span class="tag gone">removed · React rewrite</span></td></tr>
+    <tr class="removed"><td>htmx (vendored file)</td><td>Fragment updates without a JS build step</td><td><span class="tag gone">removed · React rewrite</span></td></tr>
     <tr class="removed"><td>essentia-tensorflow</td><td>Self-generated audio embeddings (MusiCNN)</td><td><span class="tag gone">removed · Phase 1</span></td></tr>
     <tr class="removed"><td>psycopg[binary]</td><td>PostgreSQL driver</td><td><span class="tag gone">removed · Phase 3</span></td></tr>
     <tr class="removed"><td>pgvector</td><td>Vector column type + cosine-distance query</td><td><span class="tag gone">removed · Phase 2</span></td></tr>
@@ -445,18 +447,17 @@ open source means a new user needs as little as possible.</p>
 
 <h2>5. Verify the current state</h2>
 <pre><code>cd core &amp;&amp; uv run ruff check src
-cd api  &amp;&amp; uv run ruff check src
-cd web  &amp;&amp; uv run ruff check src tests
-python3 -m compileall -q core/src/musicseed api/src/musicseed_api \
-    cli/src/musicseed_cli web/src/musicseed_web
-cd web &amp;&amp; uv run pytest tests -q       # web smoke tests (offline)
+cd api  &amp;&amp; uv run ruff check src &amp;&amp; uv run pytest tests -q
+cd cli  &amp;&amp; uv run ruff check src &amp;&amp; uv run pytest tests -q
+cd web  &amp;&amp; npx tsc --noEmit &amp;&amp; npm run lint
+python3 -m compileall -q core/src/musicseed api/src/musicseed_api cli/src/musicseed_cli
 cd cli &amp;&amp; uv run musicseed init-db      # creates the SQLite file
 uv run musicseed status                  # shows DB path + file size
 uv run musicseed recommend --seed-id 123 --limit 20 --explain</code></pre>
 
 <footer>
-  Generated September 2026, after extraction of the <code>api/</code> orchestration layer
-  from <code>web/routes/</code>. Historical context:
+  Generated August 2026, after the React/Next.js web rewrite and the extraction of the
+  <code>api/</code> orchestration layer. Historical context:
   <code>docs/ard/001</code> (original design, superseded), <code>docs/ard/002</code> (sonic
   vectors at query time), <code>docs/implementation-plan.md</code> (original build plan, historical).
 </footer>
