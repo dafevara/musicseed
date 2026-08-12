@@ -49,6 +49,12 @@ Config lookup order:
 
 Environment variables and `~` are expanded. Keep credentials out of repo-local tracked files.
 
+The Plex token is auto-detected when possible: discovery reads `PlexOnlineToken` from Plex's
+`Preferences.xml`, falling back to `.LocalAdminToken` (localhost-only), both under
+`~/Library/Application Support/Plex Media Server/`. Saving setup or settings persists the
+detected token into `config.yaml`; when none is found the UI shows how to retrieve one from
+app.plex.tv.
+
 ## Web UI, First-Run Wizard, And Settings
 
 The web UI is the default onboarding path. One command starts the API and the web dev server

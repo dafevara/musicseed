@@ -17,6 +17,10 @@ from musicseed.config import Config, PlexConfig
 from musicseed.services import discovery
 from musicseed.services.discovery import Reason, discover
 
+# Captured before the autouse conftest fixture patches it, so token-file tests
+# can exercise the real implementation.
+_real_read_plex_token = discovery.read_plex_token
+
 SECRET_TOKEN = "SECRET-TOKEN-123"
 
 
@@ -407,3 +411,45 @@ def test_library_empty_false_when_db_unreadable(tmp_path: Path,
     result = discover(musicseed_db_path=str(db), check_server=False,
                       config=_config(tmp_path))
     assert not result.first_run.library_empty
+
+
+# ---------------------------------------------------------------- token
+
+
+def test_read_plex_token_prefers_preferences_xml(tmp_path: Path) -> None:
+    prefs = tmp_path / "Preferences.xml"
+    prefs.write_text(
+        '<?xml version="1.0"?><Preferences PlexOnlineToken="ACCOUNT-TOKEN"/>'
+    )
+    admin = tmp_path / ".LocalAdminToken"
+    admin.write_text("LOCAL-ADMIN-TOKEN")
+    assert _real_read_plex_token(
+        preferences_path=str(prefs), local_admin_token_path=str(admin),
+    ) == "ACCOUNT-TOKEN"
+
+
+def test_read_plex_token_falls_back_to_local_admin(tmp_path: Path) -> None:
+    admin = tmp_path / ".LocalAdminToken"
+    admin.write_text("LOCAL-ADMIN-TOKEN\n")
+    assert _real_read_plex_token(
+        preferences_path=str(tmp_path / "missing.xml"),
+        local_admin_token_path=str(admin),
+    ) == "LOCAL-ADMIN-TOKEN"
+
+
+def test_read_plex_token_returns_none(tmp_path: Path) -> None:
+    assert _real_read_plex_token(
+        preferences_path=str(tmp_path / "missing.xml"),
+        local_admin_token_path=str(tmp_path / "missing-admin"),
+    ) is None
+
+
+def test_server_uses_local_token(tmp_path: Path,
+                                 monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_client(monkeypatch, check=_ok_check(), sections=[_music_section()])
+    monkeypatch.setattr(discovery, "read_plex_token", lambda: SECRET_TOKEN)
+    result = discover(config=_config(tmp_path))  # no token in config
+    assert result.plex_server.token_configured
+    assert result.plex_server.token_source == "local"
+    assert result.plex_server.ok
+    assert SECRET_TOKEN not in json.dumps(result.model_dump(), default=str)

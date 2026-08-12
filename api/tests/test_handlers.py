@@ -145,6 +145,38 @@ def test_save_config_overrides_leaves_blank_fields_untouched(tmp_path):
     assert config_module._config.plex.url == "http://localhost:32400"
 
 
+def test_save_config_overrides_uses_local_token(tmp_path, monkeypatch):
+    import musicseed_api.handlers.discovery as discovery_handlers
+
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text("")
+    set_config(load_config(cfg_path))
+
+    monkeypatch.setattr(discovery_handlers, "read_plex_token", lambda: "LOCAL-TOKEN")
+    changed = discovery_handlers.save_config_overrides()
+
+    assert changed
+    assert config_module._config.plex.token == "LOCAL-TOKEN"
+
+    config_module._config = None
+    config_module._config_path = None
+    reloaded = load_config(cfg_path)
+    assert reloaded.plex.token == "LOCAL-TOKEN"
+
+
+def test_save_config_overrides_keeps_existing_token(tmp_path, monkeypatch):
+    import musicseed_api.handlers.discovery as discovery_handlers
+
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text("plex:\n  token: CONFIG-TOKEN\n")
+    set_config(load_config(cfg_path))
+
+    monkeypatch.setattr(discovery_handlers, "read_plex_token", lambda: "LOCAL-TOKEN")
+    discovery_handlers.save_config_overrides()
+
+    assert config_module._config.plex.token == "CONFIG-TOKEN"
+
+
 def test_apply_config_and_init_db_initializes(tmp_path, monkeypatch):
     import musicseed_api.handlers.discovery as discovery_handlers
 

@@ -12,6 +12,7 @@ import sqlite3
 from enum import StrEnum
 from pathlib import Path
 from urllib.parse import quote
+from xml.etree import ElementTree
 
 from pydantic import BaseModel
 
@@ -25,6 +26,42 @@ from musicseed.config import (
 )
 
 _SQLITE_HEADER = b"SQLite format 3\x00"
+
+
+def _plex_data_dir() -> Path:
+    return Path.home() / "Library" / "Application Support" / "Plex Media Server"
+
+
+def read_plex_token(
+    preferences_path: str | None = None,
+    local_admin_token_path: str | None = None,
+) -> str | None:
+    """Read a usable Plex token from the local server's data directory.
+
+    Prefers the account token (``PlexOnlineToken`` in ``Preferences.xml``),
+    then falls back to ``.LocalAdminToken`` (which only works from localhost).
+    Returns ``None`` when neither is readable. Read-only — the token value is
+    never logged or returned in discovery results.
+    """
+    prefs = Path(preferences_path) if preferences_path else _plex_data_dir() / "Preferences.xml"
+    try:
+        root = ElementTree.parse(prefs).getroot()
+    except (OSError, ElementTree.ParseError):
+        token = None
+    else:
+        token = (root.get("PlexOnlineToken") or "").strip() or None
+    if token:
+        return token
+
+    admin = (
+        Path(local_admin_token_path)
+        if local_admin_token_path
+        else _plex_data_dir() / ".LocalAdminToken"
+    )
+    try:
+        return admin.read_text(encoding="utf-8").strip() or None
+    except OSError:
+        return None
 
 
 class Reason(StrEnum):
@@ -92,6 +129,7 @@ class PlexServerDiscovery(BaseModel):
     url: str
     source: str
     token_configured: bool
+    token_source: str = "none"  # "override" | "config" | "local" | "none"
     server_version: str | None
     library: str
     library_found: bool
@@ -246,7 +284,7 @@ def _dedup_candidates(entries: list[tuple[Path, str]]) -> list[tuple[Path, str]]
 
 
 def _discover_server(
-    url: str, source: str, token: str, library: str, timeout: float
+    url: str, source: str, token: str, library: str, timeout: float, token_source: str
 ) -> PlexServerDiscovery:
     token_configured = bool(token)
     client = PlexClient(url, token, timeout=timeout)
@@ -254,6 +292,7 @@ def _discover_server(
         "url": url,
         "source": source,
         "token_configured": token_configured,
+        "token_source": token_source,
         "library": library,
     }
 
@@ -356,14 +395,23 @@ def discover(
     url = plex_url or cfg.plex.url
     url_source = _source(plex_url, cfg.plex.url, default_plex.url)
     library = plex_library or cfg.plex.library
-    token = plex_token if plex_token is not None else cfg.plex.token
+    if plex_token is not None:
+        token, token_source = plex_token, "override"
+    elif cfg.plex.token:
+        token, token_source = cfg.plex.token, "config"
+    else:
+        local_token = read_plex_token()
+        token, token_source = (local_token, "local") if local_token else ("", "none")
     if check_server:
-        plex_server = _discover_server(url, url_source, token, library, timeout)
+        plex_server = _discover_server(
+            url, url_source, token, library, timeout, token_source
+        )
     else:
         plex_server = PlexServerDiscovery(
             url=url,
             source=url_source,
             token_configured=bool(token),
+            token_source=token_source,
             server_version=None,
             library=library,
             library_found=False,

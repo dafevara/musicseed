@@ -181,8 +181,10 @@ export default function SetupPage() {
             <div className="flash flash-warn mt-3">
               {plex.reason === "unreachable"
                 ? "Plex isn't responding. Make sure Plex Media Server is running, then scan again."
-                : plex.detail ||
-                  "Plex needs attention before continuing. You can finish the remaining details on the next step."}
+                : plex.reason === "missing_token"
+                  ? "Plex is running but requires a token and none could be found locally. Continue to enter one — or get it by signing in at app.plex.tv/desktop and finding the X-Plex-Token header in your browser's developer tools."
+                  : plex.detail ||
+                    "Plex needs attention before continuing. You can finish the remaining details on the next step."}
             </div>
           )}
 

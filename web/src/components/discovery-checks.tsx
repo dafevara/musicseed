@@ -28,7 +28,7 @@ function plexGuidance(reason: string | null, detail: string | null): string {
     case "unreachable":
       return "Can't reach Plex at this address. Is Plex Media Server running? If it uses a different host or port, enter the URL below.";
     case "missing_token":
-      return "Plex is running but requires a token, and none is configured. Paste your Plex token below — it is only used for the check and is never stored or shown.";
+      return "Plex is running but requires a token, and MusicSeed couldn't find one on this machine. To get one: sign in at app.plex.tv/desktop, open your browser's developer tools (Network tab), load any library, find a request with an X-Plex-Token header, and copy its value — then paste it below. The token is stored only in your local config and never shown.";
     case "unauthorized":
       return "Plex rejected the configured token. Paste a valid Plex token below.";
     case "library_not_found":
@@ -122,7 +122,13 @@ export function DiscoveryChecks({
             <p className="mt-1 mb-0 text-sm text-[var(--muted)]">
               Connected — Plex {plex_server.server_version},
               music library &ldquo;{plex_server.library}&rdquo; found.
-              Token: {plex_server.token_configured ? "configured" : "not set"}.
+              Token:{" "}
+              {plex_server.token_configured
+                ? plex_server.token_source === "local"
+                  ? "found on this machine"
+                  : "configured"
+                : "not set"}
+              .
             </p>
           ) : (
             <p className="mt-1 mb-0 text-sm text-[var(--muted)]">

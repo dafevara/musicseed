@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from musicseed.config import Config, get_config, save_config
 from musicseed.db.session import reset_engine
-from musicseed.services.discovery import DiscoveryResult, Reason, discover
+from musicseed.services.discovery import DiscoveryResult, Reason, discover, read_plex_token
 from musicseed.services.library import initialize_database
 from musicseed.services.plex_discovery import DiscoveredPlexServer, discover_plex_servers
 
@@ -109,10 +109,15 @@ def save_config_overrides(
     """Persist setup overrides to config without any side effects.
 
     Saves credentials and paths only — never creates the database, starts an
-    import, or runs enrichment. Returns True when anything changed. Blank
-    fields leave the existing config untouched.
+    import, or runs enrichment. When no Plex token is supplied and none is
+    configured, reads one from the local Plex installation (Preferences.xml /
+    .LocalAdminToken) so a same-machine setup needs no manual token. Returns
+    True when anything changed. Blank fields leave the existing config
+    untouched.
     """
     cfg = get_config()
+    if not plex_token.strip() and not cfg.plex.token:
+        plex_token = read_plex_token() or ""
     changed = _apply_config_overrides(
         cfg,
         musicseed_db_path=musicseed_db_path,

@@ -26,6 +26,7 @@ export interface PlexServerCheck {
   server_version: string | null;
   library: string | null;
   token_configured: boolean;
+  token_source: string;
   reason: string | null;
   detail: string | null;
 }
