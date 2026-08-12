@@ -120,3 +120,10 @@ export interface RecommendResponse {
   seed_track_ids: number[];
   recommendations: RecommendationItem[];
 }
+
+export interface PopulatePreview {
+  playlist_name: string;
+  playlist_track_count: number;
+  matched_track_count: number;
+  recommendations: RecommendationItem[];
+}

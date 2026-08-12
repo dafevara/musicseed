@@ -109,7 +109,7 @@ export function HealthStrip({
   snapshot: DashboardSnapshot;
   activeJobs: JobSummary[];
   onEnrich: () => void;
-  onSonicRefresh: () => void;
+  onSonicRefresh: () => void | Promise<void>;
 }) {
   const { library: lib, discovery } = snapshot;
   const plex = discovery.plex_server;
@@ -120,6 +120,14 @@ export function HealthStrip({
   const [sonicStatus, setSonicStatus] = useState<SonicStatus | null>(null);
   const [enriching, setEnriching] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [confirmRefresh, setConfirmRefresh] = useState(false);
+
+  async function doRefresh() {
+    setRefreshing(true);
+    setConfirmRefresh(false);
+    await onSonicRefresh();
+    setRefreshing(false);
+  }
 
   useEffect(() => {
     api.get<{ total_tracks: number; analyzed_tracks: number; unanalyzed_albums: SonicStatus["unanalyzed_albums"] }>("/sonic/status")
@@ -145,6 +153,7 @@ export function HealthStrip({
     : "Sonic analysis not yet available";
 
   return (
+    <>
     <div className="grid grid-cols-[repeat(auto-fit,minmax(15rem,1fr))] gap-px bg-[var(--border)] border border-[var(--border)] rounded-lg overflow-hidden">
       {/* Plex */}
       <div className="min-w-0 p-3.5 bg-[var(--panel)]">
@@ -236,11 +245,31 @@ export function HealthStrip({
             action={{
               label: "Refresh analysis",
               busy: refreshing,
-              onClick: () => { setRefreshing(true); onSonicRefresh(); },
+              onClick: () => setConfirmRefresh(true),
             }}
           />
         </div>
       </div>
     </div>
+
+    {confirmRefresh && (
+      <div className="flash flash-warn mt-3">
+        <p className="m-0 mb-2">
+          Refreshing sonic analysis starts Plex&apos;s MusicAnalysis Butler task, which
+          processes the server&apos;s <strong>entire pending backlog</strong> — not just recent
+          additions — and can keep running after MusicSeed returns. This may take a long time
+          and run in the background on your Plex server.
+        </p>
+        <div className="flex gap-2">
+          <button className="btn btn-primary" onClick={doRefresh} disabled={refreshing}>
+            {refreshing ? "Starting…" : "Confirm refresh"}
+          </button>
+          <button className="btn btn-secondary" onClick={() => setConfirmRefresh(false)}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    )}
+    </>
   );
 }

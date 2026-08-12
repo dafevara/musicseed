@@ -95,6 +95,11 @@ body {
   color: var(--status-problem);
   border: 1px solid color-mix(in srgb, var(--status-problem) 30%, transparent);
 }
+.flash-warn {
+  background: color-mix(in srgb, var(--brand) 12%, transparent);
+  color: var(--brand);
+  border: 1px solid color-mix(in srgb, var(--brand) 35%, transparent);
+}
 
 /* ── Buttons ────────────────────────────────── */
 .btn {

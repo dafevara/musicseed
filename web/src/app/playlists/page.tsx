@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import type { TypeaheadTrack } from "@/lib/types";
+import type { RecommendationItem, PopulatePreview, RecommendResponse, TypeaheadTrack } from "@/lib/types";
 import { Typeahead } from "@/components/typeahead";
 import { SeedChips } from "@/components/seed-chips";
+import { RecommendResults } from "@/components/recommend-results";
 
 interface PlexPlaylist {
   name: string;
@@ -22,10 +23,13 @@ export default function PlaylistsPage() {
   const [newName, setNewName] = useState("");
   const [seeds, setSeeds] = useState<TypeaheadTrack[]>([]);
   const [seedIds, setSeedIds] = useState<number[]>([]);
+  const [createPreview, setCreatePreview] = useState<RecommendationItem[] | null>(null);
+  const [previewing, setPreviewing] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createResult, setCreateResult] = useState<string | null>(null);
 
   // Populate state
+  const [populatePreview, setPopulatePreview] = useState<PopulatePreview | null>(null);
   const [populating, setPopulating] = useState<string | null>(null);
   const [populateResult, setPopulateResult] = useState<string | null>(null);
   const [populateError, setPopulateError] = useState<string | null>(null);
@@ -56,7 +60,33 @@ export default function PlaylistsPage() {
     setSeedIds((prev) => prev.filter((i) => i !== id));
   }
 
-  async function handleCreate() {
+  function resetCreate() {
+    setShowCreate(false);
+    setNewName("");
+    setSeeds([]);
+    setSeedIds([]);
+    setCreatePreview(null);
+  }
+
+  async function handlePreviewCreate() {
+    if (!newName.trim() || seedIds.length === 0) return;
+    setPreviewing(true);
+    setCreateResult(null);
+    try {
+      const data = await api.post<RecommendResponse>("/recommend", {
+        seed_ids: seedIds.join(","),
+        limit: 50,
+      });
+      setCreatePreview(data.recommendations);
+    } catch (e) {
+      setCreatePreview(null);
+      setCreateResult(`Error: ${String(e).replace("Error: ", "")}`);
+    } finally {
+      setPreviewing(false);
+    }
+  }
+
+  async function handleConfirmCreate() {
     if (!newName.trim() || seedIds.length === 0) return;
     setCreating(true);
     setCreateResult(null);
@@ -75,11 +105,7 @@ export default function PlaylistsPage() {
         `Created "${result.name}" with ${result.track_count} tracks ` +
         `(${result.seed_count} seeds + ${result.recommendation_count} recommendations).`
       );
-      setShowCreate(false);
-      setNewName("");
-      setSeeds([]);
-      setSeedIds([]);
-      // Refresh playlist list
+      resetCreate();
       const updated = await api.get<PlexPlaylist[]>("/playlists");
       setPlaylists(updated);
     } catch (e) {
@@ -89,7 +115,21 @@ export default function PlaylistsPage() {
     }
   }
 
-  async function handlePopulate(name: string) {
+  async function handlePreviewPopulate(name: string) {
+    setPopulatePreview(null);
+    setPopulateResult(null);
+    setPopulateError(null);
+    try {
+      const data = await api.get<PopulatePreview>(
+        `/playlists/${encodeURIComponent(name)}/preview?limit=10`
+      );
+      setPopulatePreview(data);
+    } catch (e) {
+      setPopulateError(String(e).replace("Error: ", ""));
+    }
+  }
+
+  async function handleConfirmPopulate(name: string) {
     setPopulating(name);
     setPopulateResult(null);
     setPopulateError(null);
@@ -103,6 +143,7 @@ export default function PlaylistsPage() {
         `Added ${result.added_count} tracks to "${result.playlist_name}" ` +
         `(now ${result.playlist_track_count + result.added_count} tracks).`
       );
+      setPopulatePreview(null);
       const updated = await api.get<PlexPlaylist[]>("/playlists");
       setPlaylists(updated);
     } catch (e) {
@@ -127,7 +168,7 @@ export default function PlaylistsPage() {
           <h2 className="mt-0 text-lg font-semibold">Plex Playlists</h2>
           <button
             className="btn btn-primary"
-            onClick={() => { setShowCreate(!showCreate); setCreateResult(null); }}
+            onClick={() => { setShowCreate(!showCreate); setCreatePreview(null); setCreateResult(null); }}
           >
             {showCreate ? "Cancel" : "New playlist"}
           </button>
@@ -161,13 +202,41 @@ export default function PlaylistsPage() {
             <Typeahead seedIds={seedIds} onSelect={addSeed} />
             <SeedChips seeds={seeds} onRemove={removeSeed} />
 
-            <button
-              className="btn btn-primary mt-3"
-              onClick={handleCreate}
-              disabled={creating || !newName.trim() || seedIds.length === 0}
-            >
-              {creating ? "Creating…" : "Create playlist"}
-            </button>
+            {createPreview && (
+              <div className="mt-3 p-3 border border-[var(--border)] rounded-lg bg-[var(--bg)]">
+                <p className="text-sm mb-1">
+                  {createPreview.length} recommended tracks will be added to &ldquo;{newName.trim()}&rdquo;
+                  alongside your {seedIds.length} seed{seedIds.length !== 1 ? "s" : ""}.
+                </p>
+                <RecommendResults items={createPreview} />
+                <div className="flex gap-2 mt-3">
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleConfirmCreate}
+                    disabled={creating}
+                  >
+                    {creating ? "Creating…" : "Confirm & create"}
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => setCreatePreview(null)}
+                    disabled={creating}
+                  >
+                    Back
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {!createPreview && (
+              <button
+                className="btn btn-primary mt-3"
+                onClick={handlePreviewCreate}
+                disabled={previewing || !newName.trim() || seedIds.length === 0}
+              >
+                {previewing ? "Previewing…" : "Preview"}
+              </button>
+            )}
           </div>
         )}
 
@@ -192,7 +261,7 @@ export default function PlaylistsPage() {
                 </div>
                 <button
                   className="btn btn-secondary text-sm px-3 py-1.5"
-                  onClick={() => handlePopulate(p.name)}
+                  onClick={() => handlePreviewPopulate(p.name)}
                   disabled={populating === p.name}
                 >
                   {populating === p.name ? "Adding…" : "Populate"}
@@ -200,6 +269,35 @@ export default function PlaylistsPage() {
               </li>
             ))}
           </ul>
+        )}
+
+        {populatePreview && (
+          <div className="mt-3 p-3 border border-[var(--border)] rounded-lg">
+            <h3 className="mt-0 text-base font-semibold">
+              Preview additions to &ldquo;{populatePreview.playlist_name}&rdquo;
+            </h3>
+            <p className="text-sm muted">
+              {populatePreview.playlist_track_count} tracks currently,{" "}
+              {populatePreview.recommendations.length} recommended to add.
+            </p>
+            <RecommendResults items={populatePreview.recommendations} />
+            <div className="flex gap-2 mt-3">
+              <button
+                className="btn btn-primary"
+                onClick={() => handleConfirmPopulate(populatePreview.playlist_name)}
+                disabled={populating === populatePreview.playlist_name}
+              >
+                {populating === populatePreview.playlist_name ? "Adding…" : "Confirm & add"}
+              </button>
+              <button
+                className="btn btn-secondary"
+                onClick={() => setPopulatePreview(null)}
+                disabled={populating === populatePreview.playlist_name}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         )}
 
         {populateResult && (
