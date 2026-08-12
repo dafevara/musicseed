@@ -6,15 +6,7 @@ import type { TypeaheadTrack, RecommendResponse, RecommendationItem } from "@/li
 import { SeedChips } from "@/components/seed-chips";
 import { Typeahead } from "@/components/typeahead";
 import { RecommendResults } from "@/components/recommend-results";
-
-const WEIGHT_LABELS: Record<string, string> = {
-  sonic: "Sonic similarity",
-  popularity: "Popularity match",
-  style: "Style match",
-  genre: "Genre match",
-  era: "Era proximity",
-  novelty: "Novelty / discovery",
-};
+import { WeightControls } from "@/components/weight-controls";
 
 type Presets = Record<string, Record<string, number>>;
 
@@ -128,48 +120,13 @@ export default function RecommendPage() {
       <section className="panel">
         <h2 className="mt-0 mb-3 text-lg font-semibold">Scoring weights</h2>
 
-        <div className="flex flex-wrap gap-2 mb-3">
-          {Object.keys(presets).map((name) => (
-            <button
-              key={name}
-              className={`text-xs px-2.5 py-1 rounded-full border font-medium cursor-pointer transition-colors
-                ${preset === name
-                  ? "bg-[var(--brand)] text-white border-[var(--brand)]"
-                  : "bg-transparent text-[var(--muted)] border-[var(--border)] hover:border-[var(--brand)] hover:text-[var(--fg)]"
-                }`}
-              onClick={() => setPresetWeights(name)}
-            >
-              {name.charAt(0).toUpperCase() + name.slice(1)}
-            </button>
-          ))}
-        </div>
-
-        <div className="grid gap-2.5 max-w-md">
-          {(() => {
-            const totalWeight = Object.values(weights).reduce((a, b) => a + b, 0) || 1;
-            return Object.entries(WEIGHT_LABELS).map(([key, label]) => (
-            <div key={key} className="flex items-center gap-3">
-              <span className="text-sm text-[var(--muted)] w-32 flex-shrink-0">{label}</span>
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={weights[key]}
-                onChange={(e) => setWeight(key, parseFloat(e.target.value))}
-                className="flex-1"
-                style={{
-                  accentColor: "var(--brand)",
-                  height: 4,
-                }}
-              />
-              <span className="text-xs text-[var(--muted)] w-8 text-right tabular-nums">
-                {((weights[key] / totalWeight) * 100).toFixed(0)}%
-              </span>
-            </div>
-          ));
-          })()}
-        </div>
+        <WeightControls
+          weights={weights}
+          presets={presets}
+          preset={preset}
+          onPresetChange={setPresetWeights}
+          onWeightChange={setWeight}
+        />
       </section>
 
       <section className="panel">

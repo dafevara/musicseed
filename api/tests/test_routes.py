@@ -7,10 +7,11 @@ Plex server and no real database.
 import musicseed_api.routes.dashboard as dashboard_routes
 import musicseed_api.routes.enrichment as enrichment_routes
 import musicseed_api.routes.library as library_routes
+import musicseed_api.routes.playlists as playlists_routes
 import musicseed_api.routes.recommend as recommend_routes
 import musicseed_api.routes.sonic as sonic_routes
 from fastapi.testclient import TestClient
-from musicseed.recommender.scoring import ScoreBreakdown, SonicCoverage
+from musicseed.recommender.scoring import ScoreBreakdown, SonicCoverage, Weights
 from musicseed.services.library import EnrichmentCoverage, LibraryStatus
 from musicseed_api.app import create_app
 from pydantic import BaseModel
@@ -110,3 +111,46 @@ def test_recommend_presets_match_core():
     assert resp.status_code == 200
     expected = {name: w.model_dump() for name, w in RECOMMENDATION_PRESETS.items()}
     assert resp.json() == expected
+
+
+def test_populate_route_passes_selected_track_ids(monkeypatch):
+    captured = {}
+
+    def fake_apply_populate(**kwargs):
+        captured.update(kwargs)
+        return {
+            "playlist_name": kwargs["playlist_name"],
+            "playlist_track_count": 5,
+            "matched_track_count": 3,
+            "added_count": 2,
+        }
+
+    monkeypatch.setattr(playlists_routes, "apply_populate", fake_apply_populate)
+    resp = TestClient(create_app()).post(
+        "/playlists/Test/populate", data={"track_ids": "10,20,30"}
+    )
+    assert resp.status_code == 200
+    assert captured["track_ids"] == [10, 20, 30]
+
+
+def test_preview_route_passes_weights(monkeypatch):
+    captured = {}
+
+    def fake_preview_populate(**kwargs):
+        captured.update(kwargs)
+        return {
+            "playlist_name": kwargs["playlist_name"],
+            "playlist_track_count": 5,
+            "matched_track_count": 3,
+            "weights": (kwargs["weights"] or Weights()).model_dump(),
+            "recommendations": [],
+        }
+
+    monkeypatch.setattr(playlists_routes, "preview_populate", fake_preview_populate)
+    resp = TestClient(create_app()).get(
+        "/playlists/Test/preview",
+        params={"limit": "10", "w_sonic": "0.5", "w_popularity": "0.2"},
+    )
+    assert resp.status_code == 200
+    assert captured["weights"].sonic == 0.5
+    assert captured["weights"].popularity == 0.2

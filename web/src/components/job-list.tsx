@@ -63,7 +63,15 @@ function formatResult(job: JobSummary): React.ReactNode {
   return job.checkpoint;
 }
 
-function JobRow({ job, polling }: { job: JobSummary; polling?: boolean }) {
+function JobRow({
+  job,
+  polling,
+  onDeleted,
+}: {
+  job: JobSummary;
+  polling?: boolean;
+  onDeleted?: (id: number) => void;
+}) {
   const [state, setState] = useState(job.state);
   const [current, setCurrent] = useState(job.progress_current);
   const [total, setTotal] = useState(job.progress_total);
@@ -72,10 +80,26 @@ function JobRow({ job, polling }: { job: JobSummary; polling?: boolean }) {
   const [resultSummary, setResultSummary] = useState(job.result_summary);
   const [completedAt, setCompletedAt] = useState(job.completed_at);
   const [eta, setEta] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   const etaStart = useRef<{ time: number; current: number } | null>(null);
 
   const isTerminal = state === "succeeded" || state === "failed" || state === "canceled";
+  const canDelete =
+    state === "succeeded" ||
+    state === "failed" ||
+    state === "canceled" ||
+    state === "interrupted";
+
+  async function handleDelete() {
+    setDeleting(true);
+    try {
+      await api.delete<{ deleted: boolean }>(`/jobs/${job.id}`);
+      onDeleted?.(job.id);
+    } catch {
+      setDeleting(false);
+    }
+  }
 
   function updateProgress(j: JobSummary) {
     setState(j.state);
@@ -205,6 +229,19 @@ function JobRow({ job, polling }: { job: JobSummary; polling?: boolean }) {
           {isTerminal ? relativeTime(completedAt || job.completed_at) : relativeTime(job.started_at)}
         </span>
       </div>
+
+      {canDelete && (
+        <button
+          type="button"
+          className="activity-delete"
+          title="Delete entry"
+          aria-label={`Delete ${kindLabel} entry`}
+          disabled={deleting}
+          onClick={handleDelete}
+        >
+          {deleting ? "…" : "×"}
+        </button>
+      )}
     </div>
   );
 }
@@ -212,9 +249,11 @@ function JobRow({ job, polling }: { job: JobSummary; polling?: boolean }) {
 export function JobList({
   jobs,
   recent,
+  onDeleted,
 }: {
   jobs: JobSummary[];
   recent: JobSummary[];
+  onDeleted?: (id: number) => void;
 }) {
   const hasJobs = jobs.length > 0 || recent.length > 0;
 
@@ -225,13 +264,13 @@ export function JobList({
       )}
 
       {jobs.map((j) => (
-        <JobRow key={j.id} job={j} polling />
+        <JobRow key={j.id} job={j} polling onDeleted={onDeleted} />
       ))}
 
       {recent
         .filter((j) => !jobs.some((a) => a.id === j.id))
         .map((j) => (
-          <JobRow key={j.id} job={j} />
+          <JobRow key={j.id} job={j} onDeleted={onDeleted} />
         ))}
     </div>
   );

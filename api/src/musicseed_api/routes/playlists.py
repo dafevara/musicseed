@@ -74,12 +74,29 @@ def preview(
     year_min: str | None = Query(default=None),
     year_max: str | None = Query(default=None),
     max_tracks_per_artist: int = Query(default=3),
+    w_sonic: str = Query(default=""),
+    w_popularity: str = Query(default=""),
+    w_style: str = Query(default=""),
+    w_genre: str = Query(default=""),
+    w_era: str = Query(default=""),
+    w_novelty: str = Query(default=""),
 ) -> dict:
     y_min = int(year_min) if year_min else None
     y_max = int(year_max) if year_max else None
+
+    weight_kwargs = {}
+    for key, param in [
+        ("sonic", w_sonic), ("popularity", w_popularity), ("style", w_style),
+        ("genre", w_genre), ("era", w_era), ("novelty", w_novelty),
+    ]:
+        if param.strip():
+            weight_kwargs[key] = float(param)
+    weights = Weights(**weight_kwargs) if weight_kwargs else None
+
     return preview_populate(
         playlist_name=name,
         limit=limit,
+        weights=weights,
         year_min=y_min,
         year_max=y_max,
         max_tracks_per_artist=max_tracks_per_artist,
@@ -93,6 +110,7 @@ def populate(
     year_min: Annotated[str, Form()] = "",
     year_max: Annotated[str, Form()] = "",
     max_tracks_per_artist: Annotated[int, Form()] = 3,
+    track_ids: Annotated[str, Form()] = "",
     w_sonic: Annotated[str, Form()] = "",
     w_popularity: Annotated[str, Form()] = "",
     w_style: Annotated[str, Form()] = "",
@@ -102,6 +120,10 @@ def populate(
 ) -> dict:
     y_min = int(year_min) if year_min.strip() else None
     y_max = int(year_max) if year_max.strip() else None
+
+    selected_ids = parse_seed_ids(track_ids) if track_ids.strip() else None
+    if selected_ids is not None and not selected_ids:
+        raise HTTPException(status_code=400, detail="No tracks selected to add.")
 
     weight_kwargs = {}
     for key, param in [
@@ -119,4 +141,5 @@ def populate(
         year_min=y_min,
         year_max=y_max,
         max_tracks_per_artist=max_tracks_per_artist,
+        track_ids=selected_ids,
     )

@@ -41,4 +41,8 @@ export const api = {
       body: formBody.toString(),
     });
   },
+
+  delete<T>(path: string): Promise<T> {
+    return request<T>(path, { method: "DELETE" });
+  },
 };

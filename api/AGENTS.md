@@ -58,6 +58,7 @@ JSON. Handlers are the reusable part — routes are the HTTP-specific projection
 | `handlers/jobs.submit_job` | `services.jobs.get_manager` → `JobManager.submit` |
 | `handlers/jobs.get_job_progress` | `services.jobs.get_job` |
 | `handlers/jobs.cancel_job` | `services.jobs.get_manager` → `JobManager.request_cancel` |
+| `handlers/jobs.delete_job` | `services.jobs.get_job` → `services.jobs.delete_job` |
 
 ## Code Map
 

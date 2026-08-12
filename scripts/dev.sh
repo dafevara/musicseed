@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+U d#!/usr/bin/env bash
 # Start the MusicSeed API (8789) and the Next.js web UI (3000) together.
 # One command for local development; Ctrl-C stops both processes.
 set -euo pipefail

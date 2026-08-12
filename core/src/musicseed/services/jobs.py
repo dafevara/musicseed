@@ -137,6 +137,17 @@ def get_job(job_id: int) -> dict | None:
         return _job_to_dict(job) if job else None
 
 
+def delete_job(job_id: int) -> bool:
+    """Delete a job row by id. Returns True if a row was deleted."""
+    with get_session() as session:
+        ensure_schema()
+        job = session.get(Job, job_id)
+        if job is None:
+            return False
+        session.delete(job)
+        return True
+
+
 def list_jobs(limit: int = 20) -> list[dict]:
     with get_session() as session:
         ensure_schema()

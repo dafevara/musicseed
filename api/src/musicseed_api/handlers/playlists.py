@@ -94,8 +94,13 @@ def apply_populate(
     year_min: int | None = None,
     year_max: int | None = None,
     max_tracks_per_artist: int = 3,
+    track_ids: list[int] | None = None,
 ) -> dict:
-    """Generate recommendations and add them to an existing Plex playlist."""
+    """Generate recommendations and add them to an existing Plex playlist.
+
+    When ``track_ids`` is provided, only those tracks are added and the
+    recommendation step is skipped.
+    """
     result: PopulateApplyResult = populate_playlist(
         playlist_name=playlist_name,
         limit=limit,
@@ -103,6 +108,7 @@ def apply_populate(
         year_min=year_min,
         year_max=year_max,
         max_tracks_per_artist=max_tracks_per_artist,
+        track_ids=track_ids,
     )
     return {
         "playlist_name": result.playlist_name,

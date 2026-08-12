@@ -1,11 +1,14 @@
 """Handler-layer tests — framework-free, offline."""
 
 import musicseed.config as config_module
+import pytest
 from musicseed.config import Config, load_config, set_config
 from musicseed.db.session import init_db, reset_engine
+from musicseed.exceptions import JobConflictError, NotFoundError
 from musicseed.services.jobs import create_job
+from musicseed.services.populate import PopulateApplyResult
 from musicseed_api.handlers.enrichment import save_spotify_creds
-from musicseed_api.handlers.jobs import cancel_job, get_job_progress
+from musicseed_api.handlers.jobs import cancel_job, delete_job, get_job_progress
 from musicseed_api.handlers.recommend import parse_seed_ids
 
 
@@ -55,3 +58,48 @@ def test_jobs_handlers(tmp_path):
     assert get_job_progress(jid)["state"] == "cancel_requested"
 
     assert get_job_progress(999999) is None
+
+
+def test_delete_job_handler(tmp_path):
+    import musicseed.services.jobs as jobs_module
+
+    set_config(Config.model_validate({"database": {"path": str(tmp_path / "db.sqlite")}}))
+    reset_engine()
+    init_db()
+    jobs_module._manager = None
+
+    # A pending job is active and cannot be deleted.
+    pending_id = create_job("import")
+    with pytest.raises(JobConflictError):
+        delete_job(pending_id)
+
+    # Missing jobs map to NotFoundError.
+    with pytest.raises(NotFoundError):
+        delete_job(999999)
+
+    # A completed job can be deleted and disappears from the store.
+    done_id = create_job("enrich")
+    jobs_module.complete_job(done_id)
+    delete_job(done_id)
+    assert get_job_progress(done_id) is None
+
+
+def test_apply_populate_passes_selected_track_ids(monkeypatch):
+    import musicseed_api.handlers.playlists as playlists_module
+
+    captured = {}
+
+    def fake_populate(**kwargs):
+        captured.update(kwargs)
+        return PopulateApplyResult(
+            playlist_name=kwargs["playlist_name"],
+            playlist_track_count=5,
+            matched_track_count=3,
+            recommendations=[],
+            added_count=2,
+        )
+
+    monkeypatch.setattr(playlists_module, "populate_playlist", fake_populate)
+    result = playlists_module.apply_populate(playlist_name="Test", track_ids=[10, 20])
+    assert captured["track_ids"] == [10, 20]
+    assert result["added_count"] == 2

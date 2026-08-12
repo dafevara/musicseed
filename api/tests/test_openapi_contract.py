@@ -9,6 +9,7 @@ EXPECTED_OPERATIONS = {
     ("post", "/discovery/check"),
     ("post", "/discovery/init-db"),
     ("post", "/enrichment/spotify"),
+    ("delete", "/jobs/{job_id}"),
     ("get", "/jobs/{job_id}"),
     ("post", "/jobs/{job_id}/cancel"),
     ("post", "/library/import"),

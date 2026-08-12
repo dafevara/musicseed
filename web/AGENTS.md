@@ -63,7 +63,7 @@ the **single place** that parses error bodies (`{detail}`) and form-encodes POST
 | Page | Calls |
 |---|---|
 | `src/app/setup/page.tsx` | `GET /discovery`, `POST /discovery/check`, `POST /discovery/init-db`, `GET /library/status`, `POST /library/import`, `POST /enrichment/spotify` |
-| `src/app/page.tsx` (dashboard) | `GET /dashboard`, `GET /discovery`, `POST /library/import`, `POST /enrichment/spotify`, `POST /sonic/refresh` |
+| `src/app/page.tsx` (dashboard) | `GET /dashboard`, `GET /discovery`, `POST /library/import`, `POST /enrichment/spotify`, `POST /sonic/refresh`, `DELETE /jobs/{job_id}` |
 | `src/app/recommend/page.tsx` | `GET /recommend/presets`, `GET /recommend/typeahead`, `POST /recommend` |
 | `src/app/playlists/page.tsx` | `GET /playlists`, `POST /recommend` (create preview), `POST /playlists/create`, `GET /playlists/{name}/preview`, `POST /playlists/{name}/populate` |
 

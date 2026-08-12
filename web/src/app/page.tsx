@@ -126,7 +126,11 @@ export default function DashboardPage() {
       <section className="panel">
         <h2 className="mt-0 text-lg font-semibold">Activity</h2>
 
-        <JobList jobs={snapshot.active_jobs} recent={snapshot.recent_jobs} />
+        <JobList
+          jobs={snapshot.active_jobs}
+          recent={snapshot.recent_jobs}
+          onDeleted={() => fetchSnapshot()}
+        />
 
         {snapshot.last_sync && (
           <p className="muted text-sm mt-3">

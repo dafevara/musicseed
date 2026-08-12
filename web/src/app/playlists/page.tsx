@@ -1,11 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import type { RecommendationItem, PopulatePreview, RecommendResponse, TypeaheadTrack } from "@/lib/types";
 import { Typeahead } from "@/components/typeahead";
 import { SeedChips } from "@/components/seed-chips";
 import { RecommendResults } from "@/components/recommend-results";
+import { WeightControls } from "@/components/weight-controls";
+
+function weightsQuery(weights: Record<string, number>): string {
+  return Object.entries(weights)
+    .map(([k, v]) => `w_${k}=${v}`)
+    .join("&");
+}
 
 interface PlexPlaylist {
   name: string;
@@ -31,9 +38,16 @@ export default function PlaylistsPage() {
 
   // Populate state
   const [populatePreview, setPopulatePreview] = useState<PopulatePreview | null>(null);
+  const [populateItems, setPopulateItems] = useState<RecommendationItem[]>([]);
   const [populating, setPopulating] = useState<string | null>(null);
+  const [previewingPlaylist, setPreviewingPlaylist] = useState<string | null>(null);
   const [populateResult, setPopulateResult] = useState<string | null>(null);
   const [populateError, setPopulateError] = useState<string | null>(null);
+  const [populateWeights, setPopulateWeights] = useState<Record<string, number>>({});
+  const [populatePreset, setPopulatePreset] = useState("balanced");
+  const [presets, setPresets] = useState<Record<string, Record<string, number>>>({});
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const removedPopulateIdsRef = useRef<Set<number>>(new Set());
 
   useEffect(() => {
     api.get<PlexPlaylist[]>("/playlists")
@@ -42,6 +56,15 @@ export default function PlaylistsPage() {
         setError(String(e).replace("Error: ", "") || "Could not load playlists.");
       })
       .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    api.get<Record<string, Record<string, number>>>("/recommend/presets")
+      .then((data) => {
+        setPresets(data);
+        if (data.balanced) setPopulateWeights({ ...data.balanced });
+      })
+      .catch(() => {});
   }, []);
 
   function addSeed(track: TypeaheadTrack) {
@@ -113,19 +136,72 @@ export default function PlaylistsPage() {
 
   async function handlePreviewPopulate(name: string) {
     setPopulatePreview(null);
+    setPopulateItems([]);
     setPopulateResult(null);
     setPopulateError(null);
+    setPreviewingPlaylist(name);
+    setShowAdvanced(false);
+    setPopulatePreset("balanced");
+    if (presets.balanced) setPopulateWeights({ ...presets.balanced });
+    removedPopulateIdsRef.current = new Set();
     try {
       const data = await api.get<PopulatePreview>(
         `/playlists/${encodeURIComponent(name)}/preview?limit=10`
       );
       setPopulatePreview(data);
+      setPopulateItems(data.recommendations);
     } catch (e) {
       setPopulateError(String(e).replace("Error: ", ""));
+    } finally {
+      setPreviewingPlaylist(null);
     }
   }
 
+  function removePopulateItem(trackId: number) {
+    removedPopulateIdsRef.current.add(trackId);
+    setPopulateItems((prev) => prev.filter((r) => r.track_id !== trackId));
+  }
+
+  function setPopulatePresetWeights(name: string) {
+    setPopulatePreset(name);
+    if (presets[name]) setPopulateWeights({ ...presets[name] });
+  }
+
+  function setPopulateWeight(key: string, value: number) {
+    setPopulatePreset("custom");
+    setPopulateWeights((prev) => ({ ...prev, [key]: value }));
+  }
+
+  // Recompute the preview (debounced) whenever the user changes weights in
+  // the advanced panel.
+  useEffect(() => {
+    const name = populatePreview?.playlist_name;
+    if (!showAdvanced || !name) return;
+
+    const timer = setTimeout(async () => {
+      try {
+        const qs = weightsQuery(populateWeights);
+        const data = await api.get<PopulatePreview>(
+          `/playlists/${encodeURIComponent(name)}/preview?limit=10${qs ? `&${qs}` : ""}`
+        );
+        setPopulatePreview(data);
+        setPopulateItems(
+          data.recommendations.filter(
+            (r) => !removedPopulateIdsRef.current.has(r.track_id)
+          )
+        );
+      } catch (e) {
+        setPopulateError(String(e).replace("Error: ", ""));
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [populatePreview?.playlist_name, showAdvanced, populateWeights]);
+
   async function handleConfirmPopulate(name: string) {
+    const trackIds = populateItems.map((r) => r.track_id);
+    if (trackIds.length === 0) return;
+
     setPopulating(name);
     setPopulateResult(null);
     setPopulateError(null);
@@ -134,12 +210,16 @@ export default function PlaylistsPage() {
         playlist_name: string;
         added_count: number;
         playlist_track_count: number;
-      }>(`/playlists/${encodeURIComponent(name)}/populate`, { limit: 10 });
+      }>(`/playlists/${encodeURIComponent(name)}/populate`, {
+        limit: 10,
+        track_ids: trackIds.join(","),
+      });
       setPopulateResult(
         `Added ${result.added_count} tracks to "${result.playlist_name}" ` +
         `(now ${result.playlist_track_count + result.added_count} tracks).`
       );
       setPopulatePreview(null);
+      setPopulateItems([]);
       const updated = await api.get<PlexPlaylist[]>("/playlists");
       setPlaylists(updated);
     } catch (e) {
@@ -176,6 +256,13 @@ export default function PlaylistsPage() {
           <div className={`flash ${createResult.startsWith("Error") ? "flash-error" : "flash-ok"}`}>
             {createResult}
           </div>
+        )}
+
+        {populateResult && (
+          <div className="flash flash-ok mt-3">{populateResult}</div>
+        )}
+        {populateError && (
+          <div className="flash flash-error mt-3">{populateError}</div>
         )}
 
         {showCreate && (
@@ -244,63 +331,99 @@ export default function PlaylistsPage() {
 
         {playlists.length > 0 && (
           <ul className="list-none m-0 p-0 grid gap-1 mt-3">
-            {playlists.map((p) => (
-              <li
-                key={p.rating_key}
-                className="flex items-center justify-between gap-4 px-3 py-2 rounded-md odd:bg-[var(--bg)]"
-              >
-                <div className="min-w-0">
-                  <span className="font-medium truncate block">{p.name}</span>
-                  <span className="text-xs text-[var(--muted)]">
-                    {p.track_count} track{p.track_count !== 1 ? "s" : ""}
-                  </span>
-                </div>
-                <button
-                  className="btn btn-secondary text-sm px-3 py-1.5"
-                  onClick={() => handlePreviewPopulate(p.name)}
-                  disabled={populating === p.name}
+            {playlists.map((p) => {
+              const isPreviewing = previewingPlaylist === p.name;
+              const isPopulating = populating === p.name;
+              const showPreview = populatePreview?.playlist_name === p.name;
+
+              return (
+                <li
+                  key={p.rating_key}
+                  className="px-3 py-2 rounded-md odd:bg-[var(--bg)]"
                 >
-                  {populating === p.name ? "Adding…" : "Populate"}
-                </button>
-              </li>
-            ))}
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="min-w-0">
+                      <span className="font-medium truncate block">{p.name}</span>
+                      <span className="text-xs text-[var(--muted)]">
+                        {p.track_count} track{p.track_count !== 1 ? "s" : ""}
+                      </span>
+                    </div>
+                    <button
+                      className="btn btn-secondary text-sm px-3 py-1.5"
+                      onClick={() => handlePreviewPopulate(p.name)}
+                      disabled={isPopulating || isPreviewing}
+                    >
+                      {isPopulating ? "Adding…" : isPreviewing ? "Previewing…" : "Populate"}
+                    </button>
+                  </div>
+
+                  {showPreview && (
+                    <div className="mt-3 p-3 border border-[var(--border)] rounded-lg">
+                      <h3 className="mt-0 text-base font-semibold">
+                        Preview additions to &ldquo;{populatePreview.playlist_name}&rdquo;
+                      </h3>
+                      <p className="text-sm muted">
+                        {populatePreview.playlist_track_count} tracks currently,{" "}
+                        {populateItems.length} recommended to add.
+                      </p>
+
+                      {showAdvanced && (
+                        <div className="mt-3 mb-3 p-3 border border-[var(--border)] rounded-lg bg-[var(--bg)]">
+                          <p className="text-sm font-semibold mb-2">Scoring weights</p>
+                          <WeightControls
+                            weights={populateWeights}
+                            presets={presets}
+                            preset={populatePreset}
+                            onPresetChange={setPopulatePresetWeights}
+                            onWeightChange={setPopulateWeight}
+                          />
+                        </div>
+                      )}
+
+                      {populateItems.length === 0 ? (
+                        <p className="text-sm text-[var(--muted)]">
+                          No tracks selected — nothing to add.
+                        </p>
+                      ) : (
+                        <RecommendResults
+                          items={populateItems}
+                          weights={populatePreview.weights}
+                          onRemove={removePopulateItem}
+                        />
+                      )}
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        <button
+                          className="btn btn-primary"
+                          onClick={() => handleConfirmPopulate(populatePreview.playlist_name)}
+                          disabled={isPopulating || populateItems.length === 0}
+                        >
+                          {isPopulating ? "Adding…" : "Confirm & add"}
+                        </button>
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => {
+                            setPopulatePreview(null);
+                            setPopulateItems([]);
+                            setShowAdvanced(false);
+                          }}
+                          disabled={isPopulating}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => setShowAdvanced((v) => !v)}
+                          disabled={isPopulating}
+                        >
+                          {showAdvanced ? "Hide weights" : "Advanced"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
-        )}
-
-        {populatePreview && (
-          <div className="mt-3 p-3 border border-[var(--border)] rounded-lg">
-            <h3 className="mt-0 text-base font-semibold">
-              Preview additions to &ldquo;{populatePreview.playlist_name}&rdquo;
-            </h3>
-            <p className="text-sm muted">
-              {populatePreview.playlist_track_count} tracks currently,{" "}
-              {populatePreview.recommendations.length} recommended to add.
-            </p>
-            <RecommendResults items={populatePreview.recommendations} weights={populatePreview.weights} />
-            <div className="flex gap-2 mt-3">
-              <button
-                className="btn btn-primary"
-                onClick={() => handleConfirmPopulate(populatePreview.playlist_name)}
-                disabled={populating === populatePreview.playlist_name}
-              >
-                {populating === populatePreview.playlist_name ? "Adding…" : "Confirm & add"}
-              </button>
-              <button
-                className="btn btn-secondary"
-                onClick={() => setPopulatePreview(null)}
-                disabled={populating === populatePreview.playlist_name}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-
-        {populateResult && (
-          <div className="flash flash-ok mt-3">{populateResult}</div>
-        )}
-        {populateError && (
-          <div className="flash flash-error mt-3">{populateError}</div>
         )}
       </section>
     </>

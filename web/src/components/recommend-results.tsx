@@ -45,27 +45,41 @@ function ScoreBar({ breakdown, weights }: { breakdown: ScoreBreakdown; weights?:
 export function RecommendResults({
   items,
   weights,
+  onRemove,
 }: {
   items: RecommendationItem[];
   weights?: Record<string, number>;
+  onRemove?: (trackId: number) => void;
 }) {
   if (!items.length) return null;
 
   return (
     <ol className="list-none m-0 p-0 grid gap-1">
       {items.map((rec) => {
-        const pct = Math.round(rec.score.total * 100);
         return (
           <li
             key={rec.track_id}
             className="grid gap-3 px-3 py-2.5 rounded-md odd:bg-[var(--bg)]"
           >
-            <div className="flex flex-wrap items-baseline gap-x-1 min-w-0">
-              <span className="font-semibold truncate">
-                {rec.artist || "Unknown Artist"}
-              </span>
-              <span className="text-[var(--muted)] flex-shrink-0">&mdash;</span>
-              <span className="truncate">{rec.title}</span>
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex flex-wrap items-baseline gap-x-1 min-w-0">
+                <span className="font-semibold truncate">
+                  {rec.artist || "Unknown Artist"}
+                </span>
+                <span className="text-[var(--muted)] flex-shrink-0">&mdash;</span>
+                <span className="truncate">{rec.title}</span>
+              </div>
+              {onRemove && (
+                <button
+                  type="button"
+                  className="activity-delete"
+                  title="Remove from preview"
+                  aria-label={`Remove ${rec.title}`}
+                  onClick={() => onRemove(rec.track_id)}
+                >
+                  ×
+                </button>
+              )}
             </div>
             <div className="grid grid-cols-[1fr_3.5rem] items-center gap-4">
               <ScoreBar breakdown={rec.score} weights={weights} />
