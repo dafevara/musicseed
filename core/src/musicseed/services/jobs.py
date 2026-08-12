@@ -9,11 +9,14 @@ left in a ``running`` state from a prior process into ``interrupted``.
 
 from __future__ import annotations
 
+import sqlite3
 import threading
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from enum import StrEnum
 
+from musicseed.config import get_config
 from musicseed.db.models import Job
 from musicseed.db.session import ensure_schema, get_session
 
@@ -80,35 +83,96 @@ def start_job(job_id: int) -> None:
 
 
 def update_progress(job_id: int, current: int, total: int = 0, checkpoint: str = "") -> None:
-    with get_session() as session:
-        job = session.get(Job, job_id)
-        if job is None:
+    """Update job progress via a dedicated sqlite3 connection.
+
+    Opens a fresh connection with a 60 s busy_timeout and uses BEGIN
+    IMMEDIATE so the write lock is acquired up front rather than failing
+    at commit time when the enrichment pipeline's session holds a
+    RESERVED lock.
+    """
+    db_path = str(get_config().database.path_expanded)
+    for attempt in range(5):
+        try:
+            conn = sqlite3.connect(db_path, timeout=60)
+            try:
+                conn.execute("PRAGMA journal_mode=WAL")
+                conn.execute("PRAGMA busy_timeout=60000")
+                conn.execute("BEGIN IMMEDIATE")
+                params = [current, total, job_id]
+                extra_sql = ""
+                if checkpoint:
+                    extra_sql = ", checkpoint = ?"
+                    params.insert(2, checkpoint)
+                conn.execute(
+                    f"UPDATE jobs SET progress_current = ?, progress_total = ?"
+                    f"{extra_sql}, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    params,
+                )
+                conn.commit()
+            finally:
+                conn.close()
             return
-        job.progress_current = current
-        job.progress_total = total
-        if checkpoint:
-            job.checkpoint = checkpoint
+        except sqlite3.OperationalError:
+            if attempt < 4:
+                time.sleep(0.5 * (2 ** attempt))
+            else:
+                raise
+
+
+def _jobs_raw_conn():
+    db_path = str(get_config().database.path_expanded)
+    conn = sqlite3.connect(db_path, timeout=60)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=60000")
+    conn.execute("BEGIN IMMEDIATE")
+    return conn
 
 
 def complete_job(job_id: int, result_summary: str = "") -> None:
-    with get_session() as session:
-        job = session.get(Job, job_id)
-        if job is None:
+    for attempt in range(5):
+        try:
+            conn = _jobs_raw_conn()
+            try:
+                params = [_now().isoformat(), job_id]
+                extra_sql = ""
+                if result_summary:
+                    extra_sql = ", result_summary = ?"
+                    params.insert(1, result_summary)
+                conn.execute(
+                    f"UPDATE jobs SET state = 'succeeded', completed_at = ?"
+                    f"{extra_sql}, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    params,
+                )
+                conn.commit()
+            finally:
+                conn.close()
             return
-        job.state = JobState.SUCCEEDED
-        job.completed_at = _now()
-        if result_summary:
-            job.result_summary = result_summary
+        except sqlite3.OperationalError:
+            if attempt < 4:
+                time.sleep(0.5 * (2 ** attempt))
+            else:
+                raise
 
 
 def fail_job(job_id: int, error_summary: str) -> None:
-    with get_session() as session:
-        job = session.get(Job, job_id)
-        if job is None:
+    for attempt in range(5):
+        try:
+            conn = _jobs_raw_conn()
+            try:
+                conn.execute(
+                    "UPDATE jobs SET state = 'failed', error_summary = ?,"
+                    " completed_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    [(error_summary or "")[:500], _now().isoformat(), job_id],
+                )
+                conn.commit()
+            finally:
+                conn.close()
             return
-        job.state = JobState.FAILED
-        job.error_summary = (error_summary or "")[:500]
-        job.completed_at = _now()
+        except sqlite3.OperationalError:
+            if attempt < 4:
+                time.sleep(0.5 * (2 ** attempt))
+            else:
+                raise
 
 
 def request_cancel(job_id: int) -> None:
