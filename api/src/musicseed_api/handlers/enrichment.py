@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from musicseed.config import get_config, set_config
+from musicseed.config import get_config, save_config
 from musicseed.services.enrichment import enrich_tracks
 from musicseed.services.jobs import complete_job, update_progress
 
@@ -20,7 +20,7 @@ def save_spotify_creds(client_id: str, client_secret: str) -> None:
         cfg.spotify.client_id = client_id
     if client_secret:
         cfg.spotify.client_secret = client_secret
-    set_config(cfg)
+    save_config(cfg)
 
 
 def run_enrich_job(job_id: int) -> None:

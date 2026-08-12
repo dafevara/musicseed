@@ -100,6 +100,7 @@ def load_config(config_path: Path | None = None) -> Config:
     Returns:
         Loaded Config object with environment variables expanded.
     """
+    global _config_path
     if config_path is None:
         candidates = [
             Path.home() / ".config" / "musicseed" / "config.yaml",
@@ -112,8 +113,10 @@ def load_config(config_path: Path | None = None) -> Config:
                 break
 
     if config_path is None or not config_path.exists():
+        _config_path = None
         return Config()
 
+    _config_path = Path(config_path)
     with open(config_path) as f:
         raw_config = yaml.safe_load(f)
 
@@ -126,6 +129,12 @@ def load_config(config_path: Path | None = None) -> Config:
 
 # Global config instance (lazy loaded)
 _config: Config | None = None
+_config_path: Path | None = None
+
+
+def default_config_path() -> Path:
+    """Canonical config location used when no existing file was resolved."""
+    return Path.home() / ".config" / "musicseed" / "config.yaml"
 
 
 def get_config() -> Config:
@@ -140,3 +149,22 @@ def set_config(config: Config) -> None:
     """Set the global config instance."""
     global _config
     _config = config
+
+
+def save_config(config: Config, path: Path | None = None) -> Path:
+    """Persist ``config`` to the YAML file it was loaded from (or ``path``).
+
+    Writes back to the path ``load_config`` resolved and records it so later
+    saves target the same file. Falls back to the canonical default location
+    when no file has been resolved yet.
+
+    Returns:
+        The path written to.
+    """
+    global _config_path
+    target = Path(path) if path is not None else (_config_path or default_config_path())
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with open(target, "w") as f:
+        yaml.safe_dump(config.model_dump(), f, sort_keys=False)
+    _config_path = target
+    return target

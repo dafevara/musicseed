@@ -7,7 +7,7 @@ callable from the CLI, a JSON route, or the web rendering layer.
 
 from __future__ import annotations
 
-from musicseed.config import get_config, set_config
+from musicseed.config import get_config, save_config
 from musicseed.db.session import reset_engine
 from musicseed.services.discovery import DiscoveryResult, Reason, discover
 from musicseed.services.library import initialize_database
@@ -70,6 +70,6 @@ def apply_config_and_init_db(
         cfg.spotify.client_secret = spotify_client_secret
         changed = True
     if changed:
-        set_config(cfg)
+        save_config(cfg)
         reset_engine()
     initialize_database()
