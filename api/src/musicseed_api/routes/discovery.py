@@ -58,12 +58,20 @@ def init_database(
     musicseed_db_path: Annotated[str, Form()] = "",
     spotify_client_id: Annotated[str, Form()] = "",
     spotify_client_secret: Annotated[str, Form()] = "",
+    plex_url: Annotated[str, Form()] = "",
+    plex_token: Annotated[str, Form()] = "",
+    plex_library: Annotated[str, Form()] = "",
+    plex_db_path: Annotated[str, Form()] = "",
 ) -> dict:
     overrides, _form = extract_overrides(
         musicseed_db_path=musicseed_db_path,
         spotify_client_id=spotify_client_id,
         spotify_client_secret=spotify_client_secret,
+        plex_url=plex_url,
+        plex_token=plex_token,
+        plex_library=plex_library,
+        plex_db_path=plex_db_path,
     )
     apply_config_and_init_db(**overrides)
-    result = run_discovery(**{k: v for k, v in overrides.items() if k == "musicseed_db_path"})
+    result = run_discovery()
     return {"ready": wizard_ready(result), "result": result.model_dump()}

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import type { DiscoveryResponse, DiscoveryResult, JobSummary } from "@/lib/types";
+import type { DiscoveryResponse, LibraryStatus } from "@/lib/types";
 import { DiscoveryChecks } from "@/components/discovery-checks";
 import { SetupForm } from "@/components/setup-form";
 import { JobProgress } from "@/components/job-progress";
@@ -18,30 +18,45 @@ type Phase =
   | "enriching"
   | "done";
 
+function resolvePhase(d: DiscoveryResponse, status: LibraryStatus | null): Phase {
+  if (d.result.musicseed_db.exists) {
+    return status && status.track_count > 0 ? "done" : "db_created";
+  }
+  return d.ready ? "ready" : "not_ready";
+}
+
 export default function SetupPage() {
   const [data, setData] = useState<DiscoveryResponse | null>(null);
+  const [libraryStatus, setLibraryStatus] = useState<LibraryStatus | null>(null);
   const [phase, setPhase] = useState<Phase>("loading");
   const [dbError, setDbError] = useState<string | null>(null);
   const [jobId, setJobId] = useState<number | null>(null);
   const [jobKind, setJobKind] = useState<string | null>(null);
   const [formValues, setFormValues] = useState<Record<string, string>>({});
 
+  async function bootstrap() {
+    try {
+      const d = await api.get<DiscoveryResponse>("/discovery");
+      setData(d);
+      let status: LibraryStatus | null = null;
+      if (d.result.musicseed_db.exists) {
+        try {
+          status = await api.get<LibraryStatus>("/library/status");
+        } catch {
+          status = null;
+        }
+      }
+      setLibraryStatus(status);
+      setPhase(resolvePhase(d, status));
+    } catch {
+      setPhase("loading");
+    }
+  }
+
   // Auto-discover on load
   useEffect(() => {
-    api.get<DiscoveryResponse>("/discovery").then(setData).catch(() => setPhase("loading"));
+    bootstrap();
   }, []);
-
-  // Determine phase from data
-  useEffect(() => {
-    if (!data) return;
-    if (data.result.musicseed_db.exists) {
-      setPhase("done");
-    } else if (data.ready) {
-      setPhase("ready");
-    } else {
-      setPhase("not_ready");
-    }
-  }, [data]);
 
   async function handleRecheck(vals: Record<string, string>) {
     setFormValues(vals);
@@ -49,7 +64,7 @@ export default function SetupPage() {
     try {
       const result = await api.post<DiscoveryResponse>("/discovery/check", vals);
       setData(result);
-      // phase is set by the useEffect above
+      setPhase(resolvePhase(result, libraryStatus));
     } catch {
       setPhase("not_ready");
     }
@@ -64,10 +79,12 @@ export default function SetupPage() {
         musicseed_db_path: data.result.musicseed_db.path,
         spotify_client_id: formValues.spotify_client_id || "",
         spotify_client_secret: formValues.spotify_client_secret || "",
+        plex_url: formValues.plex_url || data.result.plex_server.url,
+        plex_token: formValues.plex_token || "",
+        plex_library: formValues.plex_library || data.result.plex_server.library || "",
+        plex_db_path: formValues.plex_db_path || data.result.plex_library_db.selected?.path || "",
       });
-      const result = await api.get<DiscoveryResponse>("/discovery");
-      setData(result);
-      setPhase("db_created");
+      await bootstrap();
     } catch (e) {
       const raw = String(e);
       try {

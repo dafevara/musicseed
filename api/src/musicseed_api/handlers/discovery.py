@@ -49,25 +49,44 @@ def extract_overrides(**raw: str) -> tuple[dict[str, str], dict[str, str]]:
 
 
 def apply_config_and_init_db(
-    db_path: str = "",
+    musicseed_db_path: str = "",
     spotify_client_id: str = "",
     spotify_client_secret: str = "",
+    plex_url: str = "",
+    plex_token: str = "",
+    plex_library: str = "",
+    plex_db_path: str = "",
 ) -> None:
-    """Persist path/credential overrides to config and create the database.
+    """Persist validated setup overrides to config and create the database.
 
-    Raises whatever ``initialize_database`` or the config layer raises;
-    callers are expected to catch and map to their own error convention.
+    Carries the Plex settings that passed discovery into config so import
+    uses the same values the user confirmed. Blank fields leave the existing
+    config untouched. Raises whatever ``initialize_database`` or the config
+    layer raises; callers are expected to catch and map to their own error
+    convention.
     """
     cfg = get_config()
     changed = False
-    if db_path:
-        cfg.database.path = db_path
+    if musicseed_db_path:
+        cfg.database.path = musicseed_db_path
         changed = True
     if spotify_client_id:
         cfg.spotify.client_id = spotify_client_id
         changed = True
     if spotify_client_secret:
         cfg.spotify.client_secret = spotify_client_secret
+        changed = True
+    if plex_url:
+        cfg.plex.url = plex_url
+        changed = True
+    if plex_token:
+        cfg.plex.token = plex_token
+        changed = True
+    if plex_library:
+        cfg.plex.library = plex_library
+        changed = True
+    if plex_db_path:
+        cfg.plex.db_path = plex_db_path
         changed = True
     if changed:
         save_config(cfg)

@@ -60,6 +60,10 @@ export interface LibrarySnapshot {
   enrichment: EnrichmentCoverage;
 }
 
+export interface LibraryStatus {
+  track_count: number;
+}
+
 export interface JobSummary {
   id: number;
   kind: string;
