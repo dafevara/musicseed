@@ -101,7 +101,9 @@ def _parse_gdm(headers: dict[str, str], addr: tuple[str, int]) -> DiscoveredPlex
         port=port_num,
         product=headers.get("product") or "Plex Media Server",
         version=headers.get("version"),
-        machine_identifier=headers.get("machine-identifier"),
+        machine_identifier=(
+            headers.get("machine-identifier") or headers.get("resource-identifier")
+        ),
     )
 
 
@@ -136,7 +138,11 @@ def _parse_response(data: bytes, addr: tuple[str, int]) -> DiscoveredPlexServer 
     status, headers = _parse_headers(text)
     if not status or "200" not in status:
         return None
-    if "machine-identifier" in headers:
+    if (
+        "plex/media-server" in headers.get("content-type", "")
+        or "machine-identifier" in headers
+        or "resource-identifier" in headers
+    ):
         return _parse_gdm(headers, addr)
     if "location" in headers or "st" in headers:
         return _parse_ssdp(headers, addr)

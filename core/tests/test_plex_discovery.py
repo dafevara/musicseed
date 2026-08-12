@@ -8,12 +8,14 @@ from musicseed.services.plex_discovery import discover_plex_servers
 
 GDM_REPLY = (
     "HTTP/1.0 200 OK\r\n"
+    "Content-Type: plex/media-server\r\n"
+    "Host: 41281637cb044f40b52ceba2b604921d.plex.direct\r\n"
     "Name: Living Room\r\n"
     "Port: 32400\r\n"
     "Product: Plex Media Server\r\n"
-    "Version: 1.41.0.9000\r\n"
-    "Machine-Identifier: deadbeefcafe\r\n"
-    "Content-Type: plex/media-server\r\n"
+    "Resource-Identifier: 3309a4b35976865b17593c74cb3f5b447c520cbf\r\n"
+    "Updated-At: 1786575042\r\n"
+    "Version: 1.43.3.10828\r\n"
     "\r\n"
 ).encode()
 
@@ -57,13 +59,13 @@ def _run(replies, timeout=1.0, monkeypatch=None):
 
 
 def test_parse_gdm() -> None:
-    server = plex_discovery._parse_response(GDM_REPLY, ("192.168.1.5", 32400))
+    server = plex_discovery._parse_response(GDM_REPLY, ("192.168.1.5", 32414))
     assert server is not None
     assert server.name == "Living Room"
     assert server.host == "192.168.1.5"
     assert server.port == 32400
-    assert server.version == "1.41.0.9000"
-    assert server.machine_identifier == "deadbeefcafe"
+    assert server.version == "1.43.3.10828"
+    assert server.machine_identifier == "3309a4b35976865b17593c74cb3f5b447c520cbf"
     assert server.url == "http://192.168.1.5:32400"
 
 
