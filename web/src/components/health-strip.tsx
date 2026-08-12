@@ -180,8 +180,8 @@ export function HealthStrip({
             </p>
             <p className="mt-1 mb-0 text-sm text-[var(--muted)]">
               {plex.detail || "Plex is not reachable."}{" "}
-              <a href="/setup" className="text-[var(--brand)] underline">
-                Re-run setup
+              <a href="/settings" className="text-[var(--brand)] underline">
+                Configure
               </a>
               .
             </p>

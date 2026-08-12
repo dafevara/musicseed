@@ -8,13 +8,13 @@ const SECTIONS: Section[] = [
   { key: "library", label: "Library", href: "/" },
   { key: "recommend", label: "Recommend", href: "/recommend" },
   { key: "playlists", label: "Playlists", href: "/playlists" },
-  { key: "settings", label: "Settings", href: "/setup" },
+  { key: "settings", label: "Settings", href: "/settings" },
 ];
 
 const PREFIXES: [string, string][] = [
   ["/recommend", "recommend"],
   ["/playlists", "playlists"],
-  ["/setup", "settings"],
+  ["/settings", "settings"],
 ];
 
 function activeSection(path: string): string | null {

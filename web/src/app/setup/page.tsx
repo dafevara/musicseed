@@ -186,10 +186,13 @@ export default function SetupPage() {
             </div>
           )}
 
-          <div className="flex gap-2 mt-3">
+          <div className="flex flex-wrap gap-2 mt-3 items-baseline">
             <button className="btn btn-primary" onClick={() => setStep("review")}>
               Continue
             </button>
+            <a href="/settings" className="text-sm text-[var(--muted)] underline">
+              Open Settings to configure manually
+            </a>
           </div>
         </section>
       )}
@@ -205,11 +208,20 @@ export default function SetupPage() {
           )}
 
           {!data.ready && (
-            <SetupForm
-              result={data.result}
-              onSubmit={handleRecheck}
-              missing={data.result.missing_inputs}
-            />
+            <>
+              <SetupForm
+                result={data.result}
+                onSubmit={handleRecheck}
+                missing={data.result.missing_inputs}
+              />
+              <p className="muted text-sm">
+                Prefer the full form?{" "}
+                <a href="/settings" className="text-[var(--brand)] underline">
+                  Open Settings
+                </a>
+                .
+              </p>
+            </>
           )}
 
           {data.ready && !data.result.musicseed_db.exists && (
