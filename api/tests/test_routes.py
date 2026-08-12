@@ -98,3 +98,12 @@ def test_dashboard_route(monkeypatch):
     resp = TestClient(create_app()).get("/dashboard")
     assert resp.status_code == 200
     assert resp.json() == {"ok": True}
+
+
+def test_recommend_presets_match_core():
+    from musicseed.recommender.scoring import RECOMMENDATION_PRESETS
+
+    resp = TestClient(create_app()).get("/recommend/presets")
+    assert resp.status_code == 200
+    expected = {name: w.model_dump() for name, w in RECOMMENDATION_PRESETS.items()}
+    assert resp.json() == expected

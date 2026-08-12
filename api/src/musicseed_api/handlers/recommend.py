@@ -4,9 +4,14 @@ from __future__ import annotations
 
 from musicseed.db.models import Artist, Track
 from musicseed.db.session import get_session
-from musicseed.recommender.scoring import Weights
+from musicseed.recommender.scoring import RECOMMENDATION_PRESETS, Weights
 from musicseed.services.recommend import RecommendationResult, get_recommendations
 from sqlalchemy.orm import joinedload
+
+
+def get_recommendation_presets() -> dict[str, dict[str, float]]:
+    """Return the authoritative named presets (see ``RECOMMENDATION_PRESETS``)."""
+    return {name: weights.model_dump() for name, weights in RECOMMENDATION_PRESETS.items()}
 
 
 def parse_seed_ids(raw: str) -> list[int]:

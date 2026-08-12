@@ -8,12 +8,18 @@ from fastapi import APIRouter, Form, Query
 from musicseed.recommender.scoring import Weights
 
 from musicseed_api.handlers.recommend import (
+    get_recommendation_presets,
     parse_seed_ids,
     run_recommendations,
     typeahead_search,
 )
 
 router = APIRouter(tags=["recommend"])
+
+
+@router.get("/recommend/presets")
+def presets() -> dict[str, dict[str, float]]:
+    return get_recommendation_presets()
 
 
 @router.get("/recommend/typeahead")

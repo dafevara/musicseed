@@ -30,6 +30,23 @@ class Weights(BaseModel):
     novelty: float = 0.10
 
 
+# The single authoritative set of named recommendation presets. "balanced" is
+# exactly the default ``Weights()`` — every surface (CLI, API, web) must use
+# these rather than duplicating values. The web UI fetches this from the API.
+RECOMMENDATION_PRESETS: dict[str, Weights] = {
+    "balanced": Weights(),
+    "sonic": Weights(
+        sonic=0.55, popularity=0.10, style=0.10, genre=0.10, era=0.05, novelty=0.10
+    ),
+    "discovery": Weights(
+        sonic=0.15, popularity=0.05, style=0.10, genre=0.10, era=0.05, novelty=0.55
+    ),
+    "popular": Weights(
+        sonic=0.15, popularity=0.45, style=0.10, genre=0.15, era=0.05, novelty=0.10
+    ),
+}
+
+
 class SeedProfile(BaseModel):
     """Aggregated recommendation signals from one or more seed tracks."""
 
