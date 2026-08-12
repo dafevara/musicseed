@@ -21,14 +21,12 @@ def get_discovery(
     musicseed_db_path: str = Query(default=""),
     plex_db_path: str = Query(default=""),
     plex_url: str = Query(default=""),
-    plex_token: str = Query(default=""),
     plex_library: str = Query(default=""),
 ) -> dict:
     result = run_discovery(
         musicseed_db_path=musicseed_db_path,
         plex_db_path=plex_db_path,
         plex_url=plex_url,
-        plex_token=plex_token,
         plex_library=plex_library,
     )
     return {"ready": wizard_ready(result), "result": result.model_dump()}

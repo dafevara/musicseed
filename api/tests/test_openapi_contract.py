@@ -33,3 +33,10 @@ def test_every_operation_is_exposed():
         for method in methods
     }
     assert EXPECTED_OPERATIONS <= actual
+
+
+def test_get_discovery_does_not_accept_plex_token():
+    spec = TestClient(create_app()).app.openapi()
+    params = spec["paths"]["/discovery"]["get"].get("parameters", [])
+    names = {p["name"] for p in params}
+    assert "plex_token" not in names
