@@ -8,13 +8,21 @@ instead of parsing exceptions. Plex tokens are never included in results.
 """
 
 import os
+import sqlite3
 from enum import StrEnum
 from pathlib import Path
+from urllib.parse import quote
 
 from pydantic import BaseModel
 
 from musicseed.clients.plex import PlexClient
-from musicseed.config import Config, DatabaseConfig, PlexConfig, get_config
+from musicseed.config import (
+    Config,
+    DatabaseConfig,
+    PlexConfig,
+    get_config,
+    get_config_path,
+)
 
 _SQLITE_HEADER = b"SQLite format 3\x00"
 
@@ -92,6 +100,37 @@ class PlexServerDiscovery(BaseModel):
     ok: bool
 
 
+class SpotifyCredentialsCheck(BaseModel):
+    """Presence of Spotify enrichment credentials (values never exposed)."""
+
+    model_config = {"frozen": True}
+
+    configured: bool
+    client_id_set: bool
+    client_secret_set: bool
+
+
+class EnrichmentDiscovery(BaseModel):
+    """Enrichment-provider readiness. ListenBrainz needs no credentials."""
+
+    model_config = {"frozen": True}
+
+    spotify: SpotifyCredentialsCheck
+    listenbrainz_requires_key: bool = False
+
+
+class FirstRunStatus(BaseModel):
+    """Derived first-run state and the reasons it is considered a first run."""
+
+    model_config = {"frozen": True}
+
+    no_config: bool
+    db_missing: bool
+    library_empty: bool
+    is_first_run: bool
+    reasons: list[str]
+
+
 class DiscoveryResult(BaseModel):
     """Complete, read-only picture of the local MusicSeed environment."""
 
@@ -102,6 +141,9 @@ class DiscoveryResult(BaseModel):
     plex_blobs_db: FileDiscovery
     plex_server: PlexServerDiscovery
     ready: bool  # every check ok; surfaces can gate "start import" on this
+    enrichers: EnrichmentDiscovery
+    first_run: FirstRunStatus
+    missing_inputs: list[str]
 
 
 def _probe_file(path: Path, source: str) -> PathCandidate:
@@ -336,10 +378,81 @@ def discover(
         plex_blobs_db.ok,
         plex_server.ok,
     ])
+
+    spotify = SpotifyCredentialsCheck(
+        configured=bool(cfg.spotify.client_id and cfg.spotify.client_secret),
+        client_id_set=bool(cfg.spotify.client_id),
+        client_secret_set=bool(cfg.spotify.client_secret),
+    )
+    enrichers = EnrichmentDiscovery(spotify=spotify)
+
+    missing: list[str] = []
+    if not musicseed_db.ok:
+        missing.append("db_location")
+    if not plex_library_db.ok or not plex_blobs_db.ok:
+        missing.append("plex_db_path")
+    if not plex_server.ok:
+        if plex_server.reason in (Reason.MISSING_TOKEN, Reason.UNAUTHORIZED):
+            missing.append("plex_token")
+        elif plex_server.reason is Reason.UNREACHABLE:
+            missing.append("plex_unreachable")
+        elif plex_server.reason is Reason.LIBRARY_NOT_FOUND:
+            missing.append("plex_library")
+        else:
+            missing.append("plex_server")
+    if not spotify.configured:
+        missing.append("spotify_credentials")
+
+    no_config = get_config_path() is None
+    db_missing = not musicseed_db.exists
+    track_count = _count_tracks(Path(musicseed_db.path)) if not db_missing else None
+    library_empty = track_count == 0
+    first_run_reasons = [
+        reason
+        for reason, flag in (
+            ("no_config", no_config),
+            ("db_missing", db_missing),
+            ("library_empty", library_empty),
+        )
+        if flag
+    ]
+    first_run = FirstRunStatus(
+        no_config=no_config,
+        db_missing=db_missing,
+        library_empty=library_empty,
+        is_first_run=bool(first_run_reasons),
+        reasons=first_run_reasons,
+    )
+
     return DiscoveryResult(
         musicseed_db=musicseed_db,
         plex_library_db=plex_library_db,
         plex_blobs_db=plex_blobs_db,
         plex_server=plex_server,
         ready=ready,
+        enrichers=enrichers,
+        first_run=first_run,
+        missing_inputs=missing,
     )
+
+
+def _count_tracks(db_path: Path) -> int | None:
+    """Return the number of imported tracks, or None when undeterminable.
+
+    Opens the discovered database read-only (``mode=ro``) so discovery never
+    writes, including sidecar WAL files. Any error — missing file, missing
+    schema, locked database — yields None rather than raising.
+    """
+    if not db_path.exists() or not db_path.is_file():
+        return None
+    try:
+        conn = sqlite3.connect(f"file:{quote(str(db_path))}?mode=ro", uri=True)
+    except sqlite3.Error:
+        return None
+    try:
+        cur = conn.execute("SELECT COUNT(*) FROM tracks")
+        return int(cur.fetchone()[0])
+    except sqlite3.Error:
+        return None
+    finally:
+        conn.close()

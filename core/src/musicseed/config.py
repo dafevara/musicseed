@@ -150,6 +150,14 @@ def get_config() -> Config:
     return _config
 
 
+def get_config_path() -> Path | None:
+    """Return the resolved config file path, or None if no file was found.
+
+    Used by discovery to derive the "no config file yet" first-run signal.
+    """
+    return _config_path
+
+
 def set_config(config: Config) -> None:
     """Set the global config instance."""
     global _config

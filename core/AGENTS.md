@@ -35,7 +35,10 @@ Service entry points:
   Plex library/blobs DB candidates, Plex server reachability/auth/library). Returns frozen
   Pydantic models with machine-readable `Reason` codes; expected failures are data, not
   exceptions. Accepts per-call overrides (never mutates global config) and never includes the
-  Plex token in results. The setup wizard / dashboard consume this.
+  Plex token in results. Also reports `enrichers` (Spotify credential presence — ListenBrainz
+  is keyless), `missing_inputs` (machine-readable keys like `plex_token`, `spotify_credentials`,
+  `plex_unreachable`, `db_location`), and a derived `first_run` status (`no_config` /
+  `db_missing` / `library_empty`; no persisted flag). The setup wizard / dashboard consume this.
 - `services/plex_discovery.py`: `discover_plex_servers` — passive, read-only local-network
   Plex discovery (GDM multicast on `239.0.0.250:32414` + SSDP fallback on `239.255.255.250:1900`,
   stdlib `socket` only). Returns `list[DiscoveredPlexServer]` (empty when nothing responds,
@@ -56,7 +59,9 @@ Service entry points:
 ## Code Map
 
 - `config.py`: Pydantic YAML config + `${ENV}`/`~` expansion. `get_config()`/`set_config()`/
-  `load_config()` global singleton. This is the CLI's config mechanism; future apps may populate
+  `load_config()`/`get_config_path()` global singleton. `get_config_path()` returns the resolved
+  config file path (or `None` when no file was found) — discovery uses it for the `no_config`
+  first-run signal. This is the CLI's config mechanism; future apps may populate
   the same `Config` from `.env` instead.
 - `exceptions.py`: `MusicSeedError` (base), `ConfigurationError`, `NotFoundError`.
 - `logging_config.py`: `setup_logging`/`get_logger`. **Gotcha:** `setup_logging` walks up from its

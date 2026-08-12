@@ -2,6 +2,7 @@
 
 import json
 import os
+import sqlite3
 from pathlib import Path
 
 import httpx
@@ -289,3 +290,120 @@ def test_check_connection_unreachable(monkeypatch: pytest.MonkeyPatch) -> None:
     assert not check.authorized
     assert check.error is not None
     assert SECRET_TOKEN not in check.error
+
+
+# ---------------------------------------------------------------- enrichers
+
+
+def _make_tracks_db(path: Path, rows: int = 0) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(path))
+    conn.execute("CREATE TABLE tracks (id INTEGER PRIMARY KEY)")
+    conn.executemany("INSERT INTO tracks (id) VALUES (?)", [(i,) for i in range(rows)])
+    conn.commit()
+    conn.close()
+    return path
+
+
+def test_enrichers_spotify_configured(tmp_path: Path) -> None:
+    cfg = Config.model_validate({
+        "database": {"path": str(tmp_path / "ms" / "musicseed.db")},
+        "plex": {"db_path": str(tmp_path / "plex" / "com.plexapp.plugins.library.db")},
+        "spotify": {"client_id": "id", "client_secret": "secret"},
+    })
+    result = discover(check_server=False, config=cfg)
+    assert result.enrichers.spotify.configured
+    assert result.enrichers.spotify.client_id_set
+    assert result.enrichers.spotify.client_secret_set
+    assert "spotify_credentials" not in result.missing_inputs
+
+
+def test_enrichers_spotify_unconfigured(tmp_path: Path) -> None:
+    result = discover(check_server=False, config=_config(tmp_path))
+    assert not result.enrichers.spotify.configured
+    assert "spotify_credentials" in result.missing_inputs
+
+
+# ---------------------------------------------------------------- missing inputs
+
+
+def test_missing_inputs_plex_unreachable(tmp_path: Path,
+                                         monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_client(monkeypatch, check=ConnectionCheck(
+        reachable=False, authorized=False, status_code=None,
+        server_version=None, error="Cannot reach Plex",
+    ))
+    result = discover(config=_config(tmp_path))
+    assert "plex_unreachable" in result.missing_inputs
+    assert "plex_token" not in result.missing_inputs
+
+
+def test_missing_inputs_missing_token(tmp_path: Path,
+                                      monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_client(monkeypatch, check=ConnectionCheck(
+        reachable=True, authorized=False, status_code=401,
+        server_version=None, error="Plex returned HTTP 401.",
+    ))
+    result = discover(config=_config(tmp_path))
+    assert "plex_token" in result.missing_inputs
+    assert "plex_unreachable" not in result.missing_inputs
+
+
+def test_missing_inputs_db_location(tmp_path: Path) -> None:
+    read_only = tmp_path / "ms"
+    read_only.mkdir()
+    os.chmod(read_only, 0o555)
+    result = discover(
+        musicseed_db_path=str(read_only / "musicseed.db"),
+        check_server=False, config=_config(tmp_path),
+    )
+    assert "db_location" in result.missing_inputs
+
+
+# ---------------------------------------------------------------- first run
+
+
+def test_first_run_no_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(discovery, "get_config_path", lambda: None)
+    result = discover(check_server=False, config=_config(tmp_path))
+    assert result.first_run.no_config
+    assert result.first_run.is_first_run
+    assert "no_config" in result.first_run.reasons
+
+
+def test_first_run_db_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(discovery, "get_config_path", lambda: "/some/config.yaml")
+    result = discover(check_server=False, config=_config(tmp_path))
+    assert result.first_run.db_missing
+    assert not result.first_run.no_config
+    assert "db_missing" in result.first_run.reasons
+
+
+def test_first_run_library_empty(tmp_path: Path,
+                                 monkeypatch: pytest.MonkeyPatch) -> None:
+    db = _make_tracks_db(tmp_path / "ms" / "musicseed.db", rows=0)
+    monkeypatch.setattr(discovery, "get_config_path", lambda: "/some/config.yaml")
+    result = discover(musicseed_db_path=str(db), check_server=False,
+                      config=_config(tmp_path))
+    assert result.first_run.library_empty
+    assert not result.first_run.db_missing
+    assert "library_empty" in result.first_run.reasons
+
+
+def test_first_run_not_first_when_populated(tmp_path: Path,
+                                            monkeypatch: pytest.MonkeyPatch) -> None:
+    db = _make_tracks_db(tmp_path / "ms" / "musicseed.db", rows=3)
+    monkeypatch.setattr(discovery, "get_config_path", lambda: "/some/config.yaml")
+    result = discover(musicseed_db_path=str(db), check_server=False,
+                      config=_config(tmp_path))
+    assert not result.first_run.is_first_run
+    assert result.first_run.reasons == []
+
+
+def test_library_empty_false_when_db_unreadable(tmp_path: Path,
+                                                monkeypatch: pytest.MonkeyPatch) -> None:
+    db = _make_sqlite(tmp_path / "ms" / "musicseed.db")  # header-only, not queryable
+    monkeypatch.setattr(discovery, "get_config_path", lambda: "/some/config.yaml")
+    result = discover(musicseed_db_path=str(db), check_server=False,
+                      config=_config(tmp_path))
+    assert not result.first_run.library_empty
