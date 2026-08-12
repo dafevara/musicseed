@@ -87,6 +87,10 @@ API shapes are typed in `src/lib/types.ts`.
   and on window focus, not every poll.
 - **Error messages come from the API client.** `src/lib/api.ts` already extracts `{detail}`; pages
   just show `String(e).replace("Error: ", "")`. Do not re-parse error JSON in pages.
+- **First-run gating.** `src/lib/use-setup-gate.ts` redirects to `/setup` when discovery reports a
+  missing or empty library (`first_run.db_missing` / `first_run.library_empty`); the dashboard
+  applies the same check on mount. The gate fails open (treats as ready) when discovery is
+  unreachable.
 
 ## Run / verify (from `web/`)
 

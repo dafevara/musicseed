@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { useSetupGate } from "@/lib/use-setup-gate";
 import type { RecommendationItem, PopulatePreview, RecommendResponse, TypeaheadTrack } from "@/lib/types";
 import { Typeahead } from "@/components/typeahead";
 import { SeedChips } from "@/components/seed-chips";
@@ -48,6 +49,8 @@ export default function PlaylistsPage() {
   const [presets, setPresets] = useState<Record<string, Record<string, number>>>({});
   const [showAdvanced, setShowAdvanced] = useState(false);
   const removedPopulateIdsRef = useRef<Set<number>>(new Set());
+
+  const gate = useSetupGate();
 
   useEffect(() => {
     api.get<PlexPlaylist[]>("/playlists")
@@ -227,6 +230,14 @@ export default function PlaylistsPage() {
     } finally {
       setPopulating(null);
     }
+  }
+
+  if (gate !== "ready") {
+    return (
+      <div className="panel">
+        <p className="muted">Loading…</p>
+      </div>
+    );
   }
 
   if (loading) {

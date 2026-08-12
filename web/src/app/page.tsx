@@ -36,7 +36,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     api.get<DiscoveryResponse>("/discovery").then((d) => {
-      if (!d.result.musicseed_db.exists) {
+      const first = d.result.first_run;
+      if (first.db_missing || first.library_empty) {
         router.replace("/setup");
         return;
       }

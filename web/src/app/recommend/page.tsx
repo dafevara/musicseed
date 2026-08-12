@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
+import { useSetupGate } from "@/lib/use-setup-gate";
 import type { TypeaheadTrack, RecommendResponse, RecommendationItem } from "@/lib/types";
 import { SeedChips } from "@/components/seed-chips";
 import { Typeahead } from "@/components/typeahead";
@@ -28,6 +29,8 @@ export default function RecommendPage() {
   const [presets, setPresets] = useState<Presets>({});
   const [weights, setWeights] = useState<Record<string, number>>({});
   const [preset, setPreset] = useState("balanced");
+
+  const gate = useSetupGate();
 
   // Presets come from the API (single source of truth in core), not from
   // duplicated values here.
@@ -104,6 +107,14 @@ export default function RecommendPage() {
 
     return () => clearTimeout(timer);
   }, [seedIds, limit, yearMin, yearMax, perArtist, minScore, weights]);
+
+  if (gate !== "ready") {
+    return (
+      <div className="panel">
+        <p className="muted">Loading…</p>
+      </div>
+    );
+  }
 
   return (
     <>
