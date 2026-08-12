@@ -45,11 +45,11 @@ export interface DiscoveryResponse {
 // ── Dashboard ──────────────────────────────
 
 export interface EnrichmentCoverage {
-  tracks_with_spotify: number | string;
-  tracks_with_listenbrainz: number | string;
-  tracks_with_sonic: number | string;
-  spotify_attempted: number | string;
-  listenbrainz_attempted: number | string;
+  tracks_with_spotify: number;
+  tracks_with_listenbrainz: number;
+  tracks_with_sonic: number;
+  spotify_attempted: number;
+  listenbrainz_attempted: number;
 }
 
 export interface LibrarySnapshot {

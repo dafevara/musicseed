@@ -79,9 +79,10 @@ JSON. Handlers are the reusable part — routes are the HTTP-specific projection
   `discovery.py`, `library.py`, `enrichment.py`, `recommend.py`, `sonic.py`, `dashboard.py`,
   `jobs.py`, `playlists.py`.
 
-- `openapi.json`: hand-crafted OpenAPI 3.1 spec covering the JSON operations with named
-  schema components and descriptions. Use this for code generation or external integration
-  docs — it is the contract, not the auto-generated one.
+- **API contract**: the OpenAPI schema is auto-generated from the routes (FastAPI serves it at
+  `/openapi.json`). It is the single source of truth for the JSON shapes — do not maintain a
+  separate hand-written spec. `tests/test_openapi_contract.py` asserts the schema exposes every
+  operation so a removed or renamed route fails the build.
 
 ## Particularities to respect
 
