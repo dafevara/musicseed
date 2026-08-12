@@ -28,6 +28,11 @@ class DatabaseConfig(BaseModel):
 
     @property
     def url(self) -> str:
+        """SQLAlchemy connection URL only — never pass this to ``sqlite3.connect``.
+
+        Filesystem callers must use ``path_expanded`` (``url`` is a ``sqlite://``
+        URL, not a path).
+        """
         return f"sqlite:///{self.path_expanded}"
 
 
