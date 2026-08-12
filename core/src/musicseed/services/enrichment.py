@@ -6,7 +6,7 @@ import asyncio
 from collections.abc import Callable
 
 from musicseed.config import get_config
-from musicseed.db.session import ensure_schema, get_session
+from musicseed.db.session import ensure_schema
 from musicseed.enrichers.pipeline import EnrichmentStats, run_enrichment
 from musicseed.exceptions import ConfigurationError
 
@@ -37,21 +37,19 @@ def enrich_tracks(
             "Add spotify.client_id and spotify.client_secret to your config file."
         )
 
-    with get_session() as session:
-        ensure_schema()
-        return asyncio.run(
-            run_enrichment(
-                session=session,
-                source=source,
-                client_id=config.spotify.client_id,
-                client_secret=config.spotify.client_secret,
-                batch_size=batch_size,
-                limit=limit,
-                artist=artist,
-                album=album,
-                unattempted_only=resume,
-                concurrency=concurrency,
-                progress_callback=progress_callback,
-                should_cancel=should_cancel,
-            )
+    ensure_schema()
+    return asyncio.run(
+        run_enrichment(
+            source=source,
+            client_id=config.spotify.client_id,
+            client_secret=config.spotify.client_secret,
+            batch_size=batch_size,
+            limit=limit,
+            artist=artist,
+            album=album,
+            unattempted_only=resume,
+            concurrency=concurrency,
+            progress_callback=progress_callback,
+            should_cancel=should_cancel,
         )
+    )

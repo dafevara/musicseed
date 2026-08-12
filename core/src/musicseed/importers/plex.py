@@ -468,6 +468,9 @@ def import_from_plex(
             if progress_callback:
                 progress_callback(imported["artists"], counts["artists"], "artists")
 
+            # Release the write lock between phases so progress writes proceed.
+            session.commit()
+
             # Import albums
             if _cancelled():
                 logger.info("Cancellation requested after artists import")
@@ -504,6 +507,9 @@ def import_from_plex(
             if progress_callback:
                 progress_callback(imported["albums"], counts["albums"], "albums")
 
+            # Release the write lock between phases so progress writes proceed.
+            session.commit()
+
             # Import tracks
             if _cancelled():
                 logger.info("Cancellation requested after albums import")
@@ -511,10 +517,12 @@ def import_from_plex(
                 return imported
             track_task = progress.add_task("Importing tracks...", total=counts["tracks"])
             for plex_track in importer.iter_tracks():
-                if imported["tracks"] % 500 == 0 and _cancelled():
-                    logger.info("Cancellation requested during tracks import")
-                    session.commit()
-                    return imported
+                if imported["tracks"] > 0 and imported["tracks"] % 500 == 0:
+                    if _cancelled():
+                        logger.info("Cancellation requested during tracks import")
+                        session.commit()
+                        return imported
+                    session.commit()  # release the write lock periodically
                 existing = session.query(Track).filter_by(plex_id=plex_track.id).first()
                 track = existing or Track()
                 track.title = plex_track.title

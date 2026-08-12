@@ -16,6 +16,7 @@ from rich.progress import (
 from sqlalchemy.orm import Session
 
 from musicseed.db.models import Album, Artist, Track
+from musicseed.db.session import get_session
 from musicseed.enrichers.listenbrainz import ListenBrainzClient
 from musicseed.enrichers.spotify import SpotifyClient
 from musicseed.logging_config import get_logger
@@ -164,7 +165,6 @@ def normalize_listenbrainz_popularity(session: Session) -> None:
 
 
 async def enrich_tracks_with_listenbrainz(
-    session: Session,
     tracks: list[dict],
     listenbrainz_client: ListenBrainzClient,
     progress: Progress,
@@ -172,7 +172,11 @@ async def enrich_tracks_with_listenbrainz(
     progress_callback: Callable[[int, int, str], None] | None = None,
     should_cancel: Callable[[], bool] | None = None,
 ) -> tuple[int, int, int]:
-    """Enrich tracks with ListenBrainz recording listen/user counts."""
+    """Enrich tracks with ListenBrainz recording listen/user counts.
+
+    Each batch opens and closes its own session so the SQLite write lock is
+    only held for the duration of a single batch, not the whole run.
+    """
     total = len(tracks)
     task = progress.add_task(
         "[cyan]Fetching ListenBrainz popularity...",
@@ -196,24 +200,23 @@ async def enrich_tracks_with_listenbrainz(
 
         try:
             results = await listenbrainz_client.get_recording_popularity(mbids)
-            for result in results:
-                track = session.get(Track, id_by_mbid[result.recording_mbid])
-                if track is None:
+            with get_session() as session:
+                for result in results:
+                    track = session.get(Track, id_by_mbid[result.recording_mbid])
+                    if track is None:
+                        progress.advance(task)
+                        processed += 1
+                        continue
+
+                    track.listenbrainz_matched = True
+                    if result.total_listen_count is not None or result.total_user_count is not None:
+                        track.listenbrainz_listen_count = result.total_listen_count
+                        track.listenbrainz_listener_count = result.total_user_count
+                        matched += 1
+                    else:
+                        unmatched += 1
                     progress.advance(task)
                     processed += 1
-                    continue
-
-                track.listenbrainz_matched = True
-                if result.total_listen_count is not None or result.total_user_count is not None:
-                    track.listenbrainz_listen_count = result.total_listen_count
-                    track.listenbrainz_listener_count = result.total_user_count
-                    matched += 1
-                else:
-                    unmatched += 1
-                progress.advance(task)
-                processed += 1
-
-            session.commit()
             if progress_callback:
                 progress_callback(processed, total, "enriching via ListenBrainz…")
         except Exception as e:
@@ -223,25 +226,29 @@ async def enrich_tracks_with_listenbrainz(
             progress.advance(task, advance=len(batch))
 
     if not cancelled:
-        normalize_listenbrainz_popularity(session)
+        with get_session() as session:
+            normalize_listenbrainz_popularity(session)
     return matched, unmatched, errors
 
 
 async def enrich_tracks(
-    session: Session,
     tracks: list[dict],
     spotify_client: SpotifyClient,
     progress: Progress,
+    batch_size: int = 100,
     progress_callback: Callable[[int, int, str], None] | None = None,
     should_cancel: Callable[[], bool] | None = None,
 ) -> tuple[int, int, int]:
     """Enrich tracks via Spotify search.
 
+    Each batch opens and closes its own session so the SQLite write lock is
+    only held for the duration of a single batch, not the whole run.
+
     Args:
-        session: Database session
         tracks: List of tracks to search
         spotify_client: Spotify client (with throttling)
         progress: Rich progress bar
+        batch_size: Number of tracks processed per session (commit unit)
         progress_callback: Optional callback(current, total, message) for job progress
         should_cancel: Optional callback returning True when the job was canceled
 
@@ -257,61 +264,60 @@ async def enrich_tracks(
     matched = 0
     unmatched = 0
     errors = 0
+    processed = 0
 
-    for track_data in tracks:
+    for start in range(0, total, batch_size):
         if should_cancel is not None and should_cancel():
             logger.info("Cancellation requested — stopping Spotify enrichment")
             break
-        try:
-            result = await spotify_client.match_track(
-                title=track_data["title"],
-                artist=track_data["artist"],
-                album=track_data.get("album"),
-                duration_ms=track_data.get("duration_ms"),
-            )
-
-            track = session.get(Track, track_data["id"])
-            if track:
-                track.spotify_matched = True  # Mark as attempted
-
-                if result.matched and result.spotify_track:
-                    track.spotify_id = result.spotify_track.spotify_id
-                    track.spotify_popularity = result.spotify_track.popularity
-                    track.popularity_score = result.spotify_track.popularity / 100
-                    track.popularity_source = "spotify"
-                    track.match_tier = 2  # Spotify search match
-                    matched += 1
-                    logger.debug(
-                        f"Matched '{track_data['title']}' -> "
-                        f"'{result.spotify_track.name}' (pop: {result.spotify_track.popularity})"
+        chunk = tracks[start : start + batch_size]
+        with get_session() as session:
+            for track_data in chunk:
+                try:
+                    result = await spotify_client.match_track(
+                        title=track_data["title"],
+                        artist=track_data["artist"],
+                        album=track_data.get("album"),
+                        duration_ms=track_data.get("duration_ms"),
                     )
-                else:
-                    unmatched += 1
 
-        except Exception as e:
-            logger.error(f"Error searching track {track_data['id']}: {e}")
-            errors += 1
+                    track = session.get(Track, track_data["id"])
+                    if track:
+                        track.spotify_matched = True  # Mark as attempted
 
-        progress.advance(task)
+                        if result.matched and result.spotify_track:
+                            track.spotify_id = result.spotify_track.spotify_id
+                            track.spotify_popularity = result.spotify_track.popularity
+                            track.popularity_score = result.spotify_track.popularity / 100
+                            track.popularity_source = "spotify"
+                            track.match_tier = 2  # Spotify search match
+                            matched += 1
+                            logger.debug(
+                                f"Matched '{track_data['title']}' -> "
+                                f"'{result.spotify_track.name}' "
+                                f"(pop: {result.spotify_track.popularity})"
+                            )
+                        else:
+                            unmatched += 1
 
-        processed = matched + unmatched + errors
+                except Exception as e:
+                    logger.error(f"Error searching track {track_data['id']}: {e}")
+                    errors += 1
 
-        # Commit periodically to save progress
-        if processed % 100 == 0:
-            session.commit()
-            logger.info(f"Progress: {matched} matched, {unmatched} unmatched, {errors} errors")
-            if progress_callback:
-                progress_callback(processed, total, "enriching via Spotify…")
+                progress.advance(task)
+                processed += 1
+
+        logger.info(f"Progress: {matched} matched, {unmatched} unmatched, {errors} errors")
+        if progress_callback:
+            progress_callback(processed, total, "enriching via Spotify…")
 
     if progress_callback:
         progress_callback(matched + unmatched + errors, total, "enriching via Spotify…")
 
-    session.commit()
     return matched, unmatched, errors
 
 
 async def run_spotify_enrichment(
-    session: Session,
     client_id: str,
     client_secret: str,
     batch_size: int = 50,
@@ -328,13 +334,14 @@ async def run_spotify_enrichment(
     logger.info("Starting Spotify enrichment pipeline")
     logger.info(f"Rate limit: {requests_per_second} requests/second")
 
-    tracks = get_tracks_to_enrich(
-        session,
-        limit=limit,
-        unattempted_only=unattempted_only,
-        artist=artist,
-        album=album,
-    )
+    with get_session() as session:
+        tracks = get_tracks_to_enrich(
+            session,
+            limit=limit,
+            unattempted_only=unattempted_only,
+            artist=artist,
+            album=album,
+        )
 
     total = len(tracks)
     if not tracks:
@@ -364,7 +371,8 @@ async def run_spotify_enrichment(
             requests_per_second=requests_per_second,
         ) as spotify_client:
             matched, unmatched, errors = await enrich_tracks(
-                session, tracks, spotify_client, progress,
+                tracks, spotify_client, progress,
+                batch_size=max(batch_size, 1),
                 progress_callback=progress_callback,
                 should_cancel=should_cancel,
             )
@@ -382,7 +390,6 @@ async def run_spotify_enrichment(
 
 
 async def run_listenbrainz_enrichment(
-    session: Session,
     batch_size: int = 100,
     limit: int | None = None,
     unattempted_only: bool = False,
@@ -396,13 +403,14 @@ async def run_listenbrainz_enrichment(
     logger.info("Starting ListenBrainz enrichment pipeline")
     logger.info(f"Rate limit: {requests_per_second} requests/second")
 
-    tracks = get_tracks_for_listenbrainz(
-        session,
-        limit=limit,
-        unattempted_only=unattempted_only,
-        artist=artist,
-        album=album,
-    )
+    with get_session() as session:
+        tracks = get_tracks_for_listenbrainz(
+            session,
+            limit=limit,
+            unattempted_only=unattempted_only,
+            artist=artist,
+            album=album,
+        )
     total = len(tracks)
     if not tracks:
         console.print("[yellow]No tracks with MusicBrainz recording IDs to process[/yellow]")
@@ -430,7 +438,6 @@ async def run_listenbrainz_enrichment(
             requests_per_second=requests_per_second
         ) as listenbrainz_client:
             matched, unmatched, errors = await enrich_tracks_with_listenbrainz(
-                session,
                 tracks,
                 listenbrainz_client,
                 progress,
@@ -447,7 +454,6 @@ async def run_listenbrainz_enrichment(
 
 
 async def run_enrichment(
-    session: Session,
     source: str = "spotify",
     client_id: str = "",
     client_secret: str = "",
@@ -464,7 +470,6 @@ async def run_enrichment(
     """Run enrichment for the selected source."""
     if source == "spotify":
         return await run_spotify_enrichment(
-            session=session,
             client_id=client_id,
             client_secret=client_secret,
             batch_size=batch_size,
@@ -479,7 +484,6 @@ async def run_enrichment(
         )
     if source == "listenbrainz":
         return await run_listenbrainz_enrichment(
-            session=session,
             batch_size=batch_size,
             limit=limit,
             unattempted_only=unattempted_only,

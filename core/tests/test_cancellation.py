@@ -1,7 +1,11 @@
-"""Cooperative cancellation tests for the enrichment and import pipelines."""
+"""Cooperative cancellation tests for the enrichment pipeline."""
 
 import asyncio
 
+import musicseed.config as config_module
+import pytest
+from musicseed.config import Config, set_config
+from musicseed.db.session import init_db, reset_engine
 from musicseed.enrichers.pipeline import (
     enrich_tracks,
     enrich_tracks_with_listenbrainz,
@@ -25,24 +29,29 @@ class FakeListenBrainzClient:
         return []
 
 
+class _MatchResult:
+    matched = False
+    spotify_track = None
+
+
 class FakeSpotifyClient:
     def __init__(self):
         self.calls = 0
 
     async def match_track(self, **kwargs):
         self.calls += 1
-        return None
+        return _MatchResult()
 
 
-class FakeSession:
-    def __init__(self):
-        self.commits = 0
-
-    def commit(self):
-        self.commits += 1
-
-    def get(self, *args, **kwargs):
-        return None
+@pytest.fixture(autouse=True)
+def isolated_db(tmp_path):
+    cfg = Config.model_validate({"database": {"path": str(tmp_path / "musicseed.db")}})
+    set_config(cfg)
+    reset_engine()
+    init_db()
+    yield
+    config_module._config = None
+    reset_engine()
 
 
 def test_listenbrainz_cancellation_stops_before_first_batch():
@@ -51,7 +60,7 @@ def test_listenbrainz_cancellation_stops_before_first_batch():
 
     matched, unmatched, errors = asyncio.run(
         enrich_tracks_with_listenbrainz(
-            None, tracks, client, FakeProgress(), 5,
+            tracks, client, FakeProgress(), 5,
             should_cancel=lambda: True,
         )
     )
@@ -62,12 +71,11 @@ def test_listenbrainz_cancellation_stops_before_first_batch():
 
 def test_spotify_cancellation_stops_before_first_track():
     client = FakeSpotifyClient()
-    session = FakeSession()
     tracks = [{"id": i, "title": "t", "artist": "a", "album": None} for i in range(10)]
 
     matched, unmatched, errors = asyncio.run(
         enrich_tracks(
-            session, tracks, client, FakeProgress(),
+            tracks, client, FakeProgress(), batch_size=5,
             should_cancel=lambda: True,
         )
     )
@@ -78,11 +86,33 @@ def test_spotify_cancellation_stops_before_first_track():
 
 def test_spotify_completes_when_not_cancelled():
     client = FakeSpotifyClient()
-    session = FakeSession()
     tracks = [{"id": 1, "title": "t", "artist": "a", "album": None}]
 
-    asyncio.run(
-        enrich_tracks(session, tracks, client, FakeProgress())
+    matched, unmatched, errors = asyncio.run(
+        enrich_tracks(tracks, client, FakeProgress(), batch_size=5)
     )
 
     assert client.calls == 1
+
+
+def test_spotify_opens_one_session_per_batch(monkeypatch):
+    from contextlib import contextmanager
+
+    import musicseed.enrichers.pipeline as pl
+
+    real_get_session = pl.get_session
+    opens = {"n": 0}
+
+    @contextmanager
+    def counting_session():
+        opens["n"] += 1
+        with real_get_session() as session:
+            yield session
+
+    monkeypatch.setattr(pl, "get_session", counting_session)
+    client = FakeSpotifyClient()
+    tracks = [{"id": i, "title": "t", "artist": "a", "album": None} for i in range(5)]
+
+    asyncio.run(enrich_tracks(tracks, client, FakeProgress(), batch_size=2))
+
+    assert opens["n"] == 3  # ceil(5 / 2) sessions — one per batch
