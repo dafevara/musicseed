@@ -76,6 +76,9 @@ def test_recommend_route(monkeypatch):
     assert body["seed_track_ids"] == [1]
     assert body["recommendations"][0]["track_id"] == 1
     assert body["sonic_coverage"]["with_vector"] == 0
+    # The response carries the effective weights so the UI can render
+    # weighted contributions.
+    assert body["weights"]["sonic"] == 0.30
 
 
 def test_sonic_status_route(monkeypatch):

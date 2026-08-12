@@ -71,6 +71,7 @@ def recommend(
         min_score=ms,
         weights=weights,
     )
+    effective_weights = weights or Weights()
     return {
         "seed_track_ids": [t.id for t in result.seed_tracks],
         "recommendations": [
@@ -83,4 +84,5 @@ def recommend(
             for r in result.recommendations
         ],
         "sonic_coverage": result.sonic_coverage.model_dump(),
+        "weights": effective_weights.model_dump(),
     }

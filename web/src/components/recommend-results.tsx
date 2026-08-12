@@ -12,18 +12,28 @@ const DIMENSIONS: { key: keyof ScoreBreakdown; label: string; color: string }[] 
   { key: "novelty", label: "Novelty", color: "#c7692a" },
 ];
 
-function ScoreBar({ breakdown }: { breakdown: ScoreBreakdown }) {
+function ScoreBar({ breakdown, weights }: { breakdown: ScoreBreakdown; weights?: Record<string, number> }) {
+  // Each segment shows the signal's weighted contribution to the total, so the
+  // segments sum to 100% of the total score (matching the scoring arithmetic:
+  // total = sum(component * weight) / sum(weight)).
+  const weighted = DIMENSIONS.map(({ key }) => {
+    const component = breakdown[key] as number;
+    const weight = weights && weights[key] !== undefined ? (weights[key] as number) : 1;
+    return { key, component, weight, share: component * weight };
+  });
+  const denominator = weighted.reduce((sum, d) => sum + d.share, 0) || 1;
+
   return (
     <div className="w-full">
       <div className="flex h-1.5 rounded-sm overflow-hidden bg-[var(--border)]">
-        {DIMENSIONS.map(({ key, color }) => {
-          const pct = breakdown.total > 0 ? (breakdown[key] as number) / breakdown.total * 100 : 0;
+        {weighted.map(({ key, component, weight, share }) => {
+          const pct = (share / denominator) * 100;
           return pct > 0 ? (
             <div
               key={key}
               className="h-full transition-all"
-              style={{ width: `${pct}%`, backgroundColor: color }}
-              title={`${key}: ${((breakdown[key] as number) * 100).toFixed(0)}%`}
+              style={{ width: `${pct}%`, backgroundColor: DIMENSIONS.find((d) => d.key === key)?.color }}
+              title={`${key}: raw ${(component * 100).toFixed(0)}% · weight ${weight} · contribution ${pct.toFixed(0)}%`}
             />
           ) : null;
         })}
@@ -32,7 +42,13 @@ function ScoreBar({ breakdown }: { breakdown: ScoreBreakdown }) {
   );
 }
 
-export function RecommendResults({ items }: { items: RecommendationItem[] }) {
+export function RecommendResults({
+  items,
+  weights,
+}: {
+  items: RecommendationItem[];
+  weights?: Record<string, number>;
+}) {
   if (!items.length) return null;
 
   return (
@@ -52,7 +68,7 @@ export function RecommendResults({ items }: { items: RecommendationItem[] }) {
               <span className="truncate">{rec.title}</span>
             </div>
             <div className="grid grid-cols-[1fr_3.5rem] items-center gap-4">
-              <ScoreBar breakdown={rec.score} />
+              <ScoreBar breakdown={rec.score} weights={weights} />
               <span className="text-sm text-[var(--muted)] text-right tabular-nums">
                 {(rec.score.total * 100).toFixed(0)}%
               </span>

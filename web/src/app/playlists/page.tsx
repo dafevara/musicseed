@@ -24,6 +24,7 @@ export default function PlaylistsPage() {
   const [seeds, setSeeds] = useState<TypeaheadTrack[]>([]);
   const [seedIds, setSeedIds] = useState<number[]>([]);
   const [createPreview, setCreatePreview] = useState<RecommendationItem[] | null>(null);
+  const [createWeights, setCreateWeights] = useState<Record<string, number>>();
   const [previewing, setPreviewing] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createResult, setCreateResult] = useState<string | null>(null);
@@ -72,6 +73,7 @@ export default function PlaylistsPage() {
         limit: 50,
       });
       setCreatePreview(data.recommendations);
+      setCreateWeights(data.weights);
     } catch (e) {
       setCreatePreview(null);
       setCreateResult(`Error: ${String(e).replace("Error: ", "")}`);
@@ -202,7 +204,7 @@ export default function PlaylistsPage() {
                   {createPreview.length} recommended tracks will be added to &ldquo;{newName.trim()}&rdquo;
                   alongside your {seedIds.length} seed{seedIds.length !== 1 ? "s" : ""}.
                 </p>
-                <RecommendResults items={createPreview} />
+                <RecommendResults items={createPreview} weights={createWeights} />
                 <div className="flex gap-2 mt-3">
                   <button
                     className="btn btn-primary"
@@ -274,7 +276,7 @@ export default function PlaylistsPage() {
               {populatePreview.playlist_track_count} tracks currently,{" "}
               {populatePreview.recommendations.length} recommended to add.
             </p>
-            <RecommendResults items={populatePreview.recommendations} />
+            <RecommendResults items={populatePreview.recommendations} weights={populatePreview.weights} />
             <div className="flex gap-2 mt-3">
               <button
                 className="btn btn-primary"

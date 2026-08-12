@@ -74,6 +74,7 @@ def preview_populate(
         "playlist_name": result.playlist_name,
         "playlist_track_count": result.playlist_track_count,
         "matched_track_count": result.matched_track_count,
+        "weights": (weights or Weights()).model_dump(),
         "recommendations": [
             {
                 "track_id": r.track.id,

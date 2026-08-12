@@ -120,11 +120,13 @@ export interface RecommendResponse {
   seed_track_ids: number[];
   recommendations: RecommendationItem[];
   sonic_coverage?: { candidates: number; with_vector: number };
+  weights?: Record<string, number>;
 }
 
 export interface PopulatePreview {
   playlist_name: string;
   playlist_track_count: number;
   matched_track_count: number;
+  weights?: Record<string, number>;
   recommendations: RecommendationItem[];
 }

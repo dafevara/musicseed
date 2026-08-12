@@ -23,6 +23,7 @@ export default function RecommendPage() {
   const [seedIds, setSeedIds] = useState<number[]>([]);
   const [results, setResults] = useState<RecommendationItem[]>([]);
   const [sonicCoverage, setSonicCoverage] = useState<{ candidates: number; with_vector: number } | null>(null);
+  const [respWeights, setRespWeights] = useState<Record<string, number>>();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -98,6 +99,7 @@ export default function RecommendPage() {
         const data = await api.post<RecommendResponse>("/recommend", body);
         setResults(data.recommendations);
         setSonicCoverage(data.sonic_coverage ?? null);
+        setRespWeights(data.weights);
         setError(null);
       } catch (e) {
         setError(String(e));
@@ -259,7 +261,7 @@ export default function RecommendPage() {
         </div>
       )}
 
-      <RecommendResults items={results} />
+      <RecommendResults items={results} weights={respWeights} />
     </>
   );
 }
