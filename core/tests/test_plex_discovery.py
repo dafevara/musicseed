@@ -2,6 +2,7 @@
 
 import socket
 
+import httpx
 import pytest
 from musicseed.services import plex_discovery
 from musicseed.services.plex_discovery import discover_plex_servers
@@ -27,6 +28,44 @@ SSDP_REPLY = (
     "USN: uuid:abc::urn:plex-com:service:pms:1\r\n"
     "\r\n"
 ).encode()
+
+ACCOUNT_RESOURCES = [
+    {
+        "name": "Caladan",
+        "product": "Plex Media Server",
+        "productVersion": "1.43.3.10828",
+        "clientIdentifier": "3309a4b35976865b17593c74cb3f5b447c520cbf",
+        "provides": "server",
+        "Connection": [
+            {
+                "protocol": "http", "address": "192.168.80.10", "port": 32400,
+                "local": "1", "relay": "0",
+            },
+            {
+                "protocol": "http", "address": "203.0.113.5", "port": 32400,
+                "local": "0", "relay": "0",
+            },
+        ],
+    },
+    {
+        "name": "Garage",
+        "product": "Plex Media Server",
+        "productVersion": "1.40.5.8897",
+        "clientIdentifier": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "provides": "server",
+        "Connection": [
+            {
+                "protocol": "http", "address": "192.168.1.50", "port": 32400,
+                "local": "0", "relay": "0",
+            },
+        ],
+    },
+    {
+        "name": "Roku TV",
+        "provides": "client,player",
+        "Connection": [{"protocol": "http", "address": "192.168.80.99", "port": 8324}],
+    },
+]
 
 
 class FakeSocket:
@@ -110,3 +149,59 @@ def test_discover_sends_both_probes(monkeypatch: pytest.MonkeyPatch) -> None:
     targets = {target for _, target in sock.sent}
     assert ("239.0.0.250", 32414) in targets
     assert ("239.255.255.250", 1900) in targets
+
+
+# ---------------------------------------------------------------- account
+
+
+def test_account_discovery_parses_servers(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        plex_discovery.httpx, "get",
+        lambda *a, **k: httpx.Response(
+            200, json=ACCOUNT_RESOURCES,
+            request=httpx.Request("GET", plex_discovery.PLEX_TV_RESOURCES_URL),
+        ),
+    )
+    servers = plex_discovery.discover_plex_account_servers("tok")
+    assert [s.name for s in servers] == ["Caladan", "Garage"]
+    caladan = servers[0]
+    assert caladan.host == "192.168.80.10"  # prefers local=1 connection
+    assert caladan.port == 32400
+    assert caladan.version == "1.43.3.10828"
+    assert caladan.machine_identifier == "3309a4b35976865b17593c74cb3f5b447c520cbf"
+    assert servers[1].host == "192.168.1.50"
+
+
+def test_account_discovery_no_token_returns_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    called = []
+    monkeypatch.setattr(
+        plex_discovery.httpx, "get",
+        lambda *a, **k: called.append(True) or httpx.Response(200, json=[]),
+    )
+    assert plex_discovery.discover_plex_account_servers("") == []
+    assert called == []
+
+
+def test_account_discovery_error_returns_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _raise(*a, **k):
+        raise httpx.ConnectError("offline")
+
+    monkeypatch.setattr(plex_discovery.httpx, "get", _raise)
+    assert plex_discovery.discover_plex_account_servers("tok") == []
+
+
+def test_discover_merges_local_and_account(monkeypatch: pytest.MonkeyPatch) -> None:
+    replies = [(GDM_REPLY, ("192.168.80.10", 32414))]
+    monkeypatch.setattr(
+        plex_discovery, "_open_discovery_socket", lambda: FakeSocket(replies)
+    )
+    monkeypatch.setattr(
+        plex_discovery.httpx, "get",
+        lambda *a, **k: httpx.Response(
+            200, json=ACCOUNT_RESOURCES,
+            request=httpx.Request("GET", plex_discovery.PLEX_TV_RESOURCES_URL),
+        ),
+    )
+    servers = discover_plex_servers(timeout=1.0, token="tok")
+    # Caladan found locally (GDM) and via account — deduped to one; Garage added.
+    assert [s.host for s in servers] == ["192.168.1.50", "192.168.80.10"]

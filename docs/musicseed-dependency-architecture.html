@@ -121,8 +121,9 @@ so publishing MusicSeed as open source means a new user needs as little as possi
   plus Node for the optional web UI; six core packages, two CLI packages, three API packages,
   and a Next.js + React web app — one SQLite file (created automatically), and read access to
   two Plex SQLite databases. Local-network Plex discovery (GDM + SSDP) is stdlib
-  <code>socket</code> only — no extra dependency. That's the whole thing — no server, no
-  containers, no native ML libraries.
+  <code>socket</code> only; servers on other subnets are found through the optional
+  <code>plex.tv/api/resources</code> account lookup (httpx, needs a Plex token). That's the
+  whole thing — no server, no containers, no native ML libraries.
 </div>
 
 <!-- ============================ BIG PICTURE ============================ -->
@@ -444,7 +445,7 @@ so publishing MusicSeed as open source means a new user needs as little as possi
   <thead><tr><th>Gap</th><th>Notes</th></tr></thead>
   <tbody>
     <tr><td>PyPI packaging</td><td>core + cli + web are separate distributions joined by editable paths; decide on one combined package or publish them all.</td></tr>
-    <tr><td>Plex DB discovery</td><td>Server discovery is solved (GDM/SSDP over stdlib socket); the on-disk <code>db_path</code> defaults are still macOS-specific, so Linux/Windows paths need documenting or auto-detection.</td></tr>
+    <tr><td>Plex DB discovery</td><td>Server discovery is solved (GDM/SSDP over stdlib socket for the local subnet; <code>plex.tv/api/resources</code> for other subnets when a token is set); the on-disk <code>db_path</code> defaults are still macOS-specific, so Linux/Windows paths need documenting or auto-detection.</td></tr>
     <tr><td>Sonic analysis coverage</td><td>Recommendation quality depends on Plex having analyzed the library; <code>sonic-probe</code> reports coverage, <code>sonic-refresh</code> triggers the Butler task.</td></tr>
   </tbody>
 </table>

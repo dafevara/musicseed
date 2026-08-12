@@ -161,7 +161,13 @@ def test_apply_config_and_init_db_initializes(tmp_path, monkeypatch):
 def test_run_plex_discovery_delegates(monkeypatch):
     import musicseed_api.handlers.discovery as discovery_handlers
 
-    monkeypatch.setattr(
-        discovery_handlers, "discover_plex_servers", lambda timeout: "servers"
-    )
+    captured = {}
+
+    def fake_discover(timeout, token):
+        captured["token"] = token
+        return "servers"
+
+    monkeypatch.setattr(discovery_handlers, "discover_plex_servers", fake_discover)
     assert discovery_handlers.run_plex_discovery() == "servers"
+    # conftest config has no plex token.
+    assert captured["token"] == ""

@@ -39,10 +39,12 @@ Service entry points:
   is keyless), `missing_inputs` (machine-readable keys like `plex_token`, `spotify_credentials`,
   `plex_unreachable`, `db_location`), and a derived `first_run` status (`no_config` /
   `db_missing` / `library_empty`; no persisted flag). The setup wizard / dashboard consume this.
-- `services/plex_discovery.py`: `discover_plex_servers` — passive, read-only local-network
-  Plex discovery (GDM multicast on `239.0.0.250:32414` + SSDP fallback on `239.255.255.250:1900`,
-  stdlib `socket` only). Returns `list[DiscoveredPlexServer]` (empty when nothing responds,
-  never raises). A separate, opt-in probe — not part of `discovery.discover()`. The first-run
+- `services/plex_discovery.py`: `discover_plex_servers` — passive, read-only Plex discovery.
+  Local network via GDM multicast (`239.0.0.250:32414`) + SSDP fallback
+  (`239.255.255.250:1900`, stdlib `socket` only), plus — when a Plex token is supplied —
+  cross-subnet discovery via `plex.tv/api/resources` (httpx). Returns
+  `list[DiscoveredPlexServer]` deduplicated by address (empty when nothing responds, never
+  raises). A separate, opt-in probe — not part of `discovery.discover()`. The first-run
   wizard consumes it.
 - `services/enrichment.py`: `enrich_tracks` (**calls `asyncio.run()` internally — never call it
   from inside a running event loop; offload to a thread**).

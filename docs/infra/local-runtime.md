@@ -62,9 +62,10 @@ proxying `/api/*` to the API.
 - **Settings** (`/settings`): a persistent view for Plex URL/token/library, the Plex database
   path, the MusicSeed database path, and Spotify credentials. Saving persists config without
   starting any import, enrichment, or database initialization.
-- **Plex discovery**: passive, read-only, stdlib-only. GDM multicast on `239.0.0.250:32414`
-  with an SSDP fallback on `239.255.255.250:1900` (`urn:plex-com:service:pms:1`). No extra
-  dependency.
+- **Plex discovery**: local-network discovery is passive and read-only — GDM multicast on
+  `239.0.0.250:32414` with an SSDP fallback on `239.255.255.250:1900`
+  (`urn:plex-com:service:pms:1`), stdlib-only. Multicast never crosses routers, so servers on
+  other subnets are found via `plex.tv/api/resources` when a Plex token is configured.
 
 Relevant API routes: `GET /discovery`, `GET /discovery/plex-servers`,
 `POST /discovery/check`, `POST /discovery/config` (save-only), `POST /discovery/init-db`.

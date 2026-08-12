@@ -1,19 +1,17 @@
-"""Local-network Plex server discovery (GDM + SSDP).
+"""Plex server discovery — local network (GDM + SSDP) and account (plex.tv).
 
-Passive, read-only discovery of Plex Media Servers on the local network. Two
-probes are used, both stdlib ``socket`` only (no zeroconf/upnpclient):
+Two independent, read-only discovery paths feed one result list:
 
-* **GDM** ("Good Day Mate") — Plex's own multicast protocol on
-  ``239.0.0.250:32414``. A single ``M-SEARCH`` datagram makes every server on
-  the subnet reply with its friendly name, port, product, version, and machine
-  identifier.
-* **SSDP** fallback — a UPnP ``M-SEARCH`` on ``239.255.255.250:1900`` for
-  ``urn:plex-com:service:pms:1``. Responses carry ``LOCATION`` (host/port) and
-  ``SERVER`` (version); the friendly name is not advertised, so it falls back
-  to the host.
+* **Local network** — GDM ("Good Day Mate") multicast on ``239.0.0.250:32414``
+  with an SSDP fallback on ``239.255.255.250:1900``. Both use stdlib ``socket``
+  only and find servers on the *same subnet* (multicast never crosses a
+  router). GDM replies carry the friendly name, port, product, version, and
+  machine identifier.
+* **Account** — ``plex.tv/api/resources`` lists every server linked to the
+  user's Plex account, including servers on *other subnets* that multicast
+  cannot reach. Requires a Plex token and internet access.
 
-Both probes are strictly read-only: they send one discovery datagram and parse
-unicast replies. No token is read, stored, or returned.
+Both paths are strictly read-only and never store or return a token.
 
 This is a deliberately separate, opt-in probe — it is *not* folded into
 ``services.discovery.discover()``, which runs on frequent dashboard polls and
@@ -27,6 +25,7 @@ import socket
 import time
 from urllib.parse import urlparse
 
+import httpx
 from pydantic import BaseModel
 
 GDM_GROUP = ("239.0.0.250", 32414)
@@ -42,11 +41,13 @@ SSDP_REQUEST = (
     "\r\n"
 )
 
+PLEX_TV_RESOURCES_URL = "https://plex.tv/api/resources"
+
 _SSDP_SERVER_VERSION = re.compile(r"Plex Media Server/([\d.]+)")
 
 
 class DiscoveredPlexServer(BaseModel):
-    """One Plex server discovered on the local network."""
+    """One Plex server discovered on the local network or the Plex account."""
 
     model_config = {"frozen": True}
 
@@ -149,14 +150,15 @@ def _parse_response(data: bytes, addr: tuple[str, int]) -> DiscoveredPlexServer 
     return None
 
 
-def discover_plex_servers(timeout: float = 3.0) -> list[DiscoveredPlexServer]:
-    """Discover Plex servers on the local network.
+def _server_key(server: DiscoveredPlexServer) -> tuple[str, str, int]:
+    """Identity used to deduplicate servers across discovery paths."""
+    return (server.scheme, server.host, server.port)
 
-    Sends one GDM probe and one SSDP probe, then listens for replies until
-    ``timeout`` elapses. Returns an empty list when nothing responds; never
-    raises on network errors.
-    """
-    servers: dict[tuple[str, str, int], DiscoveredPlexServer] = {}
+
+def _discover_local_servers(
+    servers: dict[tuple[str, str, int], DiscoveredPlexServer], timeout: float
+) -> None:
+    """Populate ``servers`` with same-subnet GDM/SSDP replies (in place)."""
     sock = _open_discovery_socket()
     try:
         for target, payload in ((GDM_GROUP, GDM_REQUEST), (SSDP_GROUP, SSDP_REQUEST)):
@@ -178,10 +180,90 @@ def discover_plex_servers(timeout: float = 3.0) -> list[DiscoveredPlexServer]:
             server = _parse_response(data, addr)
             if server is None:
                 continue
-            key = (server.machine_identifier or "", server.host, server.port)
-            servers.setdefault(key, server)
+            servers.setdefault(_server_key(server), server)
     finally:
         sock.close()
+
+
+def _pick_connection(connections: list[dict]) -> dict | None:
+    """Choose the best reachable address for a server (local, then non-relay)."""
+    if not connections:
+        return None
+    for conn in connections:
+        if str(conn.get("local")) == "1" and str(conn.get("relay")) != "1":
+            return conn
+    for conn in connections:
+        if str(conn.get("relay")) != "1":
+            return conn
+    return connections[0]
+
+
+def discover_plex_account_servers(
+    token: str, timeout: float = 5.0
+) -> list[DiscoveredPlexServer]:
+    """Discover servers linked to the Plex account via ``plex.tv/api/resources``.
+
+    Requires a Plex token and internet access. Returns an empty list (never
+    raises) when the token is missing or the call fails — e.g. offline,
+    invalid token, or no servers on the account.
+    """
+    if not token:
+        return []
+    try:
+        resp = httpx.get(
+            PLEX_TV_RESOURCES_URL,
+            headers={"X-Plex-Token": token, "Accept": "application/json"},
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        devices = resp.json()
+    except (httpx.HTTPError, ValueError):
+        return []
+
+    servers: list[DiscoveredPlexServer] = []
+    for device in devices:
+        if not isinstance(device, dict):
+            continue
+        if "server" not in (device.get("provides") or "").split(","):
+            continue
+        conn = _pick_connection(device.get("Connection") or [])
+        if conn is None:
+            continue
+        address = str(conn.get("address") or "").strip()
+        if not address:
+            continue
+        try:
+            port = int(conn.get("port") or 32400)
+        except (TypeError, ValueError):
+            port = 32400
+        servers.append(
+            DiscoveredPlexServer(
+                name=device.get("name") or address,
+                host=address,
+                port=port,
+                product=device.get("product") or "Plex Media Server",
+                version=device.get("productVersion"),
+                machine_identifier=device.get("clientIdentifier"),
+                scheme=conn.get("protocol") or "http",
+            )
+        )
+    return servers
+
+
+def discover_plex_servers(
+    timeout: float = 3.0, token: str | None = None
+) -> list[DiscoveredPlexServer]:
+    """Discover Plex servers — local subnet via GDM/SSDP, plus the account.
+
+    With ``token`` set, also queries ``plex.tv/api/resources`` so servers on
+    other subnets (invisible to multicast) are included. Results are deduplicated
+    by address. Returns an empty list when nothing responds; never raises.
+    """
+    servers: dict[tuple[str, str, int], DiscoveredPlexServer] = {}
+    _discover_local_servers(servers, timeout)
+    if token:
+        for server in discover_plex_account_servers(token, timeout=timeout):
+            servers.setdefault(_server_key(server), server)
 
     return sorted(
         servers.values(), key=lambda s: (s.host, s.port, s.name)

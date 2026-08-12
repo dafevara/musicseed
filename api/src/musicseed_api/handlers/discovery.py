@@ -39,11 +39,14 @@ def run_discovery(**overrides: str) -> DiscoveryResult:
 
 
 def run_plex_discovery(timeout: float = 3.0) -> list[DiscoveredPlexServer]:
-    """Discover Plex servers on the local network (passive GDM + SSDP).
+    """Discover Plex servers: local subnet via GDM/SSDP, plus the Plex account.
 
-    This is a separate, opt-in probe — it never runs as part of ``discover()``.
+    Uses the configured Plex token so servers on other subnets (invisible to
+    multicast) are included when credentials exist. This is a separate, opt-in
+    probe — it never runs as part of ``discover()``.
     """
-    return discover_plex_servers(timeout=timeout)
+    token = get_config().plex.token
+    return discover_plex_servers(timeout=timeout, token=token)
 
 
 def extract_overrides(**raw: str) -> tuple[dict[str, str], dict[str, str]]:
