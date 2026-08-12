@@ -23,8 +23,14 @@ class DashboardSnapshot(BaseModel):
         return self.library.track_count > 0
 
 
-def get_dashboard() -> DashboardSnapshot:
-    discovery_result = discover(check_server=True)
+def get_dashboard(check_server: bool = False) -> DashboardSnapshot:
+    """Aggregate a dashboard snapshot.
+
+    ``check_server`` gates the live Plex HTTP probe inside discovery. It
+    defaults to False so frequent dashboard polls never touch Plex; the
+    caller (a web surface) fetches the full probe separately and less often.
+    """
+    discovery_result = discover(check_server=check_server)
     try:
         library = get_status()
     except Exception:

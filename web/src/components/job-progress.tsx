@@ -29,7 +29,10 @@ export function JobProgress({
 
   useEffect(() => {
     poll();
-    const iv = setInterval(poll, 2000);
+    const tick = () => {
+      if (document.visibilityState === "visible") poll();
+    };
+    const iv = setInterval(tick, 2000);
     return () => clearInterval(iv);
   }, [poll]);
 

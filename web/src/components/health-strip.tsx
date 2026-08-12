@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import type { DashboardSnapshot, JobSummary } from "@/lib/types";
+import type { DashboardSnapshot, JobSummary, PlexServerCheck } from "@/lib/types";
 
 interface SonicStatus {
   total_tracks: number;
@@ -105,14 +105,16 @@ export function HealthStrip({
   activeJobs,
   onEnrich,
   onSonicRefresh,
+  plexServer,
 }: {
   snapshot: DashboardSnapshot;
   activeJobs: JobSummary[];
   onEnrich: () => void;
   onSonicRefresh: () => void | Promise<void>;
+  plexServer?: PlexServerCheck | null;
 }) {
   const { library: lib, discovery } = snapshot;
-  const plex = discovery.plex_server;
+  const plex = plexServer ?? discovery.plex_server;
   const tracks = lib.track_count;
   const enrichment = lib.enrichment;
 

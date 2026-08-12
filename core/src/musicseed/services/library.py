@@ -13,6 +13,8 @@ from musicseed.exceptions import NotFoundError
 from musicseed.importers.plex import import_from_plex
 from musicseed.sonic import get_sonic_vectors
 
+_sonic_count_cache: tuple[tuple[str, int, int], int] | None = None
+
 
 class EnrichmentCoverage(BaseModel):
     tracks_with_mbid: int
@@ -89,13 +91,20 @@ def import_library(
     return ImportResult(**result)
 
 
-def _count_tracks_with_sonic(session) -> int:
+def _count_tracks_with_sonic(session, track_count: int) -> int:
     """Count local tracks Plex currently has a sonic vector for.
 
     Returns 0 rather than raising when Plex's databases are unavailable, so
     status still renders the rest of the library.
+
+    The count is cached by ``(db_path, track_count, vector_count)``: it only
+    changes when tracks are imported (track_count changes) or Plex analyzes
+    more items (vector count changes), so the full ``tracks.plex_id`` scan is
+    avoided on repeat dashboard polls.
     """
     from musicseed.db.models import Track
+
+    global _sonic_count_cache
 
     try:
         vectors = get_sonic_vectors()
@@ -103,11 +112,18 @@ def _count_tracks_with_sonic(session) -> int:
         return 0
 
     plex_ids = vectors.plex_ids
-    return sum(
-        1
-        for (plex_id,) in session.query(Track.plex_id).filter(Track.plex_id.isnot(None))
-        if plex_id in plex_ids
-    )
+    db_key = str(get_config().database.path_expanded)
+    cache_key = (db_key, track_count, len(plex_ids))
+    if _sonic_count_cache is not None and _sonic_count_cache[0] == cache_key:
+        return _sonic_count_cache[1]
+
+    track_plex_ids = {
+        row[0]
+        for row in session.query(Track.plex_id).filter(Track.plex_id.isnot(None))
+    }
+    count = len(plex_ids & track_plex_ids)
+    _sonic_count_cache = (cache_key, count)
+    return count
 
 
 def get_status() -> LibraryStatus:
@@ -128,7 +144,7 @@ def get_status() -> LibraryStatus:
         tracks_with_mbid = session.query(Track).filter(Track.mbid.isnot(None)).count()
         tracks_with_spotify = session.query(Track).filter(Track.spotify_id.isnot(None)).count()
         spotify_attempted = session.query(Track).filter(Track.spotify_matched.is_(True)).count()
-        tracks_with_sonic = _count_tracks_with_sonic(session)
+        tracks_with_sonic = _count_tracks_with_sonic(session, track_count)
         tracks_with_listenbrainz = (
             session.query(Track)
             .filter(

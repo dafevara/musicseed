@@ -3,13 +3,14 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
-import type { DashboardSnapshot, DiscoveryResponse, JobSummary } from "@/lib/types";
+import type { DashboardSnapshot, DiscoveryResponse, JobSummary, PlexServerCheck } from "@/lib/types";
 import { HealthStrip } from "@/components/health-strip";
 import { JobList } from "@/components/job-list";
 
 export default function DashboardPage() {
   const router = useRouter();
   const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(null);
+  const [plexServer, setPlexServer] = useState<PlexServerCheck | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
 
@@ -24,22 +25,45 @@ export default function DashboardPage() {
     }
   }, []);
 
+  const fetchPlex = useCallback(async () => {
+    try {
+      const d = await api.get<DiscoveryResponse>("/discovery");
+      setPlexServer(d.result.plex_server);
+    } catch {
+      // ignore — snapshot fallback still renders
+    }
+  }, []);
+
   useEffect(() => {
     api.get<DiscoveryResponse>("/discovery").then((d) => {
       if (!d.result.musicseed_db.exists) {
         router.replace("/setup");
         return;
       }
+      setPlexServer(d.result.plex_server);
       fetchSnapshot();
     }).catch(() => setLoading(false));
   }, [router, fetchSnapshot]);
 
-  // Poll while jobs are active
+  // Poll while jobs are active, skipping when the tab is hidden.
   useEffect(() => {
     if (!snapshot?.active_jobs.length) return;
-    const iv = setInterval(fetchSnapshot, 5000);
+    const tick = () => {
+      if (document.visibilityState === "visible") fetchSnapshot();
+    };
+    const iv = setInterval(tick, 5000);
     return () => clearInterval(iv);
   }, [snapshot?.active_jobs.length, fetchSnapshot]);
+
+  // Re-probe Plex occasionally (not on every poll) and on window focus.
+  useEffect(() => {
+    fetchPlex();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") fetchPlex();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [fetchPlex]);
 
   async function handleSync() {
     setSyncing(true);
@@ -96,6 +120,7 @@ export default function DashboardPage() {
         activeJobs={snapshot.active_jobs}
         onEnrich={handleEnrich}
         onSonicRefresh={handleSonicRefresh}
+        plexServer={plexServer}
       />
 
       <section className="panel">
