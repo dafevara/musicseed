@@ -29,7 +29,7 @@ runs from source on the owner's machine against the owner's Plex library.
 ## Requirements
 
 - macOS on Apple Silicon (run from source; no packaged installer yet)
-- Python 3.14+ and [uv](https://docs.astral.sh/uv/)
+- Python 3.12+ and [uv](https://docs.astral.sh/uv/)
 - Node.js and npm (for the web UI only)
 - Plex Media Server with a music library (ideally already sonically analyzed)
 - Optional Spotify API credentials for fallback enrichment

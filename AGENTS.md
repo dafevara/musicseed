@@ -12,7 +12,7 @@ rules, then routes you to the app you're working in. **Read the per-app `AGENTS.
 
 - Product: generate Plex playlists from seed tracks using local library metadata, popularity
   enrichment, Plex sonic analysis vectors (read at query time), and play history.
-- Runtime: Python 3.14+, SQLAlchemy, SQLite (one local file), uv. Typer/Rich in the CLI.
+- Runtime: Python 3.12+, SQLAlchemy, SQLite (one local file), uv. Typer/Rich in the CLI.
 - Platform: macOS on Apple Silicon, run from source.
 - Recommendation signals (six): sonic, popularity, style, genre, era, novelty.
 

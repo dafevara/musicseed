@@ -6,7 +6,7 @@ actions.
 
 ## Runtime Pieces
 
-- Python 3.14+ packages under `core/src/musicseed` (library), `cli/src/musicseed_cli` (CLI), and
+- Python 3.12+ packages under `core/src/musicseed` (library), `cli/src/musicseed_cli` (CLI), and
   `api/src/musicseed_api` (REST API).
 - A Next.js + React + TypeScript web UI under `web/` (client-rendered SPA) that talks to the API
   over HTTP.
