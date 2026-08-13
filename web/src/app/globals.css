@@ -314,3 +314,53 @@ code {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* ── Help icon / popover ─────────────────────── */
+.help-anchor {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+}
+.help-icon {
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.help-icon:hover,
+.help-icon[aria-expanded="true"] {
+  color: var(--fg);
+  border-color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 10%, transparent);
+}
+.help-popover {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  right: 0;
+  width: max-content;
+  max-width: min(20rem, 80vw);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  padding: 0.6rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: normal;
+  line-height: 1.5;
+  color: var(--fg);
+  text-align: left;
+  white-space: normal;
+}

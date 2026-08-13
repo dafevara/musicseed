@@ -6,6 +6,7 @@ import type { DiscoveryResponse, LibraryStatus } from "@/lib/types";
 import { DiscoveryChecks } from "@/components/discovery-checks";
 import { SetupForm } from "@/components/setup-form";
 import { PlexServerPicker } from "@/components/plex-server-picker";
+import { HelpIcon } from "@/components/help-icon";
 import { JobProgress } from "@/components/job-progress";
 
 type Step = "detect" | "review" | "importing" | "enriching" | "done";
@@ -181,12 +182,21 @@ export default function SetupPage() {
             </div>
           ) : (
             <div className="flash flash-warn mt-3">
-              {plex.reason === "unreachable"
-                ? "Plex isn't responding. Make sure Plex Media Server is running, then scan again."
-                : plex.reason === "missing_token"
-                  ? "Plex is running but requires a token and none could be found locally. Continue to enter one — or get it by signing in at app.plex.tv/desktop and finding the X-Plex-Token header in your browser's developer tools."
-                  : plex.detail ||
-                    "Plex needs attention before continuing. You can finish the remaining details on the next step."}
+              {plex.reason === "unreachable" &&
+                "Plex isn't responding. Make sure Plex Media Server is running, then scan again."}
+              {plex.reason === "missing_token" && (
+                <>
+                  Plex requires a token and none was found on this machine.{" "}
+                  <HelpIcon>
+                    Sign in at app.plex.tv/desktop, open your browser&apos;s developer tools
+                    (Network tab), load any library, find a request with an X-Plex-Token
+                    header, and copy its value — then paste it in Settings.
+                  </HelpIcon>
+                </>
+              )}
+              {plex.reason !== "unreachable" &&
+                plex.reason !== "missing_token" &&
+                (plex.detail || "Plex needs attention before continuing.")}
             </div>
           )}
 
