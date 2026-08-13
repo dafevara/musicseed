@@ -72,63 +72,88 @@ export function DiscoveryChecks({
         {/* MusicSeed DB */}
         <li className="flex flex-wrap items-baseline gap-x-1.5">
           <StatusBadge ok={dbOk} /> <strong>MusicSeed database</strong>
-          {!dbOk && (
-            <span className="text-[var(--muted)] text-sm">
-              {SHORT_REASON[musicseed_db.reason] || ""}
-            </span>
+          {dbOk ? (
+            <>
+              <code>{musicseed_db.path}</code>{" "}
+              <span className="text-[var(--muted)] text-sm">({musicseed_db.source})</span>
+              {!musicseed_db.exists && (
+                <span className="text-[var(--muted)] text-sm">(will be created)</span>
+              )}
+            </>
+          ) : (
+            <>
+              <span className="text-[var(--muted)] text-sm">
+                {SHORT_REASON[musicseed_db.reason] || ""}
+              </span>
+              <HelpIcon>
+                {musicseed_db.detail} Fix the permissions or choose a different location in
+                Settings.
+              </HelpIcon>
+            </>
           )}
-          <HelpIcon>
-            {`${musicseed_db.path} (${musicseed_db.source})`}
-            {dbOk && !musicseed_db.exists ? " Will be created when you confirm." : ""}
-            {!dbOk
-              ? ` ${musicseed_db.detail || ""} Fix the permissions or choose a different location in Settings.`
-              : ""}
-          </HelpIcon>
         </li>
 
         {/* Plex library DB */}
         <li className="flex flex-wrap items-baseline gap-x-1.5">
           <StatusBadge ok={plex_library_db.ok} /> <strong>Plex library database</strong>
-          {!plex_library_db.ok && (
-            <span className="text-[var(--muted)] text-sm">
-              {SHORT_REASON[plex_library_db.candidates[0]?.reason || ""] || "missing"}
-            </span>
+          {plex_library_db.selected ? (
+            <>
+              <code>{plex_library_db.selected.path}</code>{" "}
+              <span className="text-[var(--muted)] text-sm">({plex_library_db.selected.source})</span>
+            </>
+          ) : (
+            <>
+              <span className="text-[var(--muted)] text-sm">
+                {SHORT_REASON[plex_library_db.candidates[0]?.reason || ""] || "missing"}
+              </span>
+              <HelpIcon>
+                {dbGuidance(plex_library_db.candidates[0]?.reason, plex_library_db.candidates[0]?.detail)}
+              </HelpIcon>
+            </>
           )}
-          <HelpIcon>
-            {plex_library_db.selected
-              ? `${plex_library_db.selected.path} (${plex_library_db.selected.source})`
-              : dbGuidance(plex_library_db.candidates[0]?.reason, plex_library_db.candidates[0]?.detail)}
-          </HelpIcon>
         </li>
 
         {/* Plex blobs DB */}
         <li className="flex flex-wrap items-baseline gap-x-1.5">
           <StatusBadge ok={plex_blobs_db.ok} /> <strong>Plex blobs database</strong>
-          {!plex_blobs_db.ok && (
-            <span className="text-[var(--muted)] text-sm">
-              {SHORT_REASON[plex_blobs_db.candidates[0]?.reason || ""] || "missing"}
-            </span>
+          {plex_blobs_db.selected ? (
+            <>
+              <code>{plex_blobs_db.selected.path}</code>{" "}
+              <span className="text-[var(--muted)] text-sm">({plex_blobs_db.selected.source})</span>
+            </>
+          ) : (
+            <>
+              <span className="text-[var(--muted)] text-sm">
+                {SHORT_REASON[plex_blobs_db.candidates[0]?.reason || ""] || "missing"}
+              </span>
+              <HelpIcon>
+                {dbGuidance(plex_blobs_db.candidates[0]?.reason, plex_blobs_db.candidates[0]?.detail)}{" "}
+                It normally sits next to the library database with a{" "}
+                <code>.blobs.db</code> suffix.
+              </HelpIcon>
+            </>
           )}
-          <HelpIcon>
-            {plex_blobs_db.selected
-              ? `${plex_blobs_db.selected.path} (${plex_blobs_db.selected.source}). Holds Plex's sonic analysis vectors.`
-              : `${dbGuidance(plex_blobs_db.candidates[0]?.reason, plex_blobs_db.candidates[0]?.detail)} It normally sits next to the library database with a .blobs.db suffix.`}
-          </HelpIcon>
         </li>
 
         {/* Plex server */}
         <li className="flex flex-wrap items-baseline gap-x-1.5">
           <StatusBadge ok={plex_server.ok} /> <strong>Plex server</strong>
-          {!plex_server.ok && (
-            <span className="text-[var(--muted)] text-sm">
-              {SHORT_REASON[plex_server.reason || ""] || ""}
-            </span>
+          {plex_server.ok ? (
+            <>
+              <code>{plex_server.url}</code>{" "}
+              <span className="text-[var(--muted)] text-sm">({plex_server.source})</span>
+              <span className="text-[var(--muted)] text-sm">
+                Plex {plex_server.server_version} &middot; &ldquo;{plex_server.library}&rdquo;
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="text-[var(--muted)] text-sm">
+                {SHORT_REASON[plex_server.reason || ""] || ""}
+              </span>
+              <HelpIcon>{plexGuidance(plex_server.reason, plex_server.detail)}</HelpIcon>
+            </>
           )}
-          <HelpIcon>
-            {plex_server.ok
-              ? `${plex_server.url} — Plex ${plex_server.server_version}, library "${plex_server.library}".`
-              : plexGuidance(plex_server.reason, plex_server.detail)}
-          </HelpIcon>
         </li>
       </ul>
     </section>
