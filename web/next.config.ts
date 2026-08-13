@@ -1,9 +1,15 @@
 import type { NextConfig } from "next";
 
+const exporting = process.env.NEXT_OUTPUT === "export";
+
 const nextConfig: NextConfig = {
   outputFileTracingRoot: __dirname,
-  // Proxy /api to the MusicSeed API backend
-  async rewrites() {
+  trailingSlash: true,
+  ...(exporting ? { output: "export" as const } : {}),
+};
+
+if (!exporting) {
+  nextConfig.rewrites = async () => {
     const apiUrl = process.env.API_URL ?? "http://127.0.0.1:8789";
     return [
       {
@@ -11,7 +17,7 @@ const nextConfig: NextConfig = {
         destination: `${apiUrl}/:path*`,
       },
     ];
-  },
-};
+  };
+}
 
 export default nextConfig;

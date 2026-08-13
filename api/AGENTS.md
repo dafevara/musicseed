@@ -19,9 +19,9 @@ for the logic this app calls. This file covers the API app only.
   (`musicseed-core = { path = "../core", editable = true }`). No dependency on `musicseed-web`
   or `musicseed-cli` — the web surface consumes this API over HTTP.
 - Own `pyproject.toml` + `uv.lock` + `.venv`. Run `uv` commands from inside `api/`.
-- Started standalone via `uv run uvicorn musicseed_api.app:app` (port 8000) or the
-  `musicseed-api` script entry point (port 8789). The Next.js web surface is a separate
-  process that proxies `/api/*` to this server in development (see `web/AGENTS.md`).
+- Started standalone via `uv run uvicorn musicseed_api.app:app` (unprefixed JSON) or the
+  `musicseed-api` script entry point (port 8789). The script serves JSON at `/api` and, when
+  `web/out/` exists, the static UI at `/`. Contributor hot reload still uses `./scripts/dev.sh`.
 
 ## Architecture: the `handlers/` seam
 
@@ -68,9 +68,9 @@ JSON. Handlers are the reusable part — routes are the HTTP-specific projection
   modules and registers the central exception handlers (the single error contract mapping
   typed core exceptions to HTTP status codes). The module-level `app = create_app()` is the
   ASGI entry point (`musicseed_api.app:app`); keep it importable.
-- `src/musicseed_api/server.py`: **public server entry point** — `serve(host, port, on_started)`
-  wraps uvicorn programmatically. `main()` is the `musicseed-api` script entry point (port 8789
-  by default) for standalone development.
+- `src/musicseed_api/server.py`: **public server entry point** — `serve()` wraps uvicorn.
+  `create_ui_app()` mounts `create_app()` at `/api` and serves `web/out/` at `/` when present.
+  `main()` is the `musicseed-api` script entry point (port 8789).
 - `src/musicseed_api/handlers/`: **orchestration layer** — one module per domain. No HTTP
   framework imports anywhere. Every function is callable from any surface. Modules:
   `discovery.py`, `library.py`, `enrichment.py`, `dashboard.py`, `recommend.py`, `sonic.py`,
@@ -106,9 +106,9 @@ JSON. Handlers are the reusable part — routes are the HTTP-specific projection
   positional arg (the `JobManager` convention). They call `update_progress` at checkpoints
   so the UI can render progress. They are synchronous, blocking functions — the manager
   runs them in daemon threads.
-- **Route prefixes are applied by the consumer.** API routes have no URL prefix. The Next.js
-  web dev server rewrites `/api/*` to this server (standalone on `:8789`). Do not add a prefix
-  to route modules — the caller owns the mount point.
+- **Route prefixes are applied by the consumer.** API routes have no URL prefix. `create_ui_app()`
+  mounts them at `/api`; `next dev` still rewrites `/api/*` to the unprefixed server. Do not add
+  a prefix to route modules.
 - **Secrets in routes.** Token and credential fields arrive via POST bodies (`Form`), are
   passed to handlers, and are never placed in JSON responses. The discovery route's
   `extract_overrides` helper separates secrets from sticky form values — secrets go to

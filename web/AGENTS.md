@@ -13,47 +13,27 @@ the API contract this app consumes. This file covers the web app only.
 - Distribution name: `musicseed-web`. Node/TypeScript app (no Python package).
 - Stack: **Next.js 15 (App Router) + React 19 + TypeScript**, Tailwind CSS, all pages
   `"use client"` (client-rendered SPA — no server components, SSR, or server actions).
-- Runtime: Node (`npm`). Dev server on port 3000 via `npm run dev`; it rewrites `/api/*` to the
-  standalone API at `http://127.0.0.1:8789` (see `next.config.ts`; override with `API_URL`).
+- Runtime: Node (`npm`) is a **build/dev** tool. `npm run dev` rewrites `/api/*` to the
+  standalone API at `http://127.0.0.1:8789`. `npm run build` writes a static export to
+  `web/out/` (gitignored); the API serves that directory at runtime. No Node at runtime.
 - No dependency on `musicseed-core` or `musicseed-cli` — the only channel to the backend is HTTP.
 
 ## Why Next.js (deliberate)
 
-The app is a fully client-rendered SPA, so it does not use server components, SSR, or server
-actions. Next.js is kept for three concrete reasons rather than a static (Vite) build:
+The app is a fully client-rendered SPA. Next.js is the existing toolchain; production is a
+static export (`output: "export"`) served by the Python API. `next dev` remains the contributor
+hot-reload path and still rewrites `/api/*` so the client never hardcodes a port.
 
-1. **Same-origin API proxy with zero config.** `next dev` rewrites `/api/*` to the standalone
-   API, so the browser calls a same-origin `/api` path and there is no CORS setup and no
-   hardcoded `localhost` port in the client. This is the only runtime "server" capability used.
-2. **The app is already built on it.** Rewriting to Vite/static export would churn the working
-   surface with no user-facing benefit.
-3. **One-command local run.** `next dev` + `musicseed-api` is the documented flow (see below); a
-   static export served by the API is a possible future simplification, not a current need.
+## Local startup
 
-The cost — a second runtime (Node) in development — is accepted for a single-user, run-from-source
-tool. If the surface ever needs SSR or server actions, Next.js already provides them.
-
-## Local startup (one documented flow)
-
-One command from the repo root starts both processes; the browser only ever talks to
-`http://127.0.0.1:3000`:
+Contributor hot reload (two processes):
 
 ```bash
 ./scripts/dev.sh
 ```
 
-This runs `musicseed-api` on `127.0.0.1:8789` and `next dev` on `127.0.0.1:3000` (proxying
-`/api/*` → the API). To run the two by hand:
-
-```bash
-# terminal 1 — API
-cd api && uv run musicseed-api          # serves JSON at http://127.0.0.1:8789
-
-# terminal 2 — web (proxies /api/* → :8789)
-cd web && npm run dev                   # http://127.0.0.1:3000
-```
-
-(Set `API_URL` to point the proxy at a different API address if needed.)
+This runs `musicseed-api` on `127.0.0.1:8789` and `next dev` on `127.0.0.1:3000`. After
+`npm run build`, the API also serves `web/out/` at `http://127.0.0.1:8789` (API at `/api`).
 
 ## Architecture
 
@@ -100,9 +80,9 @@ npm install
 npm run dev          # Next.js dev server on http://127.0.0.1:3000 (proxies /api to :8789)
 npx tsc --noEmit     # type-check
 npm run lint         # ESLint
-npm run build        # production build
+npm run build        # static export to web/out/ (not committed)
 ```
 
-The UI needs `musicseed-api` running (`cd ../api && uv run musicseed-api`). There is no separate
-web test suite — the API contract is covered by `api/tests/`, and the UI is type-checked with
-`tsc`.
+After a build, `cd ../api && uv run musicseed-api` serves the UI and JSON together. There is no
+separate web test suite — the API contract is covered by `api/tests/`, and the UI is type-checked
+with `tsc`.
