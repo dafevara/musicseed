@@ -85,7 +85,9 @@ export default function SetupPage() {
   async function handleRecheck(vals: Record<string, string>) {
     setFormValues(vals);
     try {
-      const result = await api.post<DiscoveryResponse>("/discovery/check", vals);
+      // Persist (save-only) so the selected server, token, and library name
+      // survive navigation, then return the fresh discovery result.
+      const result = await api.post<DiscoveryResponse>("/discovery/config", vals);
       setData(result);
       setStep(resolveStep(result, libraryStatus));
     } catch {

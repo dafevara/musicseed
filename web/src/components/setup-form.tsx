@@ -138,7 +138,7 @@ export function SetupForm({
           </label>
         )}
         <button type="submit" className="btn btn-primary justify-self-start">
-          Re-run checks
+          Save &amp; re-check
         </button>
       </form>
     </section>
