@@ -9,8 +9,14 @@
 > **Partially superseded (July 2026):** self-embedding generation (Essentia), stored vectors, and
 > pgvector were removed in favor of reading Plex sonic vectors at query time — see
 > [ARD 002](002-sonic-vectors-at-query-time.md) for the decision and the list of affected
-> sections. The PostgreSQL backend otherwise still applies; its replacement with SQLite is
-> planned separately.
+> sections.
+>
+> **Superseded (August 2026):** PostgreSQL was replaced with a single local SQLite file, and the
+> web UI went from a v1 non-goal to the default onboarding path (a Next.js + React SPA over a
+> FastAPI JSON API, launched with `./scripts/dev.sh`). See
+> [`docs/musicseed-dependency-architecture.html`](../musicseed-dependency-architecture.html) and
+> [`docs/product/overview.md`](../product/overview.md) for the current state; this document's
+> database sections and its "Web UI or mobile app" non-goal no longer apply.
 
 ---
 

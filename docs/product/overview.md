@@ -5,8 +5,10 @@ MusicSeed helps one owner get better discovery from an existing Plex music libra
 ## User
 
 The intended user is a technically comfortable music collector running Plex locally, with a large
-library and a preference for CLI tools. The project assumes the user can start local services,
-provide API credentials, and inspect logs.
+library. The web UI is the default path (first-run wizard, dashboard, recommendation, playlists);
+a Typer CLI remains available as the power-user surface for scripting and advanced control. The
+project assumes the user can start local services, provide API credentials when needed, and
+inspect logs.
 
 ## Product Promise
 

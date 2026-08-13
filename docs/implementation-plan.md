@@ -14,9 +14,9 @@ Implementation plan for MusicSeed - a music recommendation CLI tool that creates
 >
 > **Historical note (August 2026):** PostgreSQL + pgvector + Docker were removed entirely;
 > MusicSeed now uses a single local SQLite file. See
-> `musicseed-dependency-reduction-plan.md` at the repo root. Do not treat this document's
-> database sections (PostgreSQL setup, docker-compose, psycopg/pgvector deps) as current
-> design.
+> [`docs/musicseed-dependency-architecture.html`](musicseed-dependency-architecture.html) for the
+> current dependency graph. Do not treat this document's database sections (PostgreSQL setup,
+> docker-compose, psycopg/pgvector deps) as current design.
 
 ---
 

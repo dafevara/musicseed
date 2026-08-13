@@ -55,6 +55,8 @@ logic to a surface or handler that could live in core, move it to `core/services
 - Harness strategy and maintenance loop: `docs/harness-engineering.md`.
 - Music/recommendation domain concepts: `docs/domain/music-recommendation.md`.
 - Local services, config, logs, and verification commands: `docs/infra/local-runtime.md`.
+- Setup/job failure recovery (Plex detection, tokens, ports, providers, sonic, backup):
+  `docs/infra/troubleshooting.md`.
 - Seed matching, candidate generation, scoring, playlist selection: `docs/resolvers/recommendation-resolvers.md`.
 - Visual dependency/workflow explainer (self-contained HTML, keep in sync when deps change):
   `docs/musicseed-dependency-architecture.html`.

@@ -54,5 +54,6 @@ own database.
 - §12 configuration (`embedding:` section)
 - §13 Phase 3 (Embeddings)
 
-The PostgreSQL → SQLite migration is a separate, later decision (planned, not yet implemented);
-ARD 001's database sections otherwise still apply.
+The PostgreSQL → SQLite migration has since shipped: MusicSeed now uses a single local SQLite
+file (see [`docs/musicseed-dependency-architecture.html`](../musicseed-dependency-architecture.html));
+ARD 001's PostgreSQL-specific database sections no longer apply.

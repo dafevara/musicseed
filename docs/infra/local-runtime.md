@@ -1,6 +1,8 @@
 # Local Runtime And Operations
 
-MusicSeed runs locally from source. Infrastructure should remain boring and inspectable.
+MusicSeed runs locally from source. Infrastructure should remain boring and inspectable. When
+something fails, see [`troubleshooting.md`](troubleshooting.md) for concrete checks and recovery
+actions.
 
 ## Runtime Pieces
 
@@ -75,6 +77,19 @@ proxying `/api/*` to the API.
 
 Relevant API routes: `GET /discovery`, `GET /discovery/plex-servers`,
 `POST /discovery/check`, `POST /discovery/config` (save-only), `POST /discovery/init-db`.
+
+### Ports
+
+The API listens on `127.0.0.1:8789` and the Next.js dev server on `127.0.0.1:3000`. `dev.sh`
+reads `API_PORT`, `WEB_PORT`, and `API_URL` (the API address the web proxy targets) from the
+environment; both processes bind loopback only and are not exposed to the LAN.
+
+### Offline behavior
+
+The web UI and API are fully local and need no internet once the app is running. Internet access
+is required only for enrichment providers (ListenBrainz, and optional Spotify) and for the
+cross-subnet Plex lookup through `plex.tv`; without it, discovery falls back to local-network
+multicast and a manual URL, and enrichment is simply skipped for tracks it can't reach.
 
 ## Logging
 

@@ -116,7 +116,7 @@ in `core/`, then re-lock dependent apps (`cd ../cli && uv lock`, same for `web/`
 
 The database is a single SQLite file (`database.path` in config, default
 `~/.local/share/musicseed/musicseed.db`). Postgres/pgvector were removed (see
-`musicseed-dependency-reduction-plan.md`); `scripts/migrate_pg_to_sqlite.py` migrates an old
+`docs/musicseed-dependency-architecture.html`); `scripts/migrate_pg_to_sqlite.py` migrates an old
 Postgres database one-shot.
 
 ## Verify (from `core/`)

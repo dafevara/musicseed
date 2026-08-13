@@ -26,6 +26,7 @@ Guides are feedforward context that shape agent behavior before work starts.
 - `docs/product/overview.md`: product scope and non-goals.
 - `docs/domain/music-recommendation.md`: recommendation concepts and signal semantics.
 - `docs/infra/local-runtime.md`: local services, config, logs, commands, operational safety.
+- `docs/infra/troubleshooting.md`: concrete checks and recovery for setup/job failures.
 - `docs/resolvers/recommendation-resolvers.md`: seed resolution, candidate pools, scoring,
   diversity, and explainability.
 
