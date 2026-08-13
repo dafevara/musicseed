@@ -240,34 +240,22 @@ export default function SetupPage() {
 
           {data.ready && !data.result.musicseed_db.exists && (
             <section className="panel">
-              <h2 className="mt-0 text-lg font-semibold">Review your setup</h2>
-              <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5 mb-4 text-sm">
-                <dt className="font-semibold">MusicSeed database</dt>
-                <dd className="m-0">
-                  <code>{data.result.musicseed_db.path}</code>
-                  <span className="text-[var(--muted)] ml-1">(will be created)</span>
-                </dd>
-                <dt className="font-semibold">Plex server</dt>
-                <dd className="m-0">
-                  <code>{plex.url}</code> — Plex {plex.server_version}
-                </dd>
-                <dt className="font-semibold">Music library</dt>
-                <dd className="m-0">{plex.library}</dd>
-                <dt className="font-semibold">Spotify enrichment</dt>
-                <dd className="m-0">
-                  {data.result.enrichers.spotify.configured
-                    ? "configured"
-                    : "not set (optional — ListenBrainz needs no key)"}
-                </dd>
-              </dl>
-              <p className="muted text-sm">
-                Nothing has been changed yet. Press the button below to create the
-                MusicSeed database at the path shown above. This is safe and idempotent —
-                it never replaces an existing database.
+              <h2 className="mt-0 text-lg font-semibold">Initialize</h2>
+              <div className="flex flex-wrap items-baseline gap-2">
+                <button className="btn btn-primary" onClick={handleInitDb}>
+                  Initialize database
+                </button>
+                <HelpIcon>
+                  Creates the MusicSeed database at{" "}
+                  <code>{data.result.musicseed_db.path}</code>. Safe and idempotent —
+                  it never replaces an existing database.
+                </HelpIcon>
+              </div>
+              <p className="mt-2 mb-0 text-sm text-[var(--muted)]">
+                {data.result.enrichers.spotify.configured
+                  ? "Spotify enrichment configured."
+                  : "Spotify not configured — optional (ListenBrainz needs no key)."}
               </p>
-              <button className="btn btn-primary" onClick={handleInitDb}>
-                Initialize database
-              </button>
             </section>
           )}
 
