@@ -465,11 +465,12 @@ def import_from_plex(
                 artist_map[plex_artist.id] = artist.id
                 progress.advance(artist_task)
 
+            # Release the write lock before reporting progress, otherwise the
+            # progress write (jobs table) deadlocks against this transaction.
+            session.commit()
+
             if progress_callback:
                 progress_callback(imported["artists"], counts["artists"], "artists")
-
-            # Release the write lock between phases so progress writes proceed.
-            session.commit()
 
             # Import albums
             if _cancelled():
@@ -504,11 +505,12 @@ def import_from_plex(
                 album_map[plex_album.id] = album.id
                 progress.advance(album_task)
 
+            # Release the write lock before reporting progress, otherwise the
+            # progress write (jobs table) deadlocks against this transaction.
+            session.commit()
+
             if progress_callback:
                 progress_callback(imported["albums"], counts["albums"], "albums")
-
-            # Release the write lock between phases so progress writes proceed.
-            session.commit()
 
             # Import tracks
             if _cancelled():
