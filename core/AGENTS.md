@@ -69,9 +69,9 @@ Service entry points:
   first-run signal. This is the CLI's config mechanism; future apps may populate
   the same `Config` from `.env` instead.
 - `exceptions.py`: `MusicSeedError` (base), `ConfigurationError`, `NotFoundError`.
-- `logging_config.py`: `setup_logging`/`get_logger`. **Gotcha:** `setup_logging` walks up from its
-  own `__file__` to the nearest `pyproject.toml` and writes `logs/` beside it, so logs land in
-  `core/logs/`. Pass an explicit `log_dir` to override.
+- `logging_config.py`: `setup_logging`/`get_logger`. Default log dir is
+  `~/.local/share/musicseed/logs/` (or `$XDG_DATA_HOME/musicseed/logs`). Pass `log_dir` to
+  override.
 - `db/models.py`: SQLAlchemy 2.0 ORM (Artist, Album, Track, tag tables, play history, stats,
   playlists). No vector columns: sonic vectors are not stored.
 - `db/session.py`: `get_engine` (SQLite, sets `journal_mode=WAL` + `foreign_keys=ON` on

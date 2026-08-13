@@ -1,11 +1,64 @@
 """Configuration loading and management."""
 
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
 import yaml
 from pydantic import BaseModel, Field
+
+_PLEX_LIBRARY_DB = (
+    Path("Plug-in Support") / "Databases" / "com.plexapp.plugins.library.db"
+)
+
+
+def default_data_dir() -> Path:
+    xdg = os.environ.get("XDG_DATA_HOME")
+    root = Path(xdg) if xdg else Path.home() / ".local" / "share"
+    return root / "musicseed"
+
+
+def default_log_dir() -> Path:
+    return default_data_dir() / "logs"
+
+
+def plex_data_dir_candidates() -> list[Path]:
+    home = Path.home()
+    return [
+        home / "Library" / "Application Support" / "Plex Media Server",
+        Path("/var/lib/plexmediaserver/Library/Application Support/Plex Media Server"),
+        Path(
+            "/var/snap/plexmediaserver/common/Library/Application Support/"
+            "Plex Media Server"
+        ),
+        home
+        / ".local"
+        / "share"
+        / "plexmediaserver"
+        / "Library"
+        / "Application Support"
+        / "Plex Media Server",
+    ]
+
+
+def default_plex_data_dir() -> Path:
+    for path in plex_data_dir_candidates():
+        if path.is_dir():
+            return path
+    if sys.platform.startswith("linux"):
+        return Path(
+            "/var/lib/plexmediaserver/Library/Application Support/Plex Media Server"
+        )
+    return Path.home() / "Library" / "Application Support" / "Plex Media Server"
+
+
+def plex_library_db_candidates() -> list[Path]:
+    return [directory / _PLEX_LIBRARY_DB for directory in plex_data_dir_candidates()]
+
+
+def default_plex_db_path() -> str:
+    return str(default_plex_data_dir() / _PLEX_LIBRARY_DB)
 
 
 def _expand_env_vars(value: Any) -> Any:
@@ -40,10 +93,7 @@ class PlexConfig(BaseModel):
     url: str = "http://localhost:32400"
     token: str = ""
     library: str = "Music"
-    db_path: str = (
-        "~/Library/Application Support/Plex Media Server/Plug-in Support/Databases/"
-        "com.plexapp.plugins.library.db"
-    )
+    db_path: str = Field(default_factory=default_plex_db_path)
 
     @property
     def db_path_expanded(self) -> Path:

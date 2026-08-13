@@ -17,7 +17,7 @@ actions.
 - Plex blobs SQLite database as a read-only source of sonic analysis vectors (read at query time).
 - Optional Plex HTTP API for playlist creation (`core/src/musicseed/clients/plex_api.py`).
 - Optional external HTTP APIs: ListenBrainz and Spotify.
-- Local logs under `logs/`.
+- Local logs under `~/.local/share/musicseed/logs/`.
 
 ## Database
 
@@ -52,10 +52,11 @@ Config lookup order:
 Environment variables and `~` are expanded. Keep credentials out of repo-local tracked files.
 
 The Plex token is auto-detected when possible: discovery reads `PlexOnlineToken` from Plex's
-`Preferences.xml`, falling back to `.LocalAdminToken` (localhost-only), both under
-`~/Library/Application Support/Plex Media Server/`. Saving setup or settings persists the
-detected token into `config.yaml`; when none is found the UI shows how to retrieve one from
-app.plex.tv.
+`Preferences.xml`, falling back to `.LocalAdminToken` (localhost-only). It probes the usual
+macOS path (`~/Library/Application Support/Plex Media Server/`) and Linux locations
+(`/var/lib/plexmediaserver/...`, snap, `~/.local/share/plexmediaserver/...`). Saving setup or
+settings persists the detected token into `config.yaml`; when none is found the UI shows how
+to retrieve one from app.plex.tv.
 
 ## Web UI, First-Run Wizard, And Settings
 
@@ -95,8 +96,8 @@ multicast and a manual URL, and enrichment is simply skipped for tracks it can't
 
 The CLI configures file logging through `core/src/musicseed/logging_config.py`.
 
-- Timestamped run logs: `logs/musicseed_YYYYMMDD_HHMMSS.log`
-- Latest run: `logs/latest.log`
+- Timestamped run logs: `~/.local/share/musicseed/logs/musicseed_YYYYMMDD_HHMMSS.log`
+- Latest run: `~/.local/share/musicseed/logs/latest.log`
 
 When changing pipelines, log enough detail to diagnose failed batches without flooding console
 output. Console output should summarize progress and outcome.

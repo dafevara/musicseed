@@ -17,8 +17,8 @@ Before guessing, capture the current state with the two cheapest probes:
 - **From the CLI:** `uv run musicseed status` shows the resolved database path, Plex URL/DB/library,
   and library/enrichment coverage.
 
-Logs are the next stop: `core/logs/latest.log` (plus timestamped `logs/musicseed_*.log`). Jobs that
-fail mid-flight write the exception there.
+Logs are the next stop: `~/.local/share/musicseed/logs/latest.log` (plus timestamped
+`musicseed_*.log` in the same directory). Jobs that fail mid-flight write the exception there.
 
 ## Plex server not found
 
@@ -47,7 +47,8 @@ return 401.
 Checks and recovery:
 
 1. **Auto-detection.** MusicSeed reads the token from Plex's local install
-   (`~/Library/Application Support/Plex Media Server/Preferences.xml` →
+   (macOS `~/Library/Application Support/Plex Media Server/Preferences.xml`, or the
+   Linux Plex data dir →
    `PlexOnlineToken`, falling back to `.LocalAdminToken`). If neither is present (or Plex isn't
    installed locally), paste a token manually.
 2. **Get a token.** From a signed-in session at app.plex.tv, view any Plex XML resource and copy
@@ -140,10 +141,8 @@ Checks and recovery:
 
 ## Logs and where to look
 
-- `core/logs/latest.log` — most recent run across CLI and API surfaces.
-- `core/logs/musicseed_YYYYMMDD_HHMMSS.log` — timestamped run logs.
-- The logger anchors to the core package's location, so logs live under `core/logs/` even when you
-  run from `cli/` or `api/`.
+- `~/.local/share/musicseed/logs/latest.log` — most recent run across CLI and API surfaces.
+- `~/.local/share/musicseed/logs/musicseed_YYYYMMDD_HHMMSS.log` — timestamped run logs.
 
 If an error message says "check logs/latest.log", the exception detail is there. Avoid sharing
 those logs outside the machine — they can contain local paths and, in rare cases, credentials.

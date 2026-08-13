@@ -4,6 +4,8 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
+from musicseed.config import default_log_dir
+
 
 def parse_log_level(level: str | int) -> int:
     """Parse a logging level name or numeric value."""
@@ -33,23 +35,14 @@ def setup_logging(
         level: File logging level (default: INFO)
         console: Whether to also emit logs to stderr
         console_level: Console logging level when console logging is enabled
-        log_dir: Directory for log files. If None, uses project root/logs
+        log_dir: Directory for log files. If None, uses
+            ``~/.local/share/musicseed/logs`` (or ``$XDG_DATA_HOME/musicseed/logs``).
 
     Returns:
         The root logger configured for musicseed
     """
-    # Find project root (where pyproject.toml is)
     if log_dir is None:
-        # Try to find logs dir relative to this file
-        current = Path(__file__).parent
-        while current != current.parent:
-            if (current / "pyproject.toml").exists():
-                log_dir = current / "logs"
-                break
-            current = current.parent
-        else:
-            # Fallback to current directory
-            log_dir = Path.cwd() / "logs"
+        log_dir = default_log_dir()
 
     log_dir.mkdir(parents=True, exist_ok=True)
 

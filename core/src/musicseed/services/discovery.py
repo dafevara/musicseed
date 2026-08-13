@@ -21,15 +21,33 @@ from musicseed.config import (
     Config,
     DatabaseConfig,
     PlexConfig,
+    default_plex_data_dir,
     get_config,
     get_config_path,
+    plex_data_dir_candidates,
+    plex_library_db_candidates,
 )
 
 _SQLITE_HEADER = b"SQLite format 3\x00"
 
 
 def _plex_data_dir() -> Path:
-    return Path.home() / "Library" / "Application Support" / "Plex Media Server"
+    return default_plex_data_dir()
+
+
+def _read_token_from(preferences: Path, admin: Path) -> str | None:
+    try:
+        root = ElementTree.parse(preferences).getroot()
+    except (OSError, ElementTree.ParseError):
+        token = None
+    else:
+        token = (root.get("PlexOnlineToken") or "").strip() or None
+    if token:
+        return token
+    try:
+        return admin.read_text(encoding="utf-8").strip() or None
+    except OSError:
+        return None
 
 
 def read_plex_token(
@@ -40,28 +58,31 @@ def read_plex_token(
 
     Prefers the account token (``PlexOnlineToken`` in ``Preferences.xml``),
     then falls back to ``.LocalAdminToken`` (which only works from localhost).
+    When no explicit paths are given, probes macOS and Linux Plex data dirs.
     Returns ``None`` when neither is readable. Read-only — the token value is
     never logged or returned in discovery results.
     """
-    prefs = Path(preferences_path) if preferences_path else _plex_data_dir() / "Preferences.xml"
-    try:
-        root = ElementTree.parse(prefs).getroot()
-    except (OSError, ElementTree.ParseError):
-        token = None
-    else:
-        token = (root.get("PlexOnlineToken") or "").strip() or None
-    if token:
-        return token
+    if preferences_path is not None or local_admin_token_path is not None:
+        prefs = (
+            Path(preferences_path)
+            if preferences_path
+            else _plex_data_dir() / "Preferences.xml"
+        )
+        admin = (
+            Path(local_admin_token_path)
+            if local_admin_token_path
+            else _plex_data_dir() / ".LocalAdminToken"
+        )
+        return _read_token_from(prefs, admin)
 
-    admin = (
-        Path(local_admin_token_path)
-        if local_admin_token_path
-        else _plex_data_dir() / ".LocalAdminToken"
-    )
-    try:
-        return admin.read_text(encoding="utf-8").strip() or None
-    except OSError:
-        return None
+    for data_dir in plex_data_dir_candidates():
+        token = _read_token_from(
+            data_dir / "Preferences.xml",
+            data_dir / ".LocalAdminToken",
+        )
+        if token:
+            return token
+    return None
 
 
 class Reason(StrEnum):
@@ -379,7 +400,7 @@ def discover(
     plex_source = _source(plex_db_path, cfg.plex.db_path, default_plex.db_path)
     library_candidates = _dedup_candidates([
         (Path(os.path.expanduser(plex_value)), plex_source),
-        (default_plex.db_path_expanded, "default"),
+        *[(path, "default") for path in plex_library_db_candidates()],
     ])
     plex_library_db = _discover_file(library_candidates)
 

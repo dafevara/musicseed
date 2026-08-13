@@ -69,7 +69,6 @@ uv tool install --editable ./cli      # from the repo root
 
 ## Notes
 
-- Logs are written under `core/logs/` (including `latest.log`) — the logger anchors to the core
-  package's location, not the CLI's.
+- Logs are written under `~/.local/share/musicseed/logs/` (including `latest.log`).
 
 See [`AGENTS.md`](AGENTS.md) for the command→service map and contributor conventions.

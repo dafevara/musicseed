@@ -32,13 +32,17 @@ def _make_sqlite(path: Path) -> Path:
 
 @pytest.fixture
 def isolated_plex(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Redirect the hardcoded default Plex paths into a temp dir."""
+    """Redirect default Plex paths into a temp dir."""
     plex_dir = tmp_path / "Plex"
+    library_db = plex_dir / "com.plexapp.plugins.library.db"
 
     class FakePlexConfig(PlexConfig):
-        db_path: str = str(plex_dir / "com.plexapp.plugins.library.db")
+        db_path: str = str(library_db)
 
     monkeypatch.setattr(discovery, "PlexConfig", FakePlexConfig)
+    monkeypatch.setattr(discovery, "plex_library_db_candidates", lambda: [library_db])
+    monkeypatch.setattr(discovery, "plex_data_dir_candidates", lambda: [plex_dir])
+    monkeypatch.setattr(discovery, "default_plex_data_dir", lambda: plex_dir)
     return plex_dir
 
 
@@ -442,6 +446,21 @@ def test_read_plex_token_returns_none(tmp_path: Path) -> None:
         preferences_path=str(tmp_path / "missing.xml"),
         local_admin_token_path=str(tmp_path / "missing-admin"),
     ) is None
+
+
+def test_read_plex_token_probes_linux_candidate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    linux = tmp_path / "var" / "lib" / "plexmediaserver"
+    linux.mkdir(parents=True)
+    (linux / "Preferences.xml").write_text(
+        '<?xml version="1.0"?><Preferences PlexOnlineToken="LINUX-TOKEN"/>'
+    )
+    monkeypatch.setattr(
+        discovery, "plex_data_dir_candidates",
+        lambda: [tmp_path / "missing-macos", linux],
+    )
+    assert _real_read_plex_token() == "LINUX-TOKEN"
 
 
 def test_server_uses_local_token(tmp_path: Path,

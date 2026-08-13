@@ -112,10 +112,10 @@ credentials in env vars or an untracked local config.
 
 ## Logs And Data
 
-Logs are written under `core/logs/` (including `latest.log`) — the logger anchors to the core
-package's location. Local Plex database copies, the MusicSeed SQLite database, logs, and
-credentials are machine-local artifacts and are not portable project source. Backup of MusicSeed
-state is copying the single SQLite file.
+Logs are written under `~/.local/share/musicseed/logs/` (including `latest.log`). Local Plex
+database copies, the MusicSeed SQLite database, logs, and credentials are machine-local
+artifacts and are not portable project source. Backup of MusicSeed state is copying the single
+SQLite file.
 
 ## For Coding Agents
 

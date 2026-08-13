@@ -17,7 +17,7 @@ plex:
   # Required for playlist create / populate. Prefer an env var.
   token: ${PLEX_TOKEN}
   library: Music
-  # macOS default; adjust for your Plex install (Linux paths differ).
+  # Omit to auto-detect (macOS + Linux Plex data dirs). Override if discovery misses.
   db_path: >-
     ~/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db
 

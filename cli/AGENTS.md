@@ -68,8 +68,8 @@ Imports from core are unchanged from the pre-monorepo layout (`from musicseed.co
 - **Config is YAML** (this app's mechanism), loaded by core from `~/.config/musicseed/config.yaml`,
   `~/.musicseed.yaml`, or a **cwd-relative `./config.yaml`** — which, when running from `cli/`,
   means `cli/config.yaml`. Home-dir configs are unaffected by the monorepo move.
-- **Logs land in `core/logs/`**, not `cli/logs/`, because `setup_logging` locates the nearest
-  `pyproject.toml` from core's `__file__`. Don't be surprised looking for `latest.log`.
+- **Logs land in `~/.local/share/musicseed/logs/`**, not `cli/logs/`. Pass `log_dir` to
+  `setup_logging` to override.
 
 ## Dependencies
 
