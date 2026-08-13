@@ -28,9 +28,9 @@ keys enabled.
 Commands:
 
 ```bash
-uv run musicseed init-db       # creates the file (and parent dir) and tables
-uv run musicseed optimize-db   # search, queue, and tag indexes
-uv run musicseed status        # shows the DB path and file size
+uv run musicseed-cli init-db       # creates the file (and parent dir) and tables
+uv run musicseed-cli optimize-db   # search, queue, and tag indexes
+uv run musicseed-cli status        # shows the DB path and file size
 ```
 
 `init-db` creates tables. `optimize-db` creates search, queue, and tag
@@ -60,9 +60,9 @@ to retrieve one from app.plex.tv.
 
 ## Web UI, First-Run Wizard, And Settings
 
-The web UI is the default onboarding path. One command starts the API and the web dev server
-together (`./scripts/dev.sh`): the API on `127.0.0.1:8789` and Next.js on `127.0.0.1:3000`,
-proxying `/api/*` to the API.
+The web UI is the default onboarding path. Users run `./scripts/install.sh` then `musicseed`,
+which serves the API and the static UI on `127.0.0.1:8789`. `./scripts/dev.sh` is contributor
+hot reload (API + `next dev` on port 3000).
 
 - **First-run wizard** (`/setup`): detects the Plex server (local-network discovery plus a
   manual URL), initializes the database, and optionally runs import and enrichment. Non-setup
@@ -81,9 +81,9 @@ Relevant API routes: `GET /discovery`, `GET /discovery/plex-servers`,
 
 ### Ports
 
-The API listens on `127.0.0.1:8789` and the Next.js dev server on `127.0.0.1:3000`. `dev.sh`
-reads `API_PORT`, `WEB_PORT`, and `API_URL` (the API address the web proxy targets) from the
-environment; both processes bind loopback only and are not exposed to the LAN.
+`musicseed` listens on `127.0.0.1:8789` (JSON at `/api`, UI at `/`). Contributor `dev.sh`
+adds Next.js on `127.0.0.1:3000` and reads `API_PORT`, `WEB_PORT`, and `API_URL` from the
+environment. Both bind loopback only.
 
 ### Offline behavior
 
@@ -109,15 +109,15 @@ These are cheap and should be used before heavier checks:
 ```bash
 python3 -m compileall -q core/src/musicseed cli/src/musicseed_cli api/src/musicseed_api
 uv run ruff check src
-uv run musicseed --help
+uv run musicseed-cli --help
 ```
 
 Stateful commands should be limited during development:
 
 ```bash
-uv run musicseed enrich --source listenbrainz --limit 100 --batch-size 50 --resume
-uv run musicseed sonic-probe
-uv run musicseed recommend --seed-id 123 --limit 20 --dry-run --explain
+uv run musicseed-cli enrich --source listenbrainz --limit 100 --batch-size 50 --resume
+uv run musicseed-cli sonic-probe
+uv run musicseed-cli recommend --seed-id 123 --limit 20 --dry-run --explain
 ```
 
 ## Slow Or Risky Operations

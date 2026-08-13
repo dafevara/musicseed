@@ -28,25 +28,25 @@ runs from source on the owner's machine against the owner's Plex library.
 
 ## Requirements
 
-- macOS on Apple Silicon (run from source; no packaged installer yet)
 - Python 3.12+ and [uv](https://docs.astral.sh/uv/)
-- Node.js and npm (for the web UI only)
+- Node.js and npm (needed to **install** / rebuild the web UI, not to run it)
 - Plex Media Server with a music library (ideally already sonically analyzed)
 - Optional Spotify API credentials for fallback enrichment
 
-## Quick Start (web UI)
+macOS and Linux are supported. Windows is untested.
 
-The web UI is the default onboarding path. One command starts the REST API and the web app
-together:
+## Install
 
 ```bash
-./scripts/dev.sh
+git clone <repo-url>
+cd MusicSeed
+./scripts/install.sh
+musicseed
 ```
 
-Then open `http://127.0.0.1:3000` in your browser. `dev.sh` runs `musicseed-api` on
-`127.0.0.1:8789` and `next dev` on `127.0.0.1:3000` (the Next dev server proxies `/api/*` to the
-API); `Ctrl-C` stops both. To run the two processes by hand instead, see
-[`web/AGENTS.md`](web/AGENTS.md).
+Then open `http://127.0.0.1:8789`. `install.sh` syncs the Python apps, builds the static UI, and
+puts `musicseed` on your PATH. After that, runtime is Python only — Node is not required to start
+the app.
 
 On first run the setup wizard (`/setup`) walks you through setup:
 
@@ -63,22 +63,25 @@ state, with recommendation and playlist pages once the library is imported. A pe
 **Settings** view (`/settings`) holds your Plex URL/token/library, database paths, and Spotify
 credentials; it saves without starting any import or initialization.
 
+`musicseed --open` launches the browser. `musicseed --no-ui` serves JSON only.
+
 See [`docs/product/overview.md`](docs/product/overview.md) for the intended flows and
 [`docs/infra/troubleshooting.md`](docs/infra/troubleshooting.md) when something goes wrong.
 
+Contributor hot reload (API + `next dev`) is `./scripts/dev.sh` — not the user path.
+
 ## CLI (advanced)
 
-The Typer CLI is the power-user surface and remains fully supported. It needs no Node, no server,
-and no browser — just the core library and a config file:
+The Typer CLI is the power-user surface. It needs no Node, no server, and no browser:
 
 ```bash
 cd cli
 uv sync
-uv run musicseed init-db                            # create the SQLite database
-uv run musicseed import                             # import Plex metadata (use --limit to explore)
-uv run musicseed enrich --source listenbrainz --limit 100 --resume
-uv run musicseed recommend --seed-id 123 --limit 20 --explain
-uv run musicseed playlist --name "My Mix" --seed-id 123   # prompts before writing to Plex
+uv run musicseed-cli init-db                            # create the SQLite database
+uv run musicseed-cli import                             # import Plex metadata (use --limit to explore)
+uv run musicseed-cli enrich --source listenbrainz --limit 100 --resume
+uv run musicseed-cli recommend --seed-id 123 --limit 20 --explain
+uv run musicseed-cli playlist --name "My Mix" --seed-id 123   # prompts before writing to Plex
 ```
 
 Full CLI usage and configuration: **[`cli/README.md`](cli/README.md)**.
@@ -91,12 +94,12 @@ MusicSeed is a monorepo of independent apps that share one core library. Each ap
 
 - **[`core/`](core/README.md)** — `musicseed-core`, the reusable library (import, enrichment,
   sonic vectors, recommender, db, config). Importable as `musicseed`. All logic lives here; no UI.
-- **[`api/`](api/AGENTS.md)** — `musicseed-api`, the FastAPI JSON REST API (port 8789) plus
-  surface-agnostic orchestration handlers.
-- **[`web/`](web/AGENTS.md)** — `musicseed-web`, the Next.js + React web UI (port 3000). It is a
-  thin rendering layer over the API.
-- **[`cli/`](cli/README.md)** — `musicseed-cli`, the Typer command-line app. Depends on `core` via
-  an editable path dependency.
+- **[`api/`](api/AGENTS.md)** — FastAPI JSON REST API plus the `musicseed` product command
+  (serves API + static UI on port 8789).
+- **[`web/`](web/AGENTS.md)** — `musicseed-web`, the Next.js + React web UI. Thin rendering
+  layer; `npm run build` writes a static export the API serves.
+- **[`cli/`](cli/README.md)** — `musicseed-cli`, the Typer command-line app. Depends on `core`
+  via an editable path dependency. No API dependency.
 - `mcp/` — future surface (MCP server). Not present yet.
 
 Shared infrastructure (`docs/`, `ruff.toml`, `scripts/`) lives at the repo root.

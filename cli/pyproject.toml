@@ -20,7 +20,7 @@ dev = [
 ]
 
 [project.scripts]
-musicseed = "musicseed_cli.app:app"
+musicseed-cli = "musicseed_cli.app:app"
 
 [tool.uv.sources]
 musicseed-core = { path = "../core", editable = true }

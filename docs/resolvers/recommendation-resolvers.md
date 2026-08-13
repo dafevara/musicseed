@@ -116,7 +116,7 @@ When adding a signal, update:
 
 - Run `python3 -m compileall -q src/musicseed`.
 - Run `uv run ruff check src` if dependencies are available.
-- Use a dry run: `uv run musicseed recommend --seed-id 123 --limit 20 --dry-run --explain`.
+- Use a dry run: `uv run musicseed-cli recommend --seed-id 123 --limit 20 --dry-run --explain`.
 - Confirm tracks without sonic vectors, missing popularity, and missing tags do not crash scoring.
 - Confirm a missing Plex blobs database fails `recommend` with a clear `NotFoundError`.
 - Confirm ambiguous seed text still fails clearly.

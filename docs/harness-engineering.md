@@ -41,14 +41,14 @@ Computational sensors:
 ```bash
 python3 -m compileall -q core/src/musicseed cli/src/musicseed_cli api/src/musicseed_api
 uv run ruff check src
-uv run musicseed --help
+uv run musicseed-cli --help
 ```
 
 Runtime sensors:
 
 ```bash
-uv run musicseed status
-uv run musicseed recommend --seed-id 123 --limit 20 --dry-run --explain
+uv run musicseed-cli status
+uv run musicseed-cli recommend --seed-id 123 --limit 20 --dry-run --explain
 ```
 
 Human sensors:

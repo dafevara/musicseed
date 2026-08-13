@@ -12,7 +12,7 @@ for letter in {R..Z}; do
 
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting Spotify enrichment for artists: ${letter}*"
 
-  uv run musicseed --verbose enrich \
+  uv run musicseed-cli --verbose enrich \
     --resume \
     --batch-size 100 \
     --concurrency 20 \

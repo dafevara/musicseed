@@ -41,6 +41,20 @@ def test_ui_app_without_static_is_api_only():
     assert client.get("/api/discovery").status_code == 200
 
 
+def test_main_help_exits_zero(monkeypatch):
+    import sys
+
+    from musicseed_api.server import main
+
+    monkeypatch.setattr(sys, "argv", ["musicseed", "--help"])
+    try:
+        main()
+    except SystemExit as exc:
+        assert exc.code == 0
+    else:
+        raise AssertionError("expected --help to SystemExit")
+
+
 def test_resolve_static_dir_honors_env(tmp_path: Path, monkeypatch):
     (tmp_path / "index.html").write_text("ok")
     monkeypatch.setenv("MUSICSEED_STATIC_DIR", str(tmp_path))

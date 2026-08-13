@@ -19,8 +19,8 @@ cleanup() {
 }
 trap cleanup INT TERM EXIT
 
-echo "[dev] starting musicseed-api on 127.0.0.1:${API_PORT} ..."
-(cd "$ROOT/api" && exec uv run musicseed-api) &
+echo "[dev] starting musicseed on 127.0.0.1:${API_PORT} ..."
+(cd "$ROOT/api" && exec uv run musicseed --no-ui --host 127.0.0.1 --port "$API_PORT") &
 API_PID=$!
 
 echo "[dev] starting Next.js web UI on 127.0.0.1:${WEB_PORT} (proxying /api -> ${API_URL}) ..."

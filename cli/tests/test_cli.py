@@ -17,3 +17,4 @@ def test_help_has_no_web_command():
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
     assert "web" not in result.output
+    assert "serve" not in result.output

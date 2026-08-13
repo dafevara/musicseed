@@ -128,7 +128,7 @@ python3 -m compileall -q src/musicseed
 uv run python -c "import musicseed; from musicseed.services import library, enrichment, recommend, populate, discovery; print('ok')"
 ```
 
-DB-touching work needs a configured `database.path`; `musicseed init-db` creates the SQLite
+DB-touching work needs a configured `database.path`; `musicseed-cli init-db` creates the SQLite
 file. No server or containers are involved.
 
 ## Change guidelines

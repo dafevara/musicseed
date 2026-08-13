@@ -13,7 +13,7 @@ rules, then routes you to the app you're working in. **Read the per-app `AGENTS.
 - Product: generate Plex playlists from seed tracks using local library metadata, popularity
   enrichment, Plex sonic analysis vectors (read at query time), and play history.
 - Runtime: Python 3.12+, SQLAlchemy, SQLite (one local file), uv. Typer/Rich in the CLI.
-- Platform: macOS on Apple Silicon, run from source.
+- Platform: macOS and Linux, run from source.
 - Recommendation signals (six): sonic, popularity, style, genre, era, novelty.
 
 ## Monorepo layout
@@ -24,9 +24,9 @@ and `.venv`; run `uv` commands from inside the app directory.
 | Path | What | Guide |
 |---|---|---|
 | `core/` | `musicseed-core` — all logic (import, enrich, sonic vectors, recommender, db, config). Importable as `musicseed`. Library only, no CLI. | [`core/AGENTS.md`](core/AGENTS.md) |
-| `api/` | `musicseed-api` — REST API (FastAPI, JSON) + surface-agnostic orchestration handlers. Wraps core's services; consumed by the web UI over HTTP and available to external integrations. | [`api/AGENTS.md`](api/AGENTS.md) |
-| `cli/` | `musicseed-cli` — Typer CLI (`musicseed`). Thin wrapper over core's services; depends on core via an editable path. | [`cli/AGENTS.md`](cli/AGENTS.md) |
-| `web/` | `musicseed-web` — local web UI (Next.js + React + TypeScript, client-rendered SPA). Thin rendering layer over the API; no business logic. Proxies the REST API at `/api/` (dev) and talks to `musicseed-api` (port 8789). | [`web/AGENTS.md`](web/AGENTS.md) |
+| `api/` | `musicseed-api` — REST API (FastAPI, JSON) + the `musicseed` product command. Wraps core's services; consumed by the web UI over HTTP. | [`api/AGENTS.md`](api/AGENTS.md) |
+| `cli/` | `musicseed-cli` — Typer CLI (`musicseed-cli`). Thin wrapper over core's services; depends on core via an editable path. | [`cli/AGENTS.md`](cli/AGENTS.md) |
+| `web/` | `musicseed-web` — local web UI (Next.js + React + TypeScript, client-rendered SPA). Thin rendering layer over the API; no business logic. `npm run build` writes `web/out/`; `musicseed` serves it. | [`web/AGENTS.md`](web/AGENTS.md) |
 | `mcp/` | Future surface (MCP server). Not present yet; will be a sibling app depending on `core` (and `api` if REST is the preferred transport). | — |
 
 Shared at the repo root: `ruff.toml` (lint config for all apps), `docs/`, `data/`, `logs/`,
@@ -66,7 +66,7 @@ logic to a surface or handler that could live in core, move it to `core/services
 ## Shared Commands
 
 ```bash
-cd cli   && uv run musicseed status   # run the CLI from cli/ (SQLite file, no server needed)
+cd cli   && uv run musicseed-cli status   # CLI from cli/ (SQLite file, no server needed)
 cd api   && uv run ruff check src     # per-app lint (ruff.toml is shared at root)
 cd core  && uv run ruff check src
 cd api   && uv run pytest tests -q    # offline API suite (stubs Plex/DB)
@@ -75,8 +75,8 @@ python3 -m compileall -q core/src/musicseed cli/src/musicseed_cli api/src/musics
 ```
 
 The MusicSeed database is a single SQLite file (default
-`~/.local/share/musicseed/musicseed.db`, WAL mode). `musicseed init-db` creates it; backup is
-copying the file.
+`~/.local/share/musicseed/musicseed.db`, WAL mode). `musicseed-cli init-db` creates it; backup is
+copying the file. The web wizard also initializes it on first run.
 
 App-specific commands and verification live in each app's `AGENTS.md`.
 

@@ -116,5 +116,17 @@ def _run_when_started(server: uvicorn.Server, callback: Callable[[], None]) -> N
 
 
 def main() -> None:
-    """Script entry point: ``musicseed-api``."""
-    serve(host="127.0.0.1", port=8789)
+    """Script entry point: ``musicseed``."""
+    import argparse
+    import webbrowser
+
+    parser = argparse.ArgumentParser(prog="musicseed", description="MusicSeed API and web UI")
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=8789)
+    parser.add_argument("--open", action="store_true", help="Open the UI in a browser")
+    parser.add_argument("--no-ui", action="store_true", help="Serve JSON only (no static UI)")
+    args = parser.parse_args()
+
+    url = f"http://{args.host}:{args.port}"
+    on_started = (lambda: webbrowser.open(url)) if args.open else None
+    serve(host=args.host, port=args.port, on_started=on_started, serve_ui=not args.no_ui)

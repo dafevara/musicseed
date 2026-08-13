@@ -20,7 +20,7 @@ for the logic this app calls. This file covers the API app only.
   or `musicseed-cli` — the web surface consumes this API over HTTP.
 - Own `pyproject.toml` + `uv.lock` + `.venv`. Run `uv` commands from inside `api/`.
 - Started standalone via `uv run uvicorn musicseed_api.app:app` (unprefixed JSON) or the
-  `musicseed-api` script entry point (port 8789). The script serves JSON at `/api` and, when
+  `musicseed` script entry point (port 8789). The script serves JSON at `/api` and, when
   `web/out/` exists, the static UI at `/`. Contributor hot reload still uses `./scripts/dev.sh`.
 
 ## Architecture: the `handlers/` seam
@@ -70,7 +70,8 @@ JSON. Handlers are the reusable part — routes are the HTTP-specific projection
   ASGI entry point (`musicseed_api.app:app`); keep it importable.
 - `src/musicseed_api/server.py`: **public server entry point** — `serve()` wraps uvicorn.
   `create_ui_app()` mounts `create_app()` at `/api` and serves `web/out/` at `/` when present.
-  `main()` is the `musicseed-api` script entry point (port 8789).
+  `main()` is the `musicseed` script entry point (port 8789). Flags: `--port`, `--host`,
+  `--open`, `--no-ui`.
 - `src/musicseed_api/handlers/`: **orchestration layer** — one module per domain. No HTTP
   framework imports anywhere. Every function is callable from any surface. Modules:
   `discovery.py`, `library.py`, `enrichment.py`, `dashboard.py`, `recommend.py`, `sonic.py`,

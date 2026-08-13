@@ -14,7 +14,7 @@ Before guessing, capture the current state with the two cheapest probes:
   server, a machine-readable `reason` code plus `missing_inputs` (keys like `plex_token`,
   `plex_unreachable`, `plex_library`, `plex_db_path`, `db_location`, `spotify_credentials`) and a
   derived `first_run` status (`no_config` / `db_missing` / `library_empty`).
-- **From the CLI:** `uv run musicseed status` shows the resolved database path, Plex URL/DB/library,
+- **From the CLI:** `uv run musicseed-cli status` shows the resolved database path, Plex URL/DB/library,
   and library/enrichment coverage.
 
 Logs are the next stop: `~/.local/share/musicseed/logs/latest.log` (plus timestamped
@@ -61,15 +61,15 @@ Checks and recovery:
 
 ## Occupied ports
 
-Symptom: `dev.sh` (or `next dev`/`musicseed-api` run by hand) fails with "address already in use".
+Symptom: `musicseed` (or contributor `dev.sh`) fails with "address already in use".
 
 Recovery:
 
-1. The API defaults to `127.0.0.1:8789` and the web dev server to `127.0.0.1:3000`.
-2. Free the port: `lsof -i :8789` (or `:3000`) to find the process, then stop it — or pick new
-   ports with `API_PORT` / `WEB_PORT`. `dev.sh` reads `API_PORT`, `WEB_PORT`, and `API_URL` from
-   the environment.
-3. If you change the API port, point the web proxy at it with `API_URL=http://127.0.0.1:<new>`.
+1. The product server defaults to `127.0.0.1:8789`. Contributor `dev.sh` also uses `:3000`.
+2. Free the port: `lsof -i :8789` (or `:3000`) to find the process, then stop it — or pick a
+   new port with `musicseed --port <n>`. `dev.sh` reads `API_PORT`, `WEB_PORT`, and `API_URL`.
+3. If you change the API port under `dev.sh`, point the web proxy at it with
+   `API_URL=http://127.0.0.1:<new>`.
 
 ## Interrupted jobs (import / enrichment)
 
@@ -79,10 +79,10 @@ crash, or machine sleep).
 Recovery:
 
 - **Import** is incremental by default and resumable: re-running it (`POST /library/import`, or
-  `uv run musicseed import`) continues where it left off. Use `--full` (CLI) only when you intend a
+  `uv run musicseed-cli import`) continues where it left off. Use `--full` (CLI) only when you intend a
   complete re-import.
 - **Enrichment** marks attempted tracks, so re-running with resume
-  (`uv run musicseed enrich --source listenbrainz --resume`) skips already-attempted tracks.
+  (`uv run musicseed-cli enrich --source listenbrainz --resume`) skips already-attempted tracks.
 - **Cancel vs. delete.** The dashboard can cancel a running job (at the next safe batch boundary)
   or delete a finished/failed job record. Cancelling leaves already-committed batches in place.
 - **SQLite lock contention** is the usual cause of a crash mid-job (e.g. a stale `-wal`/`-shm`
@@ -117,9 +117,9 @@ Checks and recovery:
 - **Sonic vectors are read from Plex at query time.** MusicSeed stores nothing; Plex must have
   analyzed the library. If `recommend` fails with "sonic ... unavailable", the Plex blobs database
   path isn't resolvable — fix it in Settings.
-- **Check coverage:** `uv run musicseed sonic-probe` reports analyzed vs. unanalyzed tracks and the
+- **Check coverage:** `uv run musicseed-cli sonic-probe` reports analyzed vs. unanalyzed tracks and the
   albums still pending.
-- **Trigger analysis:** `uv run musicseed sonic-refresh` runs Plex's MusicAnalysis Butler task. It
+- **Trigger analysis:** `uv run musicseed-cli sonic-refresh` runs Plex's MusicAnalysis Butler task. It
   processes Plex's *entire* pending backlog (CPU-heavy) and keeps running after the command
   finishes; the command prompts for confirmation first. `sonic-probe --trigger-butler` tests the
   Butler path on one album before committing to it.

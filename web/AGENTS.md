@@ -32,7 +32,7 @@ Contributor hot reload (two processes):
 ./scripts/dev.sh
 ```
 
-This runs `musicseed-api` on `127.0.0.1:8789` and `next dev` on `127.0.0.1:3000`. After
+This runs `musicseed --no-ui` on `127.0.0.1:8789` and `next dev` on `127.0.0.1:3000`. After
 `npm run build`, the API also serves `web/out/` at `http://127.0.0.1:8789` (API at `/api`).
 
 ## Architecture
@@ -83,6 +83,6 @@ npm run lint         # ESLint
 npm run build        # static export to web/out/ (not committed)
 ```
 
-After a build, `cd ../api && uv run musicseed-api` serves the UI and JSON together. There is no
+After a build, `cd ../api && uv run musicseed` serves the UI and JSON together. There is no
 separate web test suite — the API contract is covered by `api/tests/`, and the UI is type-checked
 with `tsc`.

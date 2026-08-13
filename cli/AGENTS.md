@@ -11,7 +11,8 @@ the logic this app calls. This file covers the CLI app only.
 ## Identity
 
 - Distribution name: `musicseed-cli`. Import package: `musicseed_cli`.
-- Installed command: **`musicseed`** → `musicseed_cli.app:app`.
+- Installed command: **`musicseed-cli`** → `musicseed_cli.app:app`. The product web command
+  is `musicseed` (owned by `api/`).
 - Depends on `musicseed-core` via an **editable path source** in `pyproject.toml`, so edits
   to core are picked up without reinstalling.
 - Own `pyproject.toml` + `uv.lock` + `.venv`. Run `uv`/`musicseed` from inside `cli/` (or use
@@ -81,10 +82,10 @@ updated app.
 
 ```bash
 uv sync                                  # installs core editable + typer/rich
-uv run musicseed --help
+uv run musicseed-cli --help
 uv run ruff check src
 uv run pytest tests -q                   # command tests (no server, no browser, no DB)
-uv run musicseed status                  # needs config (SQLite file; `init-db` creates it)
+uv run musicseed-cli status                  # needs config (SQLite file; `init-db` creates it)
 ```
 
 Note: `ruff check src` currently reports pre-existing I001/E501 issues in the older command
@@ -95,8 +96,8 @@ The web UI is a separate Next.js app (see `web/AGENTS.md`); the CLI has no `web`
 Use limits when exercising slow/stateful paths:
 
 ```bash
-uv run musicseed enrich --source listenbrainz --limit 100 --batch-size 50 --resume
-uv run musicseed recommend --seed-id 123 --limit 20 --explain
+uv run musicseed-cli enrich --source listenbrainz --limit 100 --batch-size 50 --resume
+uv run musicseed-cli recommend --seed-id 123 --limit 20 --explain
 ```
 
 If a flag here disagrees with the command module in `commands/`, trust the code and update this doc

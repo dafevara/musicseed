@@ -53,7 +53,7 @@ Good recommendations should be:
 
 ## Current User Flows
 
-The web UI (Next.js) is the default onboarding path. The first-run wizard discovers the Plex
+The web UI is the default onboarding path (`./scripts/install.sh` then `musicseed`). The first-run wizard discovers the Plex
 server on the local network (GDM + SSDP), initializes the database, and optionally runs
 enrichment; a persistent settings view holds credentials (Plex token, Spotify keys). The CLI
 flows below remain the power-user path:

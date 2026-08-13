@@ -97,7 +97,7 @@ def status() -> None:
 
     except Exception as e:
         console.print(f"\n[yellow]Could not open database: {e}[/yellow]")
-        console.print("Run 'musicseed init-db' to initialize the database.\n")
+        console.print("Run 'musicseed-cli init-db' to initialize the database.\n")
 
 
 def register(app: typer.Typer) -> None:

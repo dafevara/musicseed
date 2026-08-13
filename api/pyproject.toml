@@ -24,7 +24,7 @@ dev = [
 musicseed-core = { path = "../core", editable = true }
 
 [project.scripts]
-musicseed-api = "musicseed_api.server:main"
+musicseed = "musicseed_api.server:main"
 
 [build-system]
 requires = ["hatchling"]
