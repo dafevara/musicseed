@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Form, HTTPException, Query
+from musicseed.recommender.populate import PopulateMethod
 from musicseed.recommender.scoring import Weights
 
 from musicseed_api.handlers.playlists import (
@@ -16,6 +17,18 @@ from musicseed_api.handlers.playlists import (
 from musicseed_api.handlers.recommend import parse_seed_ids
 
 router = APIRouter(tags=["playlists"])
+
+_METHODS = {"average", "frequency"}
+
+
+def _parse_method(value: str) -> PopulateMethod:
+    method = value.strip().lower() or "average"
+    if method not in _METHODS:
+        raise HTTPException(
+            status_code=400,
+            detail="method must be 'average' or 'frequency'.",
+        )
+    return method  # type: ignore[return-value]
 
 
 @router.get("/playlists")
@@ -67,10 +80,11 @@ def create_playlist(
     )
 
 
-@router.get("/playlists/{name}/preview")
+@router.get("/playlists/{playlist_id}/preview")
 def preview(
-    name: str,
+    playlist_id: str,
     limit: int = Query(default=10),
+    method: str = Query(default="average"),
     year_min: str | None = Query(default=None),
     year_max: str | None = Query(default=None),
     max_tracks_per_artist: int = Query(default=3),
@@ -94,8 +108,9 @@ def preview(
     weights = Weights(**weight_kwargs) if weight_kwargs else None
 
     return preview_populate(
-        playlist_name=name,
+        playlist_id=playlist_id,
         limit=limit,
+        method=_parse_method(method),
         weights=weights,
         year_min=y_min,
         year_max=y_max,
@@ -103,10 +118,11 @@ def preview(
     )
 
 
-@router.post("/playlists/{name}/populate")
+@router.post("/playlists/{playlist_id}/populate")
 def populate(
-    name: str,
+    playlist_id: str,
     limit: Annotated[int, Form()] = 10,
+    method: Annotated[str, Form()] = "average",
     year_min: Annotated[str, Form()] = "",
     year_max: Annotated[str, Form()] = "",
     max_tracks_per_artist: Annotated[int, Form()] = 3,
@@ -135,8 +151,9 @@ def populate(
     weights = Weights(**weight_kwargs) if weight_kwargs else None
 
     return apply_populate(
-        playlist_name=name,
+        playlist_id=playlist_id,
         limit=limit,
+        method=_parse_method(method),
         weights=weights,
         year_min=y_min,
         year_max=y_max,

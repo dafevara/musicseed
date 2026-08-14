@@ -7,7 +7,7 @@ import typer
 
 from musicseed import __version__
 from musicseed.config import get_config, load_config, set_config
-from musicseed.logging_config import parse_log_level, setup_logging
+from musicseed.logging_config import parse_log_level, resolve_log_level, setup_logging
 
 from musicseed_cli.commands import register_all
 from musicseed_cli.console import console
@@ -64,7 +64,7 @@ def main(
     console_logging = log_console or config.logging.console
     try:
         setup_logging(
-            level=parse_log_level(selected_log_level),
+            level=resolve_log_level(explicit=selected_log_level),
             console=console_logging,
             console_level=parse_log_level(selected_console_level),
         )

@@ -17,6 +17,7 @@ from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI
+from musicseed.logging_config import resolve_log_level, setup_logging
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import FileResponse
 from starlette.staticfiles import StaticFiles
@@ -24,6 +25,16 @@ from starlette.staticfiles import StaticFiles
 from musicseed_api.app import app, create_app
 
 _log = logging.getLogger("musicseed")
+
+
+def _attach_uvicorn_to(logger: logging.Logger) -> None:
+    for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+        uv = logging.getLogger(name)
+        uv.handlers.clear()
+        uv.propagate = False
+        uv.setLevel(logger.level)
+        for handler in logger.handlers:
+            uv.addHandler(handler)
 
 
 def resolve_static_dir() -> Path | None:
@@ -96,8 +107,12 @@ def serve(
     ``on_started`` is invoked once the server is ready. Blocks until
     shutdown. When ``serve_ui`` is true, serve the static UI if present.
     """
+    level = resolve_log_level()
+    logger = setup_logging(level=level, console=True, console_level=level)
+    _attach_uvicorn_to(logger)
     application = create_ui_app() if serve_ui else app
-    config = uvicorn.Config(application, host=host, port=port, log_level="info")
+    uv_level = logging.getLevelName(level).lower()
+    config = uvicorn.Config(application, host=host, port=port, log_level=uv_level)
     server = uvicorn.Server(config)
     if on_started is not None:
         watcher = threading.Thread(

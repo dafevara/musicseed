@@ -17,6 +17,7 @@ class PopulateResult(BaseModel):
 
     model_config = {"arbitrary_types_allowed": True}
 
+    playlist_id: str
     playlist_name: str
     playlist_track_count: int
     matched_track_count: int
@@ -64,20 +65,20 @@ def _plex_ids_for_track_ids(session, track_ids: list[int]) -> list[int]:
 
 
 def _resolve_playlist_local_tracks(
-    client: PlexClient, session, playlist_name: str
-) -> tuple[str, int, list[int]]:
-    """Return (rating_key, plex track count, local track ids) for a Plex playlist.
+    client: PlexClient, session, playlist_id: str
+) -> tuple[Playlist, int, list[int]]:
+    """Return (playlist, plex track count, local track ids) for a Plex playlist.
 
     Raises NotFoundError if the playlist doesn't exist or none of its tracks
     are present in the local database.
     """
-    playlist = client.find_playlist(playlist_name)
+    playlist = client.get_playlist(str(playlist_id))
     if playlist is None:
-        raise NotFoundError(f"No Plex playlist named '{playlist_name}' was found.")
+        raise NotFoundError(f"No Plex playlist with id '{playlist_id}' was found.")
 
     items = client.get_playlist_tracks(playlist.rating_key)
     if not items:
-        raise NotFoundError(f"Playlist '{playlist_name}' has no tracks in Plex.")
+        raise NotFoundError(f"Playlist '{playlist.title}' has no tracks in Plex.")
 
     plex_ids = [int(i.rating_key) for i in items]
     local_ids = [
@@ -86,14 +87,14 @@ def _resolve_playlist_local_tracks(
     ]
     if not local_ids:
         raise NotFoundError(
-            f"None of the tracks in playlist '{playlist_name}' are in the local "
+            f"None of the tracks in playlist '{playlist.title}' are in the local "
             "library. Import and enrich them first."
         )
-    return playlist.rating_key, len(plex_ids), local_ids
+    return playlist, len(plex_ids), local_ids
 
 
 def get_populate_recommendations(
-    playlist_name: str,
+    playlist_id: str,
     *,
     method: PopulateMethod = "average",
     limit: int = 10,
@@ -107,8 +108,8 @@ def get_populate_recommendations(
     """Preview complementary recommendations for an existing Plex playlist."""
     client = _plex_client()
     with get_session() as session:
-        _, plex_track_count, local_ids = _resolve_playlist_local_tracks(
-            client, session, playlist_name
+        playlist, plex_track_count, local_ids = _resolve_playlist_local_tracks(
+            client, session, playlist_id
         )
         recommendations = populate_playlist_recommendations(
             session,
@@ -124,7 +125,8 @@ def get_populate_recommendations(
         )
 
         return PopulateResult(
-            playlist_name=playlist_name,
+            playlist_id=playlist.rating_key,
+            playlist_name=playlist.title,
             playlist_track_count=plex_track_count,
             matched_track_count=len(local_ids),
             recommendations=recommendations,
@@ -132,7 +134,7 @@ def get_populate_recommendations(
 
 
 def populate_playlist(
-    playlist_name: str,
+    playlist_id: str,
     *,
     method: PopulateMethod = "average",
     limit: int = 10,
@@ -157,8 +159,8 @@ def populate_playlist(
     """
     client = _plex_client()
     with get_session() as session:
-        rating_key, plex_track_count, local_ids = _resolve_playlist_local_tracks(
-            client, session, playlist_name
+        playlist, plex_track_count, local_ids = _resolve_playlist_local_tracks(
+            client, session, playlist_id
         )
 
         if track_ids is not None:
@@ -184,10 +186,11 @@ def populate_playlist(
             ]
 
         if plex_ids:
-            client.add_to_playlist(rating_key, plex_ids)
+            client.add_to_playlist(playlist.rating_key, plex_ids)
 
         return PopulateApplyResult(
-            playlist_name=playlist_name,
+            playlist_id=playlist.rating_key,
+            playlist_name=playlist.title,
             playlist_track_count=plex_track_count,
             matched_track_count=len(local_ids),
             recommendations=recommendations,

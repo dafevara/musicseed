@@ -92,7 +92,8 @@ def test_apply_populate_passes_selected_track_ids(monkeypatch):
     def fake_populate(**kwargs):
         captured.update(kwargs)
         return PopulateApplyResult(
-            playlist_name=kwargs["playlist_name"],
+            playlist_id=kwargs["playlist_id"],
+            playlist_name="Test",
             playlist_track_count=5,
             matched_track_count=3,
             recommendations=[],
@@ -100,7 +101,8 @@ def test_apply_populate_passes_selected_track_ids(monkeypatch):
         )
 
     monkeypatch.setattr(playlists_module, "populate_playlist", fake_populate)
-    result = playlists_module.apply_populate(playlist_name="Test", track_ids=[10, 20])
+    result = playlists_module.apply_populate(playlist_id="99", track_ids=[10, 20])
+    assert captured["playlist_id"] == "99"
     assert captured["track_ids"] == [10, 20]
     assert result["added_count"] == 2
 

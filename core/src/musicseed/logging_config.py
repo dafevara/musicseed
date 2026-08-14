@@ -1,10 +1,13 @@
 """Logging configuration for MusicSeed."""
 
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 
 from musicseed.config import default_log_dir
+
+LOG_LEVEL_ENV = "MUSICSEED_LOG_LEVEL"
 
 
 def parse_log_level(level: str | int) -> int:
@@ -21,6 +24,16 @@ def parse_log_level(level: str | int) -> int:
         valid = "DEBUG, INFO, WARNING, ERROR, CRITICAL"
         raise ValueError(f"Invalid log level '{level}'. Valid levels: {valid}")
     return parsed
+
+
+def resolve_log_level(explicit: str | int | None = None, default: str = "INFO") -> int:
+    """Env ``MUSICSEED_LOG_LEVEL`` wins, then ``explicit``, then ``default``."""
+    env = os.environ.get(LOG_LEVEL_ENV)
+    if env:
+        return parse_log_level(env)
+    if explicit is not None:
+        return parse_log_level(explicit)
+    return parse_log_level(default)
 
 
 def setup_logging(
@@ -80,8 +93,7 @@ def setup_logging(
     file_handler.setFormatter(file_format)
     logger.addHandler(file_handler)
 
-    # Also write to latest.log (overwrite each run)
-    latest_handler = logging.FileHandler(latest_log, mode="w", encoding="utf-8")
+    latest_handler = logging.FileHandler(latest_log, mode="a", encoding="utf-8")
     latest_handler.setLevel(resolved_level)
     latest_handler.setFormatter(file_format)
     logger.addHandler(latest_handler)

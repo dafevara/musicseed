@@ -160,10 +160,14 @@ export interface RecommendResponse {
   weights?: Record<string, number>;
 }
 
+export type PopulateMethod = "average" | "frequency";
+
 export interface PopulatePreview {
+  playlist_id: string;
   playlist_name: string;
   playlist_track_count: number;
   matched_track_count: number;
+  method?: PopulateMethod;
   weights?: Record<string, number>;
   recommendations: RecommendationItem[];
 }

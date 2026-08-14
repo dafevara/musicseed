@@ -3,16 +3,18 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useSetupGate } from "@/lib/use-setup-gate";
-import type { RecommendationItem, PopulatePreview, RecommendResponse, TypeaheadTrack } from "@/lib/types";
+import type { RecommendationItem, PopulateMethod, PopulatePreview, RecommendResponse, TypeaheadTrack } from "@/lib/types";
 import { Typeahead } from "@/components/typeahead";
 import { SeedChips } from "@/components/seed-chips";
 import { RecommendResults } from "@/components/recommend-results";
 import { WeightControls } from "@/components/weight-controls";
 
-function weightsQuery(weights: Record<string, number>): string {
-  return Object.entries(weights)
-    .map(([k, v]) => `w_${k}=${v}`)
-    .join("&");
+function previewQuery(weights: Record<string, number>, method: PopulateMethod): string {
+  const parts = [`method=${method}`];
+  for (const [k, v] of Object.entries(weights)) {
+    parts.push(`w_${k}=${v}`);
+  }
+  return parts.join("&");
 }
 
 interface PlexPlaylist {
@@ -46,9 +48,12 @@ export default function PlaylistsPage() {
   const [populateError, setPopulateError] = useState<string | null>(null);
   const [populateWeights, setPopulateWeights] = useState<Record<string, number>>({});
   const [populatePreset, setPopulatePreset] = useState("balanced");
+  const [populateMethod, setPopulateMethod] = useState<PopulateMethod>("average");
   const [presets, setPresets] = useState<Record<string, Record<string, number>>>({});
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [refreshingPreview, setRefreshingPreview] = useState(false);
   const removedPopulateIdsRef = useRef<Set<number>>(new Set());
+  const previewGenRef = useRef(0);
 
   const gate = useSetupGate();
 
@@ -137,19 +142,20 @@ export default function PlaylistsPage() {
     }
   }
 
-  async function handlePreviewPopulate(name: string) {
+  async function handlePreviewPopulate(playlistId: string) {
     setPopulatePreview(null);
     setPopulateItems([]);
     setPopulateResult(null);
     setPopulateError(null);
-    setPreviewingPlaylist(name);
+    setPreviewingPlaylist(playlistId);
     setShowAdvanced(false);
     setPopulatePreset("balanced");
+    setPopulateMethod("average");
     if (presets.balanced) setPopulateWeights({ ...presets.balanced });
     removedPopulateIdsRef.current = new Set();
     try {
       const data = await api.get<PopulatePreview>(
-        `/playlists/${encodeURIComponent(name)}/preview?limit=10`
+        `/playlists/${encodeURIComponent(playlistId)}/preview?limit=10&method=average`
       );
       setPopulatePreview(data);
       setPopulateItems(data.recommendations);
@@ -178,15 +184,18 @@ export default function PlaylistsPage() {
   // Recompute the preview (debounced) whenever the user changes weights in
   // the advanced panel.
   useEffect(() => {
-    const name = populatePreview?.playlist_name;
-    if (!showAdvanced || !name) return;
+    const playlistId = populatePreview?.playlist_id;
+    if (!showAdvanced || !playlistId) return;
 
+    const gen = ++previewGenRef.current;
+    setRefreshingPreview(true);
     const timer = setTimeout(async () => {
       try {
-        const qs = weightsQuery(populateWeights);
+        const qs = previewQuery(populateWeights, populateMethod);
         const data = await api.get<PopulatePreview>(
-          `/playlists/${encodeURIComponent(name)}/preview?limit=10${qs ? `&${qs}` : ""}`
+          `/playlists/${encodeURIComponent(playlistId)}/preview?limit=10&${qs}`
         );
+        if (previewGenRef.current !== gen) return;
         setPopulatePreview(data);
         setPopulateItems(
           data.recommendations.filter(
@@ -194,18 +203,21 @@ export default function PlaylistsPage() {
           )
         );
       } catch (e) {
+        if (previewGenRef.current !== gen) return;
         setPopulateError(String(e).replace("Error: ", ""));
+      } finally {
+        if (previewGenRef.current === gen) setRefreshingPreview(false);
       }
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [populatePreview?.playlist_name, showAdvanced, populateWeights]);
+  }, [populatePreview?.playlist_id, showAdvanced, populateWeights, populateMethod]);
 
-  async function handleConfirmPopulate(name: string) {
+  async function handleConfirmPopulate(playlistId: string) {
     const trackIds = populateItems.map((r) => r.track_id);
     if (trackIds.length === 0) return;
 
-    setPopulating(name);
+    setPopulating(playlistId);
     setPopulateResult(null);
     setPopulateError(null);
     try {
@@ -213,8 +225,9 @@ export default function PlaylistsPage() {
         playlist_name: string;
         added_count: number;
         playlist_track_count: number;
-      }>(`/playlists/${encodeURIComponent(name)}/populate`, {
+      }>(`/playlists/${encodeURIComponent(playlistId)}/populate`, {
         limit: 10,
+        method: populateMethod,
         track_ids: trackIds.join(","),
       });
       setPopulateResult(
@@ -343,9 +356,9 @@ export default function PlaylistsPage() {
         {playlists.length > 0 && (
           <ul className="list-none m-0 p-0 grid gap-1 mt-3">
             {playlists.map((p) => {
-              const isPreviewing = previewingPlaylist === p.name;
-              const isPopulating = populating === p.name;
-              const showPreview = populatePreview?.playlist_name === p.name;
+              const isPreviewing = previewingPlaylist === p.rating_key;
+              const isPopulating = populating === p.rating_key;
+              const showPreview = populatePreview?.playlist_id === p.rating_key;
 
               return (
                 <li
@@ -361,7 +374,7 @@ export default function PlaylistsPage() {
                     </div>
                     <button
                       className="btn btn-secondary text-sm px-3 py-1.5"
-                      onClick={() => handlePreviewPopulate(p.name)}
+                      onClick={() => handlePreviewPopulate(p.rating_key)}
                       disabled={isPopulating || isPreviewing}
                     >
                       {isPopulating ? "Adding…" : isPreviewing ? "Previewing…" : "Populate"}
@@ -380,6 +393,32 @@ export default function PlaylistsPage() {
 
                       {showAdvanced && (
                         <div className="mt-3 mb-3 p-3 border border-[var(--border)] rounded-lg bg-[var(--bg)]">
+                          <p className="text-sm font-semibold mb-2">Strategy</p>
+                          <div className="flex items-center gap-2 mb-4">
+                            <div className="inline-flex rounded-full border border-[var(--border)] p-0.5" role="group" aria-label="Populate strategy">
+                              {(["average", "frequency"] as const).map((value) => (
+                                <button
+                                  key={value}
+                                  type="button"
+                                  disabled={refreshingPreview}
+                                  className={`text-xs px-3 py-1 rounded-full font-medium border-0 ${
+                                    populateMethod === value
+                                      ? "bg-[var(--brand)] text-white"
+                                      : "bg-transparent text-[var(--muted)]"
+                                  } ${refreshingPreview ? "opacity-60 cursor-wait" : "cursor-pointer"}`}
+                                  onClick={() => setPopulateMethod(value)}
+                                >
+                                  {value === "average" ? "Average" : "Frequency"}
+                                </button>
+                              ))}
+                            </div>
+                            {refreshingPreview && (
+                              <span className="inline-flex items-center gap-1.5 text-xs text-[var(--muted)]" aria-live="polite">
+                                <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-[var(--border)] border-t-[var(--brand)] animate-spin" />
+                                Updating preview…
+                              </span>
+                            )}
+                          </div>
                           <p className="text-sm font-semibold mb-2">Scoring weights</p>
                           <WeightControls
                             weights={populateWeights}
@@ -391,7 +430,12 @@ export default function PlaylistsPage() {
                         </div>
                       )}
 
-                      {populateItems.length === 0 ? (
+                      {refreshingPreview ? (
+                        <p className="text-sm text-[var(--muted)] inline-flex items-center gap-2">
+                          <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-[var(--border)] border-t-[var(--brand)] animate-spin" />
+                          Recalculating recommendations…
+                        </p>
+                      ) : populateItems.length === 0 ? (
                         <p className="text-sm text-[var(--muted)]">
                           No tracks selected — nothing to add.
                         </p>
@@ -405,8 +449,8 @@ export default function PlaylistsPage() {
                       <div className="flex flex-wrap gap-2 mt-3">
                         <button
                           className="btn btn-primary"
-                          onClick={() => handleConfirmPopulate(populatePreview.playlist_name)}
-                          disabled={isPopulating || populateItems.length === 0}
+                          onClick={() => handleConfirmPopulate(populatePreview.playlist_id)}
+                          disabled={isPopulating || refreshingPreview || populateItems.length === 0}
                         >
                           {isPopulating ? "Adding…" : "Confirm & add"}
                         </button>

@@ -100,8 +100,14 @@ def populate(
     console.print(f"  Max per artist: {artist_max}\n")
 
     try:
+        playlists = populate_service.list_plex_playlists()
+        match = next((p for p in playlists if p.title == playlist_name), None)
+        if match is None:
+            console.print(f"[red]No Plex playlist named '{playlist_name}' was found.[/red]")
+            raise typer.Exit(1)
+        playlist_id = match.rating_key
         preview = populate_service.get_populate_recommendations(
-            playlist_name,
+            playlist_id,
             method=method,
             limit=limit,
             per_seed_limit=per_seed_limit,
@@ -148,7 +154,7 @@ def populate(
 
     try:
         result = populate_service.populate_playlist(
-            playlist_name,
+            playlist_id,
             method=method,
             limit=limit,
             per_seed_limit=per_seed_limit,

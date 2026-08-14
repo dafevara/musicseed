@@ -359,6 +359,14 @@ class PlexClient:
                 )
         return None
 
+    def get_playlist(self, rating_key: str) -> Playlist | None:
+        """Return the audio playlist with this ratingKey, or None."""
+        key = str(rating_key)
+        for playlist in self.list_playlists():
+            if playlist.rating_key == key:
+                return playlist
+        return None
+
     def list_playlists(self) -> list[Playlist]:
         """Return every audio playlist on the server.
 

@@ -7,6 +7,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 API_PORT="${API_PORT:-8789}"
 WEB_PORT="${WEB_PORT:-3000}"
 API_URL="${API_URL:-http://127.0.0.1:8789}"
+export MUSICSEED_LOG_LEVEL="${MUSICSEED_LOG_LEVEL:-DEBUG}"
 
 API_PID=""
 WEB_PID=""

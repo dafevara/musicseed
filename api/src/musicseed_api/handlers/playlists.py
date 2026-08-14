@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from musicseed.recommender.populate import PopulateMethod
 from musicseed.recommender.scoring import Weights
 from musicseed.services.populate import (
     PopulateApplyResult,
@@ -54,8 +55,9 @@ def create_playlist_from_seeds(
 
 
 def preview_populate(
-    playlist_name: str,
+    playlist_id: str,
     limit: int = 10,
+    method: PopulateMethod = "average",
     weights: Weights | None = None,
     year_min: int | None = None,
     year_max: int | None = None,
@@ -63,7 +65,8 @@ def preview_populate(
 ) -> dict:
     """Preview complementary recommendations for an existing playlist."""
     result: PopulateResult = get_populate_recommendations(
-        playlist_name=playlist_name,
+        playlist_id=playlist_id,
+        method=method,
         limit=limit,
         weights=weights,
         year_min=year_min,
@@ -71,7 +74,9 @@ def preview_populate(
         max_tracks_per_artist=max_tracks_per_artist,
     )
     return {
+        "playlist_id": result.playlist_id,
         "playlist_name": result.playlist_name,
+        "method": method,
         "playlist_track_count": result.playlist_track_count,
         "matched_track_count": result.matched_track_count,
         "weights": (weights or Weights()).model_dump(),
@@ -88,8 +93,9 @@ def preview_populate(
 
 
 def apply_populate(
-    playlist_name: str,
+    playlist_id: str,
     limit: int = 10,
+    method: PopulateMethod = "average",
     weights: Weights | None = None,
     year_min: int | None = None,
     year_max: int | None = None,
@@ -102,7 +108,8 @@ def apply_populate(
     recommendation step is skipped.
     """
     result: PopulateApplyResult = populate_playlist(
-        playlist_name=playlist_name,
+        playlist_id=playlist_id,
+        method=method,
         limit=limit,
         weights=weights,
         year_min=year_min,
@@ -111,6 +118,7 @@ def apply_populate(
         track_ids=track_ids,
     )
     return {
+        "playlist_id": result.playlist_id,
         "playlist_name": result.playlist_name,
         "playlist_track_count": result.playlist_track_count,
         "matched_track_count": result.matched_track_count,

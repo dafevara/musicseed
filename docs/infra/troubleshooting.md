@@ -141,8 +141,10 @@ Checks and recovery:
 
 ## Logs and where to look
 
-- `~/.local/share/musicseed/logs/latest.log` — most recent run across CLI and API surfaces.
-- `~/.local/share/musicseed/logs/musicseed_YYYYMMDD_HHMMSS.log` — timestamped run logs.
+- `~/.local/share/musicseed/logs/latest.log` — CLI and `musicseed` (API/UI) append here.
+  Follow with `tail -f ~/.local/share/musicseed/logs/latest.log`.
+  Set `MUSICSEED_LOG_LEVEL=DEBUG` (or `--log-level` on the CLI) to raise verbosity.
+- `~/.local/share/musicseed/logs/musicseed_YYYYMMDD_HHMMSS.log` — timestamped per-process run.
 
 If an error message says "check logs/latest.log", the exception detail is there. Avoid sharing
 those logs outside the machine — they can contain local paths and, in rare cases, credentials.

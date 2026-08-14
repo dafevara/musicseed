@@ -8,11 +8,11 @@ def test_preview_is_get_and_mutations_are_post():
     client = TestClient(create_app())
     paths = client.app.openapi()["paths"]
 
-    assert set(paths["/playlists/{name}/preview"].keys()) == {"get"}
+    assert set(paths["/playlists/{playlist_id}/preview"].keys()) == {"get"}
     assert "post" in paths["/playlists/create"]
-    assert "post" in paths["/playlists/{name}/populate"]
+    assert "post" in paths["/playlists/{playlist_id}/populate"]
     assert "get" not in paths["/playlists/create"]
-    assert "get" not in paths["/playlists/{name}/populate"]
+    assert "get" not in paths["/playlists/{playlist_id}/populate"]
 
 
 def test_sonic_refresh_is_post_only():

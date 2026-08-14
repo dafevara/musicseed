@@ -71,7 +71,9 @@ JSON. Handlers are the reusable part — routes are the HTTP-specific projection
 - `src/musicseed_api/server.py`: **public server entry point** — `serve()` wraps uvicorn.
   `create_ui_app()` mounts `create_app()` at `/api` and serves `web/out/` at `/` when present.
   `main()` is the `musicseed` script entry point (port 8789). Flags: `--port`, `--host`,
-  `--open`, `--no-ui`.
+  `--open`, `--no-ui`. `serve()` calls `setup_logging` and attaches uvicorn to the same
+  file (`~/.local/share/musicseed/logs/latest.log`). `MUSICSEED_LOG_LEVEL` sets file,
+  console, and uvicorn level (default INFO).
 - `src/musicseed_api/handlers/`: **orchestration layer** — one module per domain. No HTTP
   framework imports anywhere. Every function is callable from any surface. Modules:
   `discovery.py`, `library.py`, `enrichment.py`, `dashboard.py`, `recommend.py`, `sonic.py`,

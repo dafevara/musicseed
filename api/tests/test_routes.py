@@ -121,7 +121,8 @@ def test_populate_route_passes_selected_track_ids(monkeypatch):
     def fake_apply_populate(**kwargs):
         captured.update(kwargs)
         return {
-            "playlist_name": kwargs["playlist_name"],
+            "playlist_id": kwargs["playlist_id"],
+            "playlist_name": "Test",
             "playlist_track_count": 5,
             "matched_track_count": 3,
             "added_count": 2,
@@ -129,9 +130,10 @@ def test_populate_route_passes_selected_track_ids(monkeypatch):
 
     monkeypatch.setattr(playlists_routes, "apply_populate", fake_apply_populate)
     resp = TestClient(create_app()).post(
-        "/playlists/Test/populate", data={"track_ids": "10,20,30"}
+        "/playlists/99/populate", data={"track_ids": "10,20,30"}
     )
     assert resp.status_code == 200
+    assert captured["playlist_id"] == "99"
     assert captured["track_ids"] == [10, 20, 30]
 
 
@@ -141,7 +143,8 @@ def test_preview_route_passes_weights(monkeypatch):
     def fake_preview_populate(**kwargs):
         captured.update(kwargs)
         return {
-            "playlist_name": kwargs["playlist_name"],
+            "playlist_id": kwargs["playlist_id"],
+            "playlist_name": "Test",
             "playlist_track_count": 5,
             "matched_track_count": 3,
             "weights": (kwargs["weights"] or Weights()).model_dump(),
@@ -150,12 +153,43 @@ def test_preview_route_passes_weights(monkeypatch):
 
     monkeypatch.setattr(playlists_routes, "preview_populate", fake_preview_populate)
     resp = TestClient(create_app()).get(
-        "/playlists/Test/preview",
+        "/playlists/99/preview",
         params={"limit": "10", "w_sonic": "0.5", "w_popularity": "0.2"},
     )
     assert resp.status_code == 200
+    assert captured["playlist_id"] == "99"
+    assert captured["method"] == "average"
     assert captured["weights"].sonic == 0.5
     assert captured["weights"].popularity == 0.2
+
+
+def test_preview_route_passes_frequency_method(monkeypatch):
+    captured = {}
+
+    def fake_preview_populate(**kwargs):
+        captured.update(kwargs)
+        return {
+            "playlist_id": kwargs["playlist_id"],
+            "playlist_name": "Test",
+            "method": kwargs["method"],
+            "recommendations": [],
+        }
+
+    monkeypatch.setattr(playlists_routes, "preview_populate", fake_preview_populate)
+    resp = TestClient(create_app()).get(
+        "/playlists/99/preview",
+        params={"method": "frequency"},
+    )
+    assert resp.status_code == 200
+    assert captured["method"] == "frequency"
+
+
+def test_preview_route_rejects_unknown_method():
+    resp = TestClient(create_app()).get(
+        "/playlists/99/preview",
+        params={"method": "mood"},
+    )
+    assert resp.status_code == 400
 
 
 def test_plex_servers_route(monkeypatch):

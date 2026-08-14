@@ -46,7 +46,7 @@ the **single place** that parses error bodies (`{detail}`) and form-encodes POST
 | `src/app/settings/page.tsx` | `GET /discovery`, `POST /discovery/config` |
 | `src/app/page.tsx` (dashboard) | `GET /dashboard`, `GET /discovery`, `POST /library/import`, `POST /enrichment/spotify`, `POST /sonic/refresh`, `DELETE /jobs/{job_id}` |
 | `src/app/recommend/page.tsx` | `GET /recommend/presets`, `GET /recommend/typeahead`, `POST /recommend` |
-| `src/app/playlists/page.tsx` | `GET /playlists`, `POST /recommend` (create preview), `POST /playlists/create`, `GET /playlists/{name}/preview`, `POST /playlists/{name}/populate` |
+| `src/app/playlists/page.tsx` | `GET /playlists`, `POST /recommend` (create preview), `POST /playlists/create`, `GET /playlists/{playlist_id}/preview` (`method=average|frequency`), `POST /playlists/{playlist_id}/populate` |
 
 Shared components live in `src/components/` (`health-strip`, `job-list`, `job-progress`,
 `typeahead`, `seed-chips`, `recommend-results`, `discovery-checks`, `setup-form`,

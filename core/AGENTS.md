@@ -53,7 +53,7 @@ Service entry points:
   from inside a running event loop; offload to a thread**).
 - `services/recommend.py`: `get_recommendations`, `create_playlist`.
 - `services/populate.py`: `list_plex_playlists`, `get_populate_recommendations`,
-  `populate_playlist`.
+  `populate_playlist` — keyed by Plex playlist `rating_key`, not title.
 - `services/plex_analysis.py`: `get_sonic_status`, `probe_sonic_trigger`,
   `probe_butler_trigger`, `refresh_album`, `refresh_sonic_analysis` — inspect Plex sonic
   analysis coverage over the HTTP API (`musicAnalysisVersion`) and trigger it on demand via
