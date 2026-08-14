@@ -75,12 +75,14 @@ function JobRow({
   const [state, setState] = useState(job.state);
   const [current, setCurrent] = useState(job.progress_current);
   const [total, setTotal] = useState(job.progress_total);
+  const [phases, setPhases] = useState(job.progress_phases ?? null);
   const [checkpoint, setCheckpoint] = useState(job.checkpoint);
   const [error, setError] = useState(job.error_summary);
   const [resultSummary, setResultSummary] = useState(job.result_summary);
   const [completedAt, setCompletedAt] = useState(job.completed_at);
   const [eta, setEta] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [canceling, setCanceling] = useState(false);
 
   const etaStart = useRef<{ time: number; current: number } | null>(null);
 
@@ -90,6 +92,15 @@ function JobRow({
     state === "failed" ||
     state === "canceled" ||
     state === "interrupted";
+
+  async function handleCancel() {
+    setCanceling(true);
+    try {
+      await api.post(`/jobs/${job.id}/cancel`);
+    } catch {
+      setCanceling(false);
+    }
+  }
 
   async function handleDelete() {
     setDeleting(true);
@@ -105,6 +116,7 @@ function JobRow({
     setState(j.state);
     setCurrent(j.progress_current);
     setTotal(j.progress_total);
+    setPhases(j.progress_phases ?? null);
     setCheckpoint(j.checkpoint);
     setError(j.error_summary);
     setResultSummary(j.result_summary);
@@ -203,7 +215,28 @@ function JobRow({
           )}
         </div>
 
-        {state === "running" && total > 0 && (
+        {state === "running" && phases && Object.keys(phases).length > 0 ? (
+          <div className="grid gap-1.5 mt-1">
+            {Object.entries(phases).map(([name, p]) => {
+              const phasePct = p.total > 0 ? Math.round((p.current / p.total) * 100) : 0;
+              return (
+                <div key={name} className="activity-progress">
+                  <div className="progress-bar">
+                    <div className="fill" style={{ width: `${phasePct}%` }} />
+                  </div>
+                  <span className="activity-progress-label">
+                    {name} {p.current.toLocaleString()} / {p.total.toLocaleString()}
+                  </span>
+                </div>
+              );
+            })}
+            {eta && (
+              <span className="activity-progress-label">
+                <span className="activity-eta">{eta} left</span>
+              </span>
+            )}
+          </div>
+        ) : state === "running" && total > 0 ? (
           <div className="activity-progress">
             <div className="progress-bar">
               <div className="fill" style={{ width: `${pct}%` }} />
@@ -213,7 +246,7 @@ function JobRow({
               {eta && <span className="activity-eta"> · {eta} left</span>}
             </span>
           </div>
-        )}
+        ) : null}
 
         {isTerminal && (
           <div className="activity-result">
@@ -230,6 +263,16 @@ function JobRow({
         </span>
       </div>
 
+      {state === "running" && (
+        <button
+          type="button"
+          className="btn btn-secondary text-xs px-2 py-1"
+          disabled={canceling}
+          onClick={handleCancel}
+        >
+          {canceling ? "…" : "Cancel"}
+        </button>
+      )}
       {canDelete && (
         <button
           type="button"

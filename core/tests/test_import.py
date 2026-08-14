@@ -91,4 +91,4 @@ def test_import_progress_writes_do_not_deadlock(monkeypatch, tmp_path):
     assert result["artists"] == 1
     assert result["albums"] == 1
     assert result["tracks"] == 1
-    assert calls == ["artists", "albums", "tracks"]
+    assert calls == ["artists", "albums", "tracks", "play history"]

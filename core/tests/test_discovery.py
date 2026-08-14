@@ -406,6 +406,7 @@ def test_first_run_not_first_when_populated(tmp_path: Path,
                       config=_config(tmp_path))
     assert not result.first_run.is_first_run
     assert result.first_run.reasons == []
+    assert not result.first_run.import_incomplete
 
 
 def test_library_empty_false_when_db_unreadable(tmp_path: Path,

@@ -56,8 +56,21 @@ export interface FirstRunStatus {
   no_config: boolean;
   db_missing: boolean;
   library_empty: boolean;
+  import_incomplete?: boolean;
   is_first_run: boolean;
   reasons: string[];
+}
+
+export interface CountCompare {
+  plex: number;
+  local: number;
+}
+
+export interface ImportCoverage {
+  artists: CountCompare;
+  albums: CountCompare;
+  tracks: CountCompare;
+  ever_succeeded: boolean;
 }
 
 export interface DiscoveryResult {
@@ -95,10 +108,19 @@ export interface LibrarySnapshot {
   artist_count: number;
   play_count: number;
   enrichment: EnrichmentCoverage;
+  import_coverage?: ImportCoverage | null;
 }
 
 export interface LibraryStatus {
   track_count: number;
+  album_count?: number;
+  artist_count?: number;
+  import_coverage?: ImportCoverage | null;
+}
+
+export interface JobPhaseProgress {
+  current: number;
+  total: number;
 }
 
 export interface JobSummary {
@@ -108,6 +130,7 @@ export interface JobSummary {
   checkpoint: string | null;
   progress_current: number;
   progress_total: number;
+  progress_phases?: Record<string, JobPhaseProgress> | null;
   error_summary: string | null;
   result_summary: string | null;
   created_at: string | null;

@@ -443,6 +443,7 @@ def import_from_plex(
                 logger.info("Cancellation requested before artists import")
                 session.commit()
                 return imported
+            artists_seen = 0
             for plex_artist in importer.iter_artists():
                 # Check if already exists
                 existing = session.query(Artist).filter_by(plex_id=plex_artist.id).first()
@@ -464,13 +465,17 @@ def import_from_plex(
 
                 artist_map[plex_artist.id] = artist.id
                 progress.advance(artist_task)
+                artists_seen += 1
+                if progress_callback and artists_seen % 50 == 0:
+                    session.commit()
+                    progress_callback(artists_seen, counts["artists"], "artists")
 
             # Release the write lock before reporting progress, otherwise the
             # progress write (jobs table) deadlocks against this transaction.
             session.commit()
 
             if progress_callback:
-                progress_callback(imported["artists"], counts["artists"], "artists")
+                progress_callback(artists_seen, counts["artists"], "artists")
 
             # Import albums
             if _cancelled():
@@ -478,6 +483,7 @@ def import_from_plex(
                 session.commit()
                 return imported
             album_task = progress.add_task("Importing albums...", total=counts["albums"])
+            albums_seen = 0
             for plex_album in importer.iter_albums():
                 existing = session.query(Album).filter_by(plex_id=plex_album.id).first()
                 if existing and not full_import:
@@ -504,13 +510,17 @@ def import_from_plex(
 
                 album_map[plex_album.id] = album.id
                 progress.advance(album_task)
+                albums_seen += 1
+                if progress_callback and albums_seen % 50 == 0:
+                    session.commit()
+                    progress_callback(albums_seen, counts["albums"], "albums")
 
             # Release the write lock before reporting progress, otherwise the
             # progress write (jobs table) deadlocks against this transaction.
             session.commit()
 
             if progress_callback:
-                progress_callback(imported["albums"], counts["albums"], "albums")
+                progress_callback(albums_seen, counts["albums"], "albums")
 
             # Import tracks
             if _cancelled():
@@ -518,6 +528,7 @@ def import_from_plex(
                 session.commit()
                 return imported
             track_task = progress.add_task("Importing tracks...", total=counts["tracks"])
+            tracks_seen = 0
             for plex_track in importer.iter_tracks():
                 if imported["tracks"] > 0 and imported["tracks"] % 500 == 0:
                     if _cancelled():
@@ -606,12 +617,16 @@ def import_from_plex(
                         track.styles.append(style_cache[style_name])
 
                 progress.advance(track_task)
+                tracks_seen += 1
+                if progress_callback and tracks_seen % 100 == 0:
+                    session.commit()
+                    progress_callback(tracks_seen, counts["tracks"], "tracks")
 
             # Commit tracks before play history
             session.commit()
 
             if progress_callback:
-                progress_callback(imported["tracks"], counts["tracks"], "tracks")
+                progress_callback(tracks_seen, counts["tracks"], "tracks")
 
             # Import play history
             if _cancelled():
@@ -621,6 +636,7 @@ def import_from_plex(
             history_task = progress.add_task(
                 "Importing play history...", total=counts["play_history"]
             )
+            history_seen = 0
             play_counts: dict[int, int] = {}  # track_id -> count
             last_played: dict[int, datetime] = {}  # track_id -> last played
 
@@ -659,6 +675,16 @@ def import_from_plex(
                         last_played[track_id] = played_at
 
                 progress.advance(history_task)
+                history_seen += 1
+                if progress_callback and history_seen % 200 == 0:
+                    session.commit()
+                    progress_callback(
+                        history_seen, counts["play_history"], "play history"
+                    )
+
+            if progress_callback:
+                session.commit()
+                progress_callback(history_seen, counts["play_history"], "play history")
 
             # Update track stats
             stats_task = progress.add_task("Updating track stats...", total=len(play_counts))

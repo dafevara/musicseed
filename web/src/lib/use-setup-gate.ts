@@ -20,7 +20,7 @@ export function useSetupGate(): SetupGate {
     api.get<DiscoveryResponse>("/discovery")
       .then((d) => {
         const first = d.result.first_run;
-        if (first.db_missing || first.library_empty) {
+        if (first.db_missing || first.library_empty || first.import_incomplete) {
           setState("needs-setup");
           router.replace("/setup");
         } else {

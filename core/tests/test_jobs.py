@@ -90,6 +90,17 @@ def test_update_progress() -> None:
     assert j["checkpoint"] == "halfway"
 
 
+def test_update_progress_keeps_phases() -> None:
+    jid = create_job("import")
+    update_progress(
+        jid, 3, 10, "importing albums…",
+        phases={"artists": {"current": 5, "total": 5}, "albums": {"current": 3, "total": 10}},
+    )
+    j = get_job(jid)
+    assert j["progress_phases"]["artists"] == {"current": 5, "total": 5}
+    assert j["progress_phases"]["albums"]["current"] == 3
+
+
 def test_get_latest_job() -> None:
     create_job("import")
     time.sleep(0.01)

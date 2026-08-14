@@ -49,6 +49,7 @@ def _job_to_dict(job: Job) -> dict:
         "state": job.state,
         "progress_current": job.progress_current,
         "progress_total": job.progress_total,
+        "progress_phases": job.progress_phases,
         "checkpoint": job.checkpoint,
         "error_summary": job.error_summary,
         "result_summary": job.result_summary,
@@ -81,7 +82,13 @@ def start_job(job_id: int) -> None:
         job.started_at = _now()
 
 
-def update_progress(job_id: int, current: int, total: int = 0, checkpoint: str = "") -> None:
+def update_progress(
+    job_id: int,
+    current: int,
+    total: int = 0,
+    checkpoint: str = "",
+    phases: dict | None = None,
+) -> None:
     with get_session() as session:
         job = session.get(Job, job_id)
         if job is None:
@@ -90,6 +97,8 @@ def update_progress(job_id: int, current: int, total: int = 0, checkpoint: str =
         job.progress_total = total
         if checkpoint:
             job.checkpoint = checkpoint
+        if phases is not None:
+            job.progress_phases = phases
 
 
 def complete_job(job_id: int, result_summary: str = "") -> None:

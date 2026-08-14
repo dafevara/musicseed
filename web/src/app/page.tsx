@@ -13,6 +13,7 @@ export default function DashboardPage() {
   const [plexServer, setPlexServer] = useState<PlexServerCheck | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   const fetchSnapshot = useCallback(async () => {
     try {
@@ -37,7 +38,7 @@ export default function DashboardPage() {
   useEffect(() => {
     api.get<DiscoveryResponse>("/discovery").then((d) => {
       const first = d.result.first_run;
-      if (first.db_missing || first.library_empty) {
+      if (first.db_missing || first.library_empty || first.import_incomplete) {
         router.replace("/setup");
         return;
       }
@@ -68,11 +69,12 @@ export default function DashboardPage() {
 
   async function handleSync() {
     setSyncing(true);
+    setSyncError(null);
     try {
       await api.post<{ job_id: number }>("/library/import");
       await fetchSnapshot();
-    } catch {
-      // ignore
+    } catch (e) {
+      setSyncError(String(e).replace("Error: ", ""));
     } finally {
       setSyncing(false);
     }
@@ -139,10 +141,20 @@ export default function DashboardPage() {
           </p>
         )}
 
+        {syncError && <div className="flash flash-error mt-3">{syncError}</div>}
+
         <div className="flex flex-wrap gap-2 mt-3">
-          {snapshot.library.track_count > 0 && !hasActiveImport && (
+          {!hasActiveImport && (
             <button className="btn btn-primary" onClick={handleSync} disabled={syncing}>
-              {syncing ? "Starting…" : "Sync library"}
+              {syncing
+                ? "Starting…"
+                : snapshot.library.import_coverage
+                    && snapshot.library.import_coverage.tracks.local
+                      < snapshot.library.import_coverage.tracks.plex
+                  ? "Resume import"
+                  : snapshot.library.track_count > 0
+                    ? "Sync library"
+                    : "Import library"}
             </button>
           )}
         </div>

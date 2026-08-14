@@ -19,7 +19,11 @@ const STEPS: { key: Step; label: string }[] = [
 ];
 
 function resolveStep(d: DiscoveryResponse, status: LibraryStatus | null): Step {
-  if (status && status.track_count > 0) return "done";
+  const incomplete = d.result.first_run.import_incomplete
+    || (status?.import_coverage && !status.import_coverage.ever_succeeded
+      && (status.import_coverage.tracks.plex > status.import_coverage.tracks.local
+        || status.import_coverage.albums.plex > status.import_coverage.albums.local));
+  if (status && status.track_count > 0 && !incomplete) return "done";
   if (d.result.musicseed_db.exists) return "review";
   return "detect";
 }
@@ -259,20 +263,32 @@ export default function SetupPage() {
             </section>
           )}
 
-          {data.ready && data.result.musicseed_db.exists && trackCount === 0 && (
+          {data.ready && data.result.musicseed_db.exists && (trackCount === 0 || data.result.first_run.import_incomplete) && (
             <section className="panel">
-              <h2 className="mt-0 text-lg font-semibold">Import your library</h2>
-              <p>
-                The database is ready but empty. Import your Plex library to start
-                recommending.
-              </p>
+              <h2 className="mt-0 text-lg font-semibold">
+                {trackCount === 0 ? "Import your library" : "Import stopped early"}
+              </h2>
+              {trackCount === 0 ? (
+                <p>
+                  The database is ready but empty. Import your Plex library to start
+                  recommending.
+                </p>
+              ) : (
+                <p>
+                  MusicSeed has {trackCount.toLocaleString()} tracks
+                  {libraryStatus?.import_coverage
+                    ? `, Plex has ${libraryStatus.import_coverage.tracks.plex.toLocaleString()}`
+                    : ""}
+                  . Resume the import to finish.
+                </p>
+              )}
               <button className="btn btn-primary" onClick={handleStartImport}>
-                Start import
+                {trackCount === 0 ? "Start import" : "Resume import"}
               </button>
             </section>
           )}
 
-          {data.ready && data.result.musicseed_db.exists && trackCount > 0 && (
+          {data.ready && data.result.musicseed_db.exists && trackCount > 0 && !data.result.first_run.import_incomplete && (
             <section className="panel">
               <h2 className="mt-0 text-lg font-semibold">Enrichment</h2>
               <p>

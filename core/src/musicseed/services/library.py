@@ -8,9 +8,10 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from musicseed.config import get_config
+from musicseed.db.models import Job
 from musicseed.db.session import IndexResult, create_indexes, ensure_schema, get_session, init_db
 from musicseed.exceptions import NotFoundError
-from musicseed.importers.plex import import_from_plex
+from musicseed.importers.plex import PlexImporter, import_from_plex
 from musicseed.sonic import get_sonic_vectors
 
 _sonic_count_cache: tuple[tuple[str, int, int], int] | None = None
@@ -39,6 +40,7 @@ class LibraryStatus(BaseModel):
     mood_count: int
     style_count: int
     enrichment: EnrichmentCoverage
+    import_coverage: ImportCoverage | None = None
 
 
 class ImportResult(BaseModel):
@@ -46,6 +48,34 @@ class ImportResult(BaseModel):
     albums: int
     tracks: int
     play_history: int
+
+
+class CountCompare(BaseModel):
+    plex: int
+    local: int
+
+    @property
+    def missing(self) -> int:
+        return max(0, self.plex - self.local)
+
+
+class ImportCoverage(BaseModel):
+    artists: CountCompare
+    albums: CountCompare
+    tracks: CountCompare
+    ever_succeeded: bool
+
+    @property
+    def complete(self) -> bool:
+        return (
+            self.artists.missing == 0
+            and self.albums.missing == 0
+            and self.tracks.missing == 0
+        )
+
+    @property
+    def setup_incomplete(self) -> bool:
+        return not self.ever_succeeded and not self.complete
 
 
 def initialize_database() -> None:
@@ -89,6 +119,58 @@ def import_library(
         )
 
     return ImportResult(**result)
+
+
+def has_succeeded_import() -> bool:
+    """True when any import job has reached succeeded."""
+    try:
+        ensure_schema()
+        with get_session() as session:
+            return (
+                session.query(Job)
+                .filter(Job.kind == "import", Job.state == "succeeded")
+                .first()
+                is not None
+            )
+    except Exception:
+        return False
+
+
+def get_import_coverage() -> ImportCoverage | None:
+    """Compare MusicSeed artist/album/track counts to the configured Plex library.
+
+    Returns None when the Plex database cannot be read. Does not raise.
+    """
+    config = get_config()
+    plex_db = config.plex.db_path_expanded
+    if not plex_db.exists():
+        return None
+
+    importer = PlexImporter(plex_db, config.plex.library)
+    try:
+        plex = importer.get_counts()
+    except Exception:
+        return None
+    finally:
+        importer.close()
+
+    from musicseed.db.models import Album, Artist, Track
+
+    try:
+        ensure_schema()
+        with get_session() as session:
+            local_artists = session.query(Artist).count()
+            local_albums = session.query(Album).count()
+            local_tracks = session.query(Track).count()
+    except Exception:
+        local_artists = local_albums = local_tracks = 0
+
+    return ImportCoverage(
+        artists=CountCompare(plex=plex["artists"], local=local_artists),
+        albums=CountCompare(plex=plex["albums"], local=local_albums),
+        tracks=CountCompare(plex=plex["tracks"], local=local_tracks),
+        ever_succeeded=has_succeeded_import(),
+    )
 
 
 def _count_tracks_with_sonic(session, track_count: int) -> int:
@@ -177,6 +259,7 @@ def get_status() -> LibraryStatus:
         genre_count=genre_count,
         mood_count=mood_count,
         style_count=style_count,
+        import_coverage=get_import_coverage(),
         enrichment=EnrichmentCoverage(
             tracks_with_mbid=tracks_with_mbid,
             tracks_with_spotify=tracks_with_spotify,

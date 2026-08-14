@@ -186,6 +186,7 @@ class FirstRunStatus(BaseModel):
     no_config: bool
     db_missing: bool
     library_empty: bool
+    import_incomplete: bool = False
     is_first_run: bool
     reasons: list[str]
 
@@ -476,12 +477,19 @@ def discover(
     db_missing = not musicseed_db.exists
     track_count = _count_tracks(Path(musicseed_db.path)) if not db_missing else None
     library_empty = track_count == 0
+    import_incomplete = False
+    if not db_missing and not library_empty:
+        from musicseed.services.library import get_import_coverage
+
+        coverage = get_import_coverage()
+        import_incomplete = bool(coverage and coverage.setup_incomplete)
     first_run_reasons = [
         reason
         for reason, flag in (
             ("no_config", no_config),
             ("db_missing", db_missing),
             ("library_empty", library_empty),
+            ("import_incomplete", import_incomplete),
         )
         if flag
     ]
@@ -489,6 +497,7 @@ def discover(
         no_config=no_config,
         db_missing=db_missing,
         library_empty=library_empty,
+        import_incomplete=import_incomplete,
         is_first_run=bool(first_run_reasons),
         reasons=first_run_reasons,
     )

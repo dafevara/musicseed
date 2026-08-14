@@ -18,8 +18,8 @@ def run_import_job(job_id: int) -> None:
     """Job target: import the Plex library and update job progress."""
     update_progress(job_id, 0, 1, "importing library…")
 
-    last_phase = [0, 0]
     cancelled = [False]
+    phases: dict[str, dict[str, int]] = {}
 
     def should_cancel() -> bool:
         if get_manager().should_cancel(job_id):
@@ -28,9 +28,10 @@ def run_import_job(job_id: int) -> None:
         return False
 
     def on_progress(current: int, total: int, phase: str) -> None:
-        last_phase[0] = current
-        last_phase[1] = total
-        update_progress(job_id, current, total, f"importing {phase}…")
+        phases[phase] = {"current": current, "total": total}
+        update_progress(
+            job_id, current, total, f"importing {phase}…", phases=phases,
+        )
 
     result = import_library(progress_callback=on_progress, should_cancel=should_cancel)
 

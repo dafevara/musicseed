@@ -303,6 +303,7 @@ class Job(Base):
     state: Mapped[str] = mapped_column(String(30), nullable=False, default="pending")
     progress_current: Mapped[int] = mapped_column(Integer, default=0)
     progress_total: Mapped[int] = mapped_column(Integer, default=0)
+    progress_phases: Mapped[Optional[dict]] = mapped_column(JSON)
     checkpoint: Mapped[Optional[str]] = mapped_column(String(500))
     error_summary: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

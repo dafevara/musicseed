@@ -30,7 +30,7 @@ only layer app surfaces should call. Each service function:
 Service entry points:
 
 - `services/library.py`: `initialize_database`, `optimize_database`, `import_library`,
-  `get_status`.
+  `get_status`, `get_import_coverage` (Plex vs local artist/album/track counts).
 - `services/discovery.py`: `discover` — read-only local environment probe (MusicSeed DB path,
   Plex library/blobs DB candidates, Plex server reachability/auth/library). Returns frozen
   Pydantic models with machine-readable `Reason` codes; expected failures are data, not

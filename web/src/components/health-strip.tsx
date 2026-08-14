@@ -119,6 +119,8 @@ export function HealthStrip({
   const enrichment = lib.enrichment;
 
   const enrichJob = activeJobs.find((j) => j.kind === "enrich" && (j.state === "running" || j.state === "pending"));
+  const importJob = activeJobs.find((j) => j.kind === "import" && (j.state === "running" || j.state === "pending"));
+  const importCov = lib.import_coverage;
   const [sonicStatus, setSonicStatus] = useState<SonicStatus | null>(null);
   const [enriching, setEnriching] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -216,6 +218,15 @@ export function HealthStrip({
           Coverage
         </p>
         <div className="grid gap-2">
+          {importCov && (
+            <CoverageBar
+              label="Plex import"
+              covered={importCov.tracks.local}
+              total={importCov.tracks.plex}
+              zeroHint="Library not imported yet."
+              activeJob={importJob}
+            />
+          )}
           <CoverageBar
             label="Spotify"
             covered={enrichment.tracks_with_spotify}

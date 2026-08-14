@@ -75,11 +75,30 @@ export function JobProgress({
               </span>
             )}
           </p>
-          {job.progress_total > 0 && (
+          {job.progress_phases && Object.keys(job.progress_phases).length > 0 ? (
+            <div className="grid gap-2 mb-3">
+              {Object.entries(job.progress_phases).map(([name, p]) => {
+                const phasePct = p.total > 0 ? Math.round((p.current / p.total) * 100) : 0;
+                return (
+                  <div key={name}>
+                    <p className="text-sm m-0 mb-0.5">
+                      {name}
+                      <span className="text-[var(--muted)] ml-1">
+                        ({p.current.toLocaleString()} / {p.total.toLocaleString()})
+                      </span>
+                    </p>
+                    <div className="progress-bar">
+                      <div className="fill" style={{ width: `${phasePct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : job.progress_total > 0 ? (
             <div className="progress-bar mb-3">
               <div className="fill" style={{ width: `${pct}%` }} />
             </div>
-          )}
+          ) : null}
           {job.state === "running" && (
             <form
               onSubmit={async (e) => {
