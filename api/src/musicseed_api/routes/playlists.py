@@ -83,7 +83,7 @@ def create_playlist(
 @router.get("/playlists/{playlist_id}/preview")
 def preview(
     playlist_id: str,
-    limit: int = Query(default=10),
+    limit: int = Query(default=40),
     method: str = Query(default="average"),
     year_min: str | None = Query(default=None),
     year_max: str | None = Query(default=None),
@@ -121,7 +121,7 @@ def preview(
 @router.post("/playlists/{playlist_id}/populate")
 def populate(
     playlist_id: str,
-    limit: Annotated[int, Form()] = 10,
+    limit: Annotated[int, Form()] = 40,
     method: Annotated[str, Form()] = "average",
     year_min: Annotated[str, Form()] = "",
     year_max: Annotated[str, Form()] = "",
