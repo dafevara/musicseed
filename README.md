@@ -37,8 +37,21 @@ macOS and Linux are supported. Windows is untested.
 
 ## Install
 
+### Release archive
+
+Download the source zip or tar.gz from
+[Releases](https://github.com/dafevara/musicseed/releases), unpack it, then:
+
 ```bash
-git clone <repo-url>
+cd MusicSeed-*
+./scripts/install.sh
+musicseed
+```
+
+### Install from source
+
+```bash
+git clone https://github.com/dafevara/musicseed.git
 cd MusicSeed
 ./scripts/install.sh
 musicseed

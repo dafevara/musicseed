@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Previous tag
+        id: prev
+        run: |
+          prev="$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)"
+          echo "ref=${prev}" >> "$GITHUB_OUTPUT"
+      - name: Release notes
+        run: |
+          {
+            echo "Unpack the source archive, then:"
+            echo ""
+            echo "\`\`\`bash"
+            echo "./scripts/install.sh"
+            echo "musicseed"
+            echo "\`\`\`"
+            echo ""
+            echo "Python 3.12+, uv, and Node/npm are required to install. Runtime is Python only."
+            echo ""
+            echo "## Changes"
+            echo ""
+          } > notes.md
+          if [ -n "${{ steps.prev.outputs.ref }}" ]; then
+            git log --pretty=format:"- %s (%h)" "${{ steps.prev.outputs.ref }}..HEAD" >> notes.md
+          else
+            git log --pretty=format:"- %s (%h)" >> notes.md
+          fi
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: false
+          body_path: notes.md
