@@ -1,10 +1,9 @@
 """``playlists`` command: list existing Plex audio playlists."""
 
 import typer
-from rich.table import Table
-
 from musicseed.exceptions import ConfigurationError
 from musicseed.logging_config import get_logger
+from rich.table import Table
 
 from musicseed_cli.console import console
 

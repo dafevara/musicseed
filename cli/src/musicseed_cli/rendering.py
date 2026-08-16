@@ -1,8 +1,7 @@
 """Shared rendering helpers for recommendation output."""
 
-from rich.table import Table
-
 from musicseed.recommender.scoring import Weights
+from rich.table import Table
 
 from musicseed_cli.console import console
 
