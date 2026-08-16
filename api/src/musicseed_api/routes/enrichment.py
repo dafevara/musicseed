@@ -36,9 +36,3 @@ def start_listenbrainz_enrich(
     save_listenbrainz_token(listenbrainz_token.strip())
     job_id = submit_job(enrich_kind("listenbrainz"), run_enrich_job, "listenbrainz")
     return {"job_id": job_id}
-
-
-@router.post("/enrichment/listenbrainz")
-def start_listenbrainz_enrich() -> dict:
-    job_id = submit_job(ENRICH_KIND, run_enrich_job, "listenbrainz")
-    return {"job_id": job_id}
