@@ -23,6 +23,15 @@ def save_spotify_creds(client_id: str, client_secret: str) -> None:
     save_config(cfg)
 
 
+def save_listenbrainz_token(token: str) -> None:
+    """Persist the ListenBrainz user token to config. No-op when empty."""
+    if not token:
+        return
+    cfg = get_config()
+    cfg.listenbrainz.token = token
+    save_config(cfg)
+
+
 def run_enrich_job(job_id: int, source: str = "spotify") -> None:
     """Job target: enrich tracks via the given source and update job progress."""
     update_progress(job_id, 0, 1, f"enriching via {source}…")

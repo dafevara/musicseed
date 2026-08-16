@@ -394,6 +394,7 @@ async def run_listenbrainz_enrichment(
     limit: int | None = None,
     unattempted_only: bool = False,
     requests_per_second: float = 1.0,
+    token: str = "",
     artist: str | None = None,
     album: str | None = None,
     progress_callback: Callable[[int, int, str], None] | None = None,
@@ -435,7 +436,7 @@ async def run_listenbrainz_enrichment(
         console=console,
     ) as progress:
         async with ListenBrainzClient(
-            requests_per_second=requests_per_second
+            requests_per_second=requests_per_second, token=token
         ) as listenbrainz_client:
             matched, unmatched, errors = await enrich_tracks_with_listenbrainz(
                 tracks,
@@ -457,6 +458,7 @@ async def run_enrichment(
     source: str = "spotify",
     client_id: str = "",
     client_secret: str = "",
+    listenbrainz_token: str = "",
     batch_size: int = 50,
     limit: int | None = None,
     unattempted_only: bool = False,
@@ -488,6 +490,7 @@ async def run_enrichment(
             limit=limit,
             unattempted_only=unattempted_only,
             requests_per_second=requests_per_second,
+            token=listenbrainz_token,
             artist=artist,
             album=album,
             progress_callback=progress_callback,

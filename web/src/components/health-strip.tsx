@@ -117,12 +117,14 @@ export function HealthStrip({
   snapshot,
   activeJobs,
   onEnrich,
+  onEnrichListenBrainz,
   onSonicRefresh,
   plexServer,
 }: {
   snapshot: DashboardSnapshot;
   activeJobs: JobSummary[];
   onEnrich: () => void | Promise<void>;
+  onEnrichListenBrainz: () => void | Promise<void>;
   onSonicRefresh: () => void | Promise<void>;
   plexServer?: PlexServerCheck | null;
 }) {
@@ -150,6 +152,15 @@ export function HealthStrip({
     setEnriching(true);
     try {
       await onEnrich();
+    } finally {
+      setEnriching(false);
+    }
+  }
+
+  async function doEnrichListenBrainz() {
+    setEnriching(true);
+    try {
+      await onEnrichListenBrainz();
     } finally {
       setEnriching(false);
     }
@@ -263,11 +274,12 @@ export function HealthStrip({
             covered={enrichment.tracks_with_listenbrainz}
             total={tracks}
             zeroHint={lbHint}
-            action={{
+            activeJob={enrichJob}
+            action={enrichJob ? undefined : {
               label: lbCovered > 0 ? "Resume" : "Enrich",
               icon: "play",
               busy: enriching,
-              onClick: doEnrich,
+              onClick: doEnrichListenBrainz,
             }}
           />
           <CoverageBar

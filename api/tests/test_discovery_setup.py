@@ -21,6 +21,7 @@ def test_apply_config_persists_plex_overrides_and_creates_fresh_db(tmp_path):
         musicseed_db_path=str(db_path),
         spotify_client_id="cid",
         spotify_client_secret="secret",
+        listenbrainz_token="lb-tok",
         plex_url="http://plex.local:32400",
         plex_token="token123",
         plex_library="Music2",
@@ -33,6 +34,7 @@ def test_apply_config_persists_plex_overrides_and_creates_fresh_db(tmp_path):
     assert reloaded.database.path == str(db_path)
     assert reloaded.spotify.client_id == "cid"
     assert reloaded.spotify.client_secret == "secret"
+    assert reloaded.listenbrainz.token == "lb-tok"
     assert reloaded.plex.url == "http://plex.local:32400"
     assert reloaded.plex.token == "token123"
     assert reloaded.plex.library == "Music2"
@@ -51,6 +53,7 @@ def test_init_db_route_forwards_plex_overrides(tmp_path):
             "musicseed_db_path": str(db_path),
             "spotify_client_id": "cid",
             "spotify_client_secret": "secret",
+            "listenbrainz_token": "lb-secret-token",
             "plex_url": "http://plex.local:32400",
             "plex_token": "secrettoken123",
             "plex_library": "Music2",
@@ -60,11 +63,13 @@ def test_init_db_route_forwards_plex_overrides(tmp_path):
 
     assert resp.status_code == 200
     assert "secrettoken123" not in resp.text  # secret never echoed
+    assert "lb-secret-token" not in resp.text  # secret never echoed
 
     config_module._config = None
     config_module._config_path = None
     reloaded = load_config(tmp_path / "config.yaml")
     assert reloaded.plex.url == "http://plex.local:32400"
     assert reloaded.plex.token == "secrettoken123"
+    assert reloaded.listenbrainz.token == "lb-secret-token"
     assert reloaded.database.path == str(db_path)
     assert db_path.exists()

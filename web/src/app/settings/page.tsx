@@ -18,6 +18,7 @@ export default function SettingsPage() {
   const [musicseedDbPath, setMusicseedDbPath] = useState("");
   const [spotifyId, setSpotifyId] = useState("");
   const [spotifySecret, setSpotifySecret] = useState("");
+  const [listenbrainzToken, setListenbrainzToken] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -42,6 +43,7 @@ export default function SettingsPage() {
         musicseed_db_path: musicseedDbPath,
         spotify_client_id: spotifyId,
         spotify_client_secret: spotifySecret,
+        listenbrainz_token: listenbrainzToken,
         plex_url: plexUrl,
         plex_token: plexToken,
         plex_library: plexLibrary,
@@ -49,6 +51,7 @@ export default function SettingsPage() {
       });
       setPlexToken("");
       setSpotifySecret("");
+      setListenbrainzToken("");
       setSaved(true);
       await load();
     } catch (e) {
@@ -60,6 +63,7 @@ export default function SettingsPage() {
 
   const plex = data?.result.plex_server;
   const spotify = data?.result.enrichers.spotify;
+  const listenbrainz = data?.result.enrichers.listenbrainz;
 
   return (
     <>
@@ -162,8 +166,22 @@ export default function SettingsPage() {
               placeholder={spotify?.client_secret_set ? "••••••••" : "not set"}
             />
           </label>
+          <label className="grid gap-1 text-sm">
+            ListenBrainz user token{" "}
+            <span className="text-[var(--muted)]">
+              ({listenbrainz?.configured ? "configured" : "not set"} — free at listenbrainz.org/settings)
+            </span>
+            <input
+              type="password"
+              value={listenbrainzToken}
+              onChange={(e) => setListenbrainzToken(e.target.value)}
+              autoComplete="off"
+              placeholder={listenbrainz?.configured ? "••••••••" : "not set"}
+            />
+          </label>
           <p className="muted text-sm m-0">
-            Leave a field blank to keep its current value. ListenBrainz needs no key.
+            Leave a field blank to keep its current value. Enrichment needs either a
+            ListenBrainz token or Spotify credentials.
           </p>
           <button type="submit" className="btn btn-primary justify-self-start" disabled={saving}>
             {saving ? "Saving…" : "Save"}

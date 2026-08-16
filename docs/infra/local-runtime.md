@@ -135,7 +135,9 @@ Ask before running:
 ## External APIs
 
 ListenBrainz enrichment uses recording MBIDs and should be the default enrichment path when
-possible. Spotify requires credentials and text matching, so treat it as optional fallback.
+possible. It requires a free ListenBrainz user token (`listenbrainz.token`), which raises rate
+limits over anonymous access. Spotify requires credentials and text matching, so treat it as a
+fallback.
 
 HTTP clients should:
 

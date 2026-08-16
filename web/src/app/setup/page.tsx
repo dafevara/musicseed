@@ -114,6 +114,7 @@ export default function SetupPage() {
         musicseed_db_path: data.result.musicseed_db.path,
         spotify_client_id: formValues.spotify_client_id || "",
         spotify_client_secret: formValues.spotify_client_secret || "",
+        listenbrainz_token: formValues.listenbrainz_token || "",
         plex_url: formValues.plex_url || data.result.plex_server.url,
         plex_token: formValues.plex_token || "",
         plex_library: formValues.plex_library || data.result.plex_server.library || "",
@@ -138,8 +139,11 @@ export default function SetupPage() {
 
   async function handleStartEnrich() {
     setStep("enriching");
+    const source = data?.result.enrichers.listenbrainz.configured
+      ? "listenbrainz"
+      : "spotify";
     try {
-      const { job_id } = await api.post<{ job_id: number }>("/enrichment/spotify");
+      const { job_id } = await api.post<{ job_id: number }>(`/enrichment/${source}`);
       setJobId(job_id);
       setJobKind("enrich");
     } catch {
@@ -258,9 +262,11 @@ export default function SetupPage() {
                 </HelpIcon>
               </div>
               <p className="mt-2 mb-0 text-sm text-[var(--muted)]">
-                {data.result.enrichers.spotify.configured
-                  ? "Spotify enrichment configured."
-                  : "Spotify not configured — optional (ListenBrainz needs no key)."}
+                {data.result.enrichers.listenbrainz.configured
+                  ? "ListenBrainz enrichment configured."
+                  : data.result.enrichers.spotify.configured
+                    ? "Spotify enrichment configured."
+                    : "No enrichment credentials — add a ListenBrainz token (free) or Spotify credentials."}
               </p>
             </section>
           )}

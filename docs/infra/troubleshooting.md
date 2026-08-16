@@ -12,7 +12,7 @@ Before guessing, capture the current state with the two cheapest probes:
   state. The underlying JSON is available directly at
   `curl http://127.0.0.1:8789/discovery` — it reports, for each required local file and the Plex
   server, a machine-readable `reason` code plus `missing_inputs` (keys like `plex_token`,
-  `plex_unreachable`, `plex_library`, `plex_db_path`, `db_location`, `spotify_credentials`) and a
+  `plex_unreachable`, `plex_library`, `plex_db_path`, `db_location`, `enrichment_credentials`) and a
   derived `first_run` status (`no_config` / `db_missing` / `library_empty`).
 - **From the CLI:** `musicseed-cli status` shows the resolved database path, Plex URL/DB/library,
   and library/enrichment coverage.
@@ -96,17 +96,19 @@ Symptom: enrichment succeeds only partially, or ListenBrainz/Spotify calls fail 
 
 Checks and recovery:
 
-- **ListenBrainz is the preferred and keyless source** and keys off recording MBIDs. Tracks without
+- **ListenBrainz is the preferred source** and keys off recording MBIDs. It requires a free user
+  token (from https://listenbrainz.org/settings/, set as `listenbrainz.token` in config or via
+  Settings); authenticated requests get higher rate limits. Tracks without
   a MusicBrainz ID cannot be enriched via ListenBrainz — that's expected, not an error. `status`
   shows MBID coverage.
-- **Spotify is an optional credentialed fallback** and uses text matching. If it isn't configured,
+- **Spotify is a credentialed fallback** and uses text matching. If it isn't configured,
   Spotify enrichment is skipped; nothing else needs Spotify.
 - **Rate limits.** Both providers are rate-limited. The pipeline uses bounded concurrency and
   retries; if a provider is throttling you, re-run with a smaller `--batch-size`/`--concurrency`
   and `--resume` rather than starting over.
-- **Spotify credentials.** Add them in Settings (or `config.yaml` under `spotify.client_id` /
-  `spotify.client_secret`). Enrichment completes fine without them — coverage will just be lower
-  for tracks lacking MBIDs.
+- **Enrichment credentials.** Enrichment requires either a ListenBrainz user token
+  (`listenbrainz.token`) or Spotify credentials (`spotify.client_id` / `spotify.client_secret`).
+  Add them in Settings or `config.yaml`.
 
 ## Missing sonic analysis
 

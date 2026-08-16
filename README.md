@@ -13,8 +13,8 @@ jobs, and explainable recommendations over large-scale product architecture.
 - Imports artists, albums, tracks, tags, file paths, MusicBrainz IDs, and play history from the
   Plex SQLite database into one local SQLite file (default
   `~/.local/share/musicseed/musicseed.db`) — no database server required.
-- Enriches popularity from ListenBrainz by MusicBrainz recording MBID, with Spotify as an optional
-  fallback.
+- Enriches popularity from ListenBrainz by MusicBrainz recording MBID (free user token required),
+  with Spotify as a credentialed fallback.
 - Uses Plex's own sonic analysis vectors (50-dimensional, read in memory at query time) for sonic
   similarity — MusicSeed generates no embeddings and stores no vectors.
 - Recommends tracks from six signals: sonic similarity, popularity proximity, style, genre, era,

@@ -323,13 +323,26 @@ def test_enrichers_spotify_configured(tmp_path: Path) -> None:
     assert result.enrichers.spotify.configured
     assert result.enrichers.spotify.client_id_set
     assert result.enrichers.spotify.client_secret_set
-    assert "spotify_credentials" not in result.missing_inputs
+    assert "enrichment_credentials" not in result.missing_inputs
 
 
-def test_enrichers_spotify_unconfigured(tmp_path: Path) -> None:
+def test_enrichers_listenbrainz_configured(tmp_path: Path) -> None:
+    cfg = Config.model_validate({
+        "database": {"path": str(tmp_path / "ms" / "musicseed.db")},
+        "plex": {"db_path": str(tmp_path / "plex" / "com.plexapp.plugins.library.db")},
+        "listenbrainz": {"token": "lb-token"},
+    })
+    result = discover(check_server=False, config=cfg)
+    assert result.enrichers.listenbrainz.configured
+    assert not result.enrichers.spotify.configured
+    assert "enrichment_credentials" not in result.missing_inputs
+
+
+def test_enrichers_unconfigured(tmp_path: Path) -> None:
     result = discover(check_server=False, config=_config(tmp_path))
     assert not result.enrichers.spotify.configured
-    assert "spotify_credentials" in result.missing_inputs
+    assert not result.enrichers.listenbrainz.configured
+    assert "enrichment_credentials" in result.missing_inputs
 
 
 # ---------------------------------------------------------------- missing inputs

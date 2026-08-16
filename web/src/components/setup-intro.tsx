@@ -52,8 +52,8 @@ export function SetupIntro() {
         </li>
         <li>
           <strong>Import &amp; enrichment.</strong> Background jobs that copy your library
-          into the local database and add popularity signals (ListenBrainz needs no
-          account; Spotify is optional). They can take a while for large libraries and
+          into the local database and add popularity signals (via ListenBrainz with a free
+          user token, or Spotify). They can take a while for large libraries and
           are safe to interrupt and resume.
         </li>
       </ol>
