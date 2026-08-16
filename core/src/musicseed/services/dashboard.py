@@ -1,6 +1,6 @@
 """Dashboard aggregation service — combines discovery, library stats, and
 job status into one surface-agnostic snapshot.
-"""
+"""  # noqa: D205
 
 from pydantic import BaseModel
 

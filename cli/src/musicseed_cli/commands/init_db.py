@@ -1,7 +1,6 @@
 """``init-db`` command: initialize the database schema."""
 
 import typer
-
 from musicseed.config import get_config
 
 from musicseed_cli.console import console

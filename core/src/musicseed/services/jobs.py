@@ -29,6 +29,7 @@ class JobKind(StrEnum):
 
 class JobState(StrEnum):
     """Lifecycle states of a job row."""
+
     PENDING = "pending"
     RUNNING = "running"
     SUCCEEDED = "succeeded"

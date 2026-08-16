@@ -3,7 +3,6 @@
 from typing import Annotated, Optional
 
 import typer
-
 from musicseed.exceptions import NotFoundError
 from musicseed.logging_config import get_logger
 
@@ -33,13 +32,19 @@ def recommend(
         typer.Option("--explain", help="Show component scores and candidate sources"),
     ] = False,
     w_sonic: Annotated[float, typer.Option("--w-sonic", help="Sonic similarity weight")] = 0.30,
-    w_popularity: Annotated[float, typer.Option("--w-popularity", help="Popularity proximity weight")] = 0.15,
+    w_popularity: Annotated[
+        float, typer.Option("--w-popularity", help="Popularity proximity weight")
+    ] = 0.15,
     w_style: Annotated[float, typer.Option("--w-style", help="Style alignment weight")] = 0.10,
     w_genre: Annotated[float, typer.Option("--w-genre", help="Genre alignment weight")] = 0.15,
     w_era: Annotated[float, typer.Option("--w-era", help="Era proximity weight")] = 0.05,
     w_novelty: Annotated[float, typer.Option("--w-novelty", help="Novelty weight")] = 0.10,
-    year_min: Annotated[Optional[int], typer.Option("--year-min", help="Minimum release year")] = None,
-    year_max: Annotated[Optional[int], typer.Option("--year-max", help="Maximum release year")] = None,
+    year_min: Annotated[
+        Optional[int], typer.Option("--year-min", help="Minimum release year")
+    ] = None,
+    year_max: Annotated[
+        Optional[int], typer.Option("--year-max", help="Maximum release year")
+    ] = None,
     artist_max: Annotated[int, typer.Option("--artist-max", help="Max tracks per artist")] = 3,
     min_score: Annotated[
         Optional[float],
@@ -102,7 +107,9 @@ def recommend(
         )
         print_seed_table(result.seed_tracks)
         print_recommendations_table(result.recommendations, explain=explain)
-        console.print(f"\n[green]Generated {len(result.recommendations)} recommendations.[/green]\n")
+        console.print(
+            f"\n[green]Generated {len(result.recommendations)} recommendations.[/green]\n"
+        )
     except NotFoundError as e:
         console.print(f"[red]Recommendation failed: {e}[/red]")
         raise typer.Exit(1)

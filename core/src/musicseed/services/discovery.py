@@ -390,8 +390,10 @@ def discover(
     timeout: float = 5.0,
     config: Config | None = None,
 ) -> DiscoveryResult:
-    """Probe the local MusicSeed/Plex environment. Read-only; never raises on
-    expected failures — they are reported via ``reason`` codes instead.
+    """Probe the local MusicSeed/Plex environment (read-only).
+
+    Never raises on expected failures — they are reported via ``reason``
+    codes instead.
 
     Overrides apply to this call only and never mutate global configuration.
 

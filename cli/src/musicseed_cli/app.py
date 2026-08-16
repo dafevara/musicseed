@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import Annotated, Optional
 
 import typer
-
 from musicseed import __version__
 from musicseed.config import get_config, load_config, set_config
 from musicseed.logging_config import parse_log_level, resolve_log_level, setup_logging

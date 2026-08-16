@@ -3,7 +3,6 @@
 from typing import Annotated, Optional
 
 import typer
-
 from musicseed.exceptions import ConfigurationError, MusicSeedError, NotFoundError
 from musicseed.logging_config import get_logger
 
