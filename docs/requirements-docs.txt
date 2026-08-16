@@ -13,5 +13,9 @@
 # importable so mkdocstrings can render the API reference.
 mkdocs-material>=9.5
 mkdocstrings[python]>=0.26
+mkdocs-typer2>=0.1.0
 -e core/
 -e api/
+# Editable install of cli/ so mkdocs-typer2 can import the Typer app
+# (`musicseed_cli.app:app`) to render the CLI reference from its docstrings.
+-e cli/
