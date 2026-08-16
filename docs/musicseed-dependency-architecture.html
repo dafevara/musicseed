@@ -117,13 +117,14 @@ Next.js web UI via the REST API). It exists to track how small the install surfa
 so publishing MusicSeed as open source means a new user needs as little as possible.</p>
 
 <div class="note">
-  <strong>TL;DR install surface:</strong> Python 3.12+ and <code>uv</code> (for core/api/cli)
-  plus Node for the optional web UI; six core packages, two CLI packages, three API packages,
-  and a Next.js + React web app — one SQLite file (created automatically), and read access to
-  two Plex SQLite databases. Local-network Plex discovery (GDM + SSDP) is stdlib
-  <code>socket</code> only; servers on other subnets are found through the optional
-  <code>plex.tv/api/resources</code> account lookup (httpx, needs a Plex token). That's the
-  whole thing — no server, no containers, no native ML libraries.
+  <strong>TL;DR install surface:</strong> Python 3.12+ and SQLite 3, plus Node for building the
+  web UI during install; six core packages, two CLI packages, three API packages, and a Next.js +
+  React web app — one SQLite file (created automatically), and read access to two Plex SQLite
+  databases. Local-network Plex discovery (GDM + SSDP) is stdlib <code>socket</code> only;
+  servers on other subnets are found through the optional <code>plex.tv/api/resources</code>
+  account lookup (httpx, needs a Plex token). <code>uv</code> is development-only tooling — the
+  end-user install is plain <code>python3 -m venv</code> + <code>pip</code>. That's the whole
+  thing — no server, no containers, no native ML libraries.
 </div>
 
 <!-- ============================ BIG PICTURE ============================ -->
@@ -425,7 +426,7 @@ so publishing MusicSeed as open source means a new user needs as little as possi
 <div class="grid cols-2">
   <div class="card">
     <h4>Prerequisites</h4>
-    <p>· Python 3.12+, <code>uv</code>, Node.js/npm (install only)</p>
+    <p>· Python 3.12+, SQLite 3, Node.js/npm (install only)</p>
     <p>· Plex Media Server with a music library, sonically analyzed</p>
     <p>· Optional: Spotify API credentials (fallback enrichment only)</p>
   </div>

@@ -28,7 +28,9 @@ runs from source on the owner's machine against the owner's Plex library.
 
 ## Requirements
 
-- Python 3.12+ and [uv](https://docs.astral.sh/uv/)
+- Python 3.12+ (with `venv` and `pip`, both included in standard Python installs)
+- SQLite 3 — MusicSeed reads the Plex database and stores its own database as SQLite files; no
+  database server required.
 - Node.js and npm (needed to **install** / rebuild the web UI, not to run it)
 - Plex Media Server with a music library (ideally already sonically analyzed)
 - Optional Spotify API credentials for fallback enrichment
@@ -57,8 +59,9 @@ cd MusicSeed
 musicseed
 ```
 
-Then open `http://127.0.0.1:8789`. `install.sh` syncs the Python apps, builds the static UI, and
-puts `musicseed` on your PATH. After that, runtime is Python only — Node is not required to start
+Then open `http://127.0.0.1:8789`. `install.sh` creates a Python virtualenv (`.venv/`) with the
+core library and API installed, builds the static UI, and puts `musicseed` on your PATH via a
+symlink in `~/.local/bin`. After that, runtime is Python only — Node is not required to start
 the app.
 
 On first run the setup wizard (`/setup`) walks you through setup:
@@ -85,20 +88,22 @@ Contributor hot reload (API + `next dev`) is `./scripts/dev.sh` — not the user
 
 ## CLI (advanced)
 
-The Typer CLI is the power-user surface. It needs no Node, no server, and no browser:
+The Typer CLI is the power-user surface. It needs no Node, no server, and no browser — and no uv:
+`install.sh` puts `musicseed-cli` on your PATH alongside `musicseed`.
 
 ```bash
-cd cli
-uv sync
-uv run musicseed-cli init-db                            # create the SQLite database
-uv run musicseed-cli import                             # import Plex metadata (use --limit to explore)
-uv run musicseed-cli enrich --source listenbrainz --limit 100 --resume
-uv run musicseed-cli recommend --seed-id 123 --limit 20 --explain
-uv run musicseed-cli playlist --name "My Mix" --seed-id 123   # prompts before writing to Plex
+musicseed-cli init-db                            # create the SQLite database
+musicseed-cli import                             # import Plex metadata (use --limit to explore)
+musicseed-cli enrich --source listenbrainz --limit 100 --resume
+musicseed-cli recommend --seed-id 123 --limit 20 --explain
+musicseed-cli playlist --name "My Mix" --seed-id 123   # prompts before writing to Plex
 ```
 
 Full CLI usage and configuration: **[`cli/README.md`](cli/README.md)**.
 Using the core library as a dependency: **[`core/README.md`](core/README.md)**.
+
+Contributors working on the CLI itself use [uv](https://docs.astral.sh/uv/) (the development-only
+dependency manager): `cd cli && uv sync && uv run musicseed-cli --help`.
 
 ## Repository Layout
 

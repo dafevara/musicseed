@@ -4,11 +4,16 @@ The command-line interface for [MusicSeed](../README.md). It's a thin Typer/Rich
 [`musicseed-core`](../core): every command delegates to a core service. Installs the
 `musicseed-cli` command. The product web command is `musicseed` (from `api/`), not this package.
 
-Run commands from this directory (or prefix with `uv run --project cli`). The database is a
-single SQLite file — `musicseed-cli init-db` creates it (default
-`~/.local/share/musicseed/musicseed.db`); no server is needed.
+The repo-root [`install.sh`](../scripts/install.sh) puts `musicseed-cli` on your PATH
+(`~/.local/bin`) alongside `musicseed` — no uv or server needed. The database is a single SQLite
+file — `musicseed-cli init-db` creates it (default `~/.local/share/musicseed/musicseed.db`).
 
 ## Setup
+
+End users: nothing to do — run [`../scripts/install.sh`](../scripts/install.sh) once, then use
+`musicseed-cli` directly.
+
+Contributors (uses [uv](https://docs.astral.sh/uv/), the development-only dependency manager):
 
 ```bash
 cd cli
@@ -20,19 +25,19 @@ uv run musicseed-cli --help
 
 ```bash
 # Database
-uv run musicseed-cli init-db
-uv run musicseed-cli optimize-db
-uv run musicseed-cli status                     # library + enrichment coverage
+musicseed-cli init-db
+musicseed-cli optimize-db
+musicseed-cli status                     # library + enrichment coverage
 
 # Ingest (use --limit while exploring)
-uv run musicseed-cli import
-uv run musicseed-cli enrich --source listenbrainz --limit 100 --batch-size 50 --resume
+musicseed-cli import
+musicseed-cli enrich --source listenbrainz --limit 100 --batch-size 50 --resume
 
 # Recommend / create playlists
-uv run musicseed-cli recommend --seed-id 123 --limit 20 --explain
-uv run musicseed-cli playlist --name "My Mix" --seed-id 123      # prompts before writing to Plex
-uv run musicseed-cli playlists                                   # list Plex audio playlists
-uv run musicseed-cli populate --playlist "My Mix" --dry-run      # preview complementary tracks
+musicseed-cli recommend --seed-id 123 --limit 20 --explain
+musicseed-cli playlist --name "My Mix" --seed-id 123      # prompts before writing to Plex
+musicseed-cli playlists                                   # list Plex audio playlists
+musicseed-cli populate --playlist "My Mix" --dry-run      # preview complementary tracks
 ```
 
 `recommend`, `playlist`, and `populate` accept per-signal weights (`--w-sonic`, `--w-popularity`,
@@ -59,12 +64,12 @@ fill in values. Prefer `${PLEX_TOKEN}` / `${SPOTIFY_CLIENT_*}` over hard-coded s
 Environment variables and `~` are expanded by the loader. Writing playlists to Plex requires
 `plex.token`.
 
-## Install as a global tool (optional)
+## Run from the repo (optional)
 
-To run `musicseed-cli` from anywhere without `uv run`:
+To run `musicseed-cli` without the repo-root install, from inside `cli/`:
 
 ```bash
-uv tool install --editable ./cli      # from the repo root
+uv sync && uv run musicseed-cli --help   # contributor path (requires uv)
 ```
 
 ## Notes
