@@ -1,0 +1,17 @@
+# Docs site toolchain (MkDocs Material + mkdocstrings).
+# Install from the repo root into a dedicated venv:
+#
+#   uv venv --python 3.12 .venv-docs
+#   uv pip install --python .venv-docs -r docs/requirements-docs.txt
+#
+# Then build/serve from the repo root:
+#
+#   .venv-docs/bin/mkdocs build
+#   .venv-docs/bin/mkdocs serve
+#
+# Editable installs of core/ and api/ make `musicseed` and `musicseed_api`
+# importable so mkdocstrings can render the API reference.
+mkdocs-material>=9.5
+mkdocstrings[python]>=0.26
+-e core/
+-e api/

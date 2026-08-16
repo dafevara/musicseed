@@ -10,6 +10,10 @@ wheels/
 # Virtual environments
 .venv
 .venv/
+.venv-docs/
+
+# MkDocs build output
+site/
 
 # Local environment and real config (never commit secrets)
 .env
