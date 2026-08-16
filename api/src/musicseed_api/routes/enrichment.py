@@ -22,3 +22,9 @@ def start_spotify_enrich(
     )
     job_id = submit_job(ENRICH_KIND, run_enrich_job)
     return {"job_id": job_id}
+
+
+@router.post("/enrichment/listenbrainz")
+def start_listenbrainz_enrich() -> dict:
+    job_id = submit_job(ENRICH_KIND, run_enrich_job, "listenbrainz")
+    return {"job_id": job_id}

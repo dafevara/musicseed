@@ -43,6 +43,37 @@ def test_save_spotify_creds_noop_when_empty(tmp_path):
     assert config_module._config.spotify.client_id == ""
 
 
+def test_run_enrich_job_passes_source(monkeypatch, tmp_path):
+    import musicseed.services.jobs as jobs_module
+    import musicseed_api.handlers.enrichment as enrich_handler
+
+    set_config(Config.model_validate({"database": {"path": str(tmp_path / "db.sqlite")}}))
+    reset_engine()
+    init_db()
+    jobs_module._manager = None
+
+    captured = {}
+
+    class FakeStats:
+        matched = 3
+        total = 10
+        errors = 0
+
+    def fake_enrich_tracks(**kwargs):
+        captured.update(kwargs)
+        return FakeStats()
+
+    monkeypatch.setattr(enrich_handler, "enrich_tracks", fake_enrich_tracks)
+
+    jid = create_job("enrich")
+    enrich_handler.run_enrich_job(jid, "listenbrainz")
+
+    assert captured["source"] == "listenbrainz"
+    job = get_job_progress(jid)
+    assert job["state"] == "succeeded"
+    assert '"source": "listenbrainz"' in job["result_summary"]
+
+
 def test_jobs_handlers(tmp_path):
     import musicseed.services.jobs as jobs_module
 

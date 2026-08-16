@@ -23,9 +23,9 @@ def save_spotify_creds(client_id: str, client_secret: str) -> None:
     save_config(cfg)
 
 
-def run_enrich_job(job_id: int) -> None:
-    """Job target: enrich tracks via Spotify and update job progress."""
-    update_progress(job_id, 0, 1, "enriching via Spotify…")
+def run_enrich_job(job_id: int, source: str = "spotify") -> None:
+    """Job target: enrich tracks via the given source and update job progress."""
+    update_progress(job_id, 0, 1, f"enriching via {source}…")
 
     cancelled = [False]
 
@@ -39,7 +39,7 @@ def run_enrich_job(job_id: int) -> None:
         update_progress(job_id, current, total, message)
 
     stats = enrich_tracks(
-        source="spotify",
+        source=source,
         resume=True,
         batch_size=10,
         concurrency=10,
@@ -65,6 +65,6 @@ def run_enrich_job(job_id: int) -> None:
             "enriched": stats.matched,
             "total": stats.total,
             "errors": stats.errors,
-            "source": "spotify",
+            "source": source,
         }),
     )

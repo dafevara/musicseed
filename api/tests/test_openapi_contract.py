@@ -10,6 +10,7 @@ EXPECTED_OPERATIONS = {
     ("post", "/discovery/config"),
     ("post", "/discovery/init-db"),
     ("get", "/discovery/plex-servers"),
+    ("post", "/enrichment/listenbrainz"),
     ("post", "/enrichment/spotify"),
     ("delete", "/jobs/{job_id}"),
     ("get", "/jobs/{job_id}"),
