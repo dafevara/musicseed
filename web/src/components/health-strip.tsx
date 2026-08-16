@@ -15,14 +15,25 @@ function fmt(n: number | string): string {
   return v.toLocaleString();
 }
 
-function pct(covered: number | string, total: number | string): number {
-  const c = typeof covered === "string" ? parseInt(covered, 10) || 0 : covered;
-  const t = typeof total === "string" ? parseInt(total, 10) || 0 : total;
-  return t > 0 ? Math.round((c / t) * 100) : 0;
-}
-
 function num(v: number | string): number {
   return typeof v === "string" ? parseInt(v, 10) || 0 : v;
+}
+
+function PlayIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+      <path d="M5 3.2v9.6l8.2-4.8L5 3.2z" />
+    </svg>
+  );
+}
+
+function RefreshIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+      <path d="M13.4 8A5.4 5.4 0 1 1 12 4.1" strokeLinecap="round" />
+      <path d="M12.1 1.8v2.7H9.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
 }
 
 function CoverageBar({
@@ -37,30 +48,55 @@ function CoverageBar({
   covered: number | string;
   total: number | string;
   zeroHint: string;
-  action?: { label: string; disabled?: boolean; onClick: () => void; busy?: boolean };
+  action?: {
+    label: string;
+    icon?: "play" | "refresh";
+    disabled?: boolean;
+    onClick: () => void;
+    busy?: boolean;
+  };
   activeJob?: JobSummary | null;
 }) {
   const c = num(covered);
   const t = num(total);
   const barPct = t > 0 ? Math.round((c / t) * 100) : 0;
+  const showAction = !activeJob && action && (c === 0 || barPct < 100);
+  const hint = activeJob
+    ? (activeJob.checkpoint || "Enriching…")
+    : c === 0
+      ? zeroHint
+      : null;
 
   return (
-    <div>
-      <div className="flex justify-between items-baseline text-xs">
-        <span>{label}</span>
-        <span className="text-[var(--muted)]">
-          {activeJob ? (
-            <span className="text-[var(--status-running)]">
-              {activeJob.progress_current > 0
-                ? `${fmt(activeJob.progress_current)} of ${fmt(activeJob.progress_total)}`
-                : "running…"}
-            </span>
-          ) : (
-            `${fmt(covered)} of ${fmt(t)}`
-          )}
-        </span>
+    <div className="grid gap-1.5 py-3 first:pt-0 last:pb-0">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="m-0 text-sm font-medium">{label}</p>
+          <p className="m-0 text-xs text-[var(--muted)]">
+            {activeJob ? (
+              <span className="text-[var(--status-running)]">
+                {activeJob.progress_current > 0
+                  ? `${fmt(activeJob.progress_current)} of ${fmt(activeJob.progress_total)}`
+                  : "running…"}
+              </span>
+            ) : (
+              `${fmt(covered)} of ${fmt(t)}`
+            )}
+          </p>
+        </div>
+        {showAction && (
+          <button
+            type="button"
+            className="btn btn-outline btn-sm shrink-0"
+            onClick={action.onClick}
+            disabled={action.disabled || action.busy}
+          >
+            {action.busy ? null : action.icon === "refresh" ? <RefreshIcon /> : <PlayIcon />}
+            {action.busy ? "Starting…" : action.label}
+          </button>
+        )}
       </div>
-      <div className="progress-bar mt-0.5">
+      <div className="progress-bar">
         <div
           className="fill"
           style={{ width: `${activeJob && activeJob.progress_total > 0
@@ -68,34 +104,11 @@ function CoverageBar({
             : barPct}%` }}
         />
       </div>
-      {activeJob ? (
-        <p className="mt-0.5 mb-0 text-[0.7rem] text-[var(--status-running)]">
-          {activeJob.checkpoint || "Enriching…"}
+      {hint && (
+        <p className={`m-0 text-[0.75rem] ${activeJob ? "text-[var(--status-running)]" : "text-[var(--muted)]"}`}>
+          {hint}
         </p>
-      ) : c === 0 ? (
-        <div className="mt-0.5 flex items-baseline gap-2">
-          <span className="text-[0.7rem] text-[var(--muted)]">{zeroHint}</span>
-          {action && (
-            <button
-              className="text-[0.7rem] font-medium bg-transparent border-0 p-0 text-[var(--brand)] cursor-pointer hover:underline"
-              onClick={action.onClick}
-              disabled={action.disabled || action.busy}
-            >
-              {action.busy ? "Starting…" : action.label}
-            </button>
-          )}
-        </div>
-      ) : barPct < 100 && action ? (
-        <div className="mt-0.5">
-          <button
-            className="text-[0.7rem] font-medium bg-transparent border-0 p-0 text-[var(--brand)] cursor-pointer hover:underline"
-            onClick={action.onClick}
-            disabled={action.disabled || action.busy}
-          >
-            {action.busy ? "Starting…" : action.label}
-          </button>
-        </div>
-      ) : null}
+      )}
     </div>
   );
 }
@@ -109,7 +122,7 @@ export function HealthStrip({
 }: {
   snapshot: DashboardSnapshot;
   activeJobs: JobSummary[];
-  onEnrich: () => void;
+  onEnrich: () => void | Promise<void>;
   onSonicRefresh: () => void | Promise<void>;
   plexServer?: PlexServerCheck | null;
 }) {
@@ -131,6 +144,15 @@ export function HealthStrip({
     setConfirmRefresh(false);
     await onSonicRefresh();
     setRefreshing(false);
+  }
+
+  async function doEnrich() {
+    setEnriching(true);
+    try {
+      await onEnrich();
+    } finally {
+      setEnriching(false);
+    }
   }
 
   useEffect(() => {
@@ -158,10 +180,8 @@ export function HealthStrip({
 
   return (
     <>
-    <div className="grid grid-cols-[repeat(auto-fit,minmax(15rem,1fr))] gap-px bg-[var(--border)] border border-[var(--border)] rounded-lg overflow-hidden">
-      {/* Plex */}
-      <div className="min-w-0 p-3.5 bg-[var(--panel)]">
-        <p className="mt-0 mb-1.5 text-xs font-semibold tracking-wider uppercase text-[var(--muted)]">
+      <section className="panel">
+        <p className="mt-0 mb-2 text-xs font-semibold tracking-wider uppercase text-[var(--muted)]">
           Plex
         </p>
         {plex.ok ? (
@@ -189,14 +209,13 @@ export function HealthStrip({
             </p>
           </>
         )}
-      </div>
+      </section>
 
-      {/* Library stats */}
-      <div className="min-w-0 p-3.5 bg-[var(--panel)]">
-        <p className="mt-0 mb-1.5 text-xs font-semibold tracking-wider uppercase text-[var(--muted)]">
+      <section className="panel">
+        <p className="mt-0 mb-2 text-xs font-semibold tracking-wider uppercase text-[var(--muted)]">
           Library
         </p>
-        <div className="flex flex-wrap gap-x-4 gap-y-1">
+        <div className="grid grid-cols-4 gap-4 max-sm:grid-cols-2">
           <div className="text-sm text-[var(--muted)]">
             <strong className="block text-lg text-[var(--fg)]">{fmt(tracks)}</strong> tracks
           </div>
@@ -210,14 +229,13 @@ export function HealthStrip({
             <strong className="block text-lg text-[var(--fg)]">{fmt(lib.play_count)}</strong> plays
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Coverage */}
-      <div className="min-w-0 p-3.5 bg-[var(--panel)]">
-        <p className="mt-0 mb-1.5 text-xs font-semibold tracking-wider uppercase text-[var(--muted)]">
+      <section className="panel">
+        <p className="mt-0 mb-1 text-xs font-semibold tracking-wider uppercase text-[var(--muted)]">
           Coverage
         </p>
-        <div className="grid gap-2">
+        <div className="grid divide-y divide-[var(--border)]">
           {importCov && (
             <CoverageBar
               label="Plex import"
@@ -235,8 +253,9 @@ export function HealthStrip({
             activeJob={enrichJob}
             action={enrichJob ? undefined : {
               label: spotifyCovered > 0 ? "Resume enrichment" : "Enrich",
+              icon: "play",
               busy: enriching,
-              onClick: () => { setEnriching(true); onEnrich(); },
+              onClick: doEnrich,
             }}
           />
           <CoverageBar
@@ -246,8 +265,9 @@ export function HealthStrip({
             zeroHint={lbHint}
             action={{
               label: lbCovered > 0 ? "Resume" : "Enrich",
+              icon: "play",
               busy: enriching,
-              onClick: () => { setEnriching(true); onEnrich(); },
+              onClick: doEnrich,
             }}
           />
           <CoverageBar
@@ -257,32 +277,32 @@ export function HealthStrip({
             zeroHint={sonicHint}
             action={{
               label: "Refresh analysis",
+              icon: "refresh",
               busy: refreshing,
               onClick: () => setConfirmRefresh(true),
             }}
           />
         </div>
-      </div>
-    </div>
 
-    {confirmRefresh && (
-      <div className="flash flash-warn mt-3">
-        <p className="m-0 mb-2">
-          Refreshing sonic analysis starts Plex&apos;s MusicAnalysis Butler task, which
-          processes the server&apos;s <strong>entire pending backlog</strong> — not just recent
-          additions — and can keep running after MusicSeed returns. This may take a long time
-          and run in the background on your Plex server.
-        </p>
-        <div className="flex gap-2">
-          <button className="btn btn-primary" onClick={doRefresh} disabled={refreshing}>
-            {refreshing ? "Starting…" : "Confirm refresh"}
-          </button>
-          <button className="btn btn-secondary" onClick={() => setConfirmRefresh(false)}>
-            Cancel
-          </button>
-        </div>
-      </div>
-    )}
+        {confirmRefresh && (
+          <div className="flash flash-warn mt-3 mb-0">
+            <p className="m-0 mb-2">
+              Refreshing sonic analysis starts Plex&apos;s MusicAnalysis Butler task, which
+              processes the server&apos;s <strong>entire pending backlog</strong> — not just recent
+              additions — and can keep running after MusicSeed returns. This may take a long time
+              and run in the background on your Plex server.
+            </p>
+            <div className="flex gap-2">
+              <button className="btn btn-primary btn-sm" onClick={doRefresh} disabled={refreshing}>
+                {refreshing ? "Starting…" : "Confirm refresh"}
+              </button>
+              <button className="btn btn-secondary btn-sm" onClick={() => setConfirmRefresh(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
     </>
   );
 }
