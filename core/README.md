@@ -46,7 +46,7 @@ core/
     ├── db/                    # SQLAlchemy models + session/engine/schema/indexes
     ├── services/             # surface-agnostic application layer (call this)
     ├── recommender/          # seed resolution, candidates, scoring, playlist/populate
-    ├── enrichers/            # ListenBrainz / Spotify / MusicBrainz + pipeline
+    ├── enrichers/            # ListenBrainz / Spotify + pipeline
     ├── importers/            # Plex SQLite metadata import
     └── clients/plex_api.py   # Plex Media Server HTTP client
 ```

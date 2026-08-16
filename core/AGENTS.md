@@ -81,7 +81,8 @@ Service entry points:
   `reset_engine` (dispose engine — the hook for tests/config reload).
 - `importers/plex.py`: Plex SQLite metadata import. Track years fall back to the album year when
   Plex doesn't set one on the track row.
-- `enrichers/`: ListenBrainz, Spotify, MusicBrainz clients + the async enrichment pipeline.
+- `enrichers/`: ListenBrainz and Spotify clients + the async enrichment pipeline. (The old
+  MusicBrainz MBID→Spotify cross-reference client was removed; it was never wired in.)
 - `sonic.py`: Plex sonic analysis vectors read at query time from the Plex blobs DB into an
   in-memory L2-normalized matrix (`SonicVectors`, keyed by `plex_id`). Lazy global cache via
   `get_sonic_vectors()` / `reset_sonic_vectors()`; raises `NotFoundError` when the Plex databases
