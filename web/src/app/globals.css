@@ -182,6 +182,24 @@ input:focus {
   padding: 1.25rem 1.5rem;
 }
 
+/* ── Setup intro (first-run explainer on /setup) ── */
+.setup-intro h2 {
+  margin: 0 0 0.6rem;
+}
+.setup-intro p {
+  margin: 0 0 0.9rem;
+}
+.setup-intro ol {
+  list-style: decimal;
+  margin: 0 0 0.9rem;
+  padding-left: 1.25rem;
+  display: grid;
+  gap: 0.5rem;
+}
+.setup-intro p:last-of-type {
+  margin-bottom: 1.1rem;
+}
+
 code {
   background: var(--bg);
   border: 1px solid var(--border);

@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import type { DiscoveryResponse, LibraryStatus } from "@/lib/types";
 import { DiscoveryChecks } from "@/components/discovery-checks";
 import { SetupForm } from "@/components/setup-form";
+import { SetupIntro } from "@/components/setup-intro";
 import { PlexServerPicker } from "@/components/plex-server-picker";
 import { HelpIcon } from "@/components/help-icon";
 import { JobProgress } from "@/components/job-progress";
@@ -168,6 +169,7 @@ export default function SetupPage() {
 
   return (
     <>
+      <SetupIntro />
       <StepIndicator current={step} />
 
       {step === "detect" && (
