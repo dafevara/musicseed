@@ -106,6 +106,7 @@ def build_candidate_pool(
         The merged candidate pool, recording which sources produced each
         candidate.
     """
+
     pool = CandidatePool()
     candidate_limit = _limit(limit)
 

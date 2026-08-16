@@ -335,8 +335,8 @@ class JobManager:
             kind: job kind (see ``JobKind``); only one active job per kind is
                 allowed across all processes sharing the database.
             target: blocking callable to run in the worker thread.
-            *args (Any): extra positional arguments forwarded to ``target``.
-            **kwargs (Any): keyword arguments forwarded to ``target``.
+            *args: extra positional arguments forwarded to ``target``.
+            **kwargs: keyword arguments forwarded to ``target``.
 
         Returns:
             The id of the newly created job row.

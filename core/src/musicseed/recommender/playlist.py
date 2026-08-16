@@ -89,6 +89,7 @@ def resolve_seed_tracks(
     seed_texts: Sequence[str] | None = None,
     seed_ids: Sequence[int] | None = None,
 ) -> list[Track]:
+
     """Resolve seed IDs and seed text queries into loaded Track objects.
 
     Text seeds accept ``"Artist - Title"`` or a bare title; exact
@@ -108,6 +109,7 @@ def resolve_seed_tracks(
         ValueError: when a seed id or text matches no track, a text seed is
             ambiguous (multiple matches), or no seeds were given at all.
     """
+
     seeds: list[Track] = []
     seen: set[int] = set()
 
@@ -148,6 +150,7 @@ def recommend_tracks(
     max_tracks_per_artist: int = 3,
     min_score: float | None = None,
 ) -> tuple[list[Track], list[Recommendation], SonicCoverage]:
+
     """Generate recommendations using multi-source candidates and constrained selection.
 
     Pipeline: resolve the seeds, aggregate them into a ``SeedProfile``, build
@@ -176,6 +179,7 @@ def recommend_tracks(
         ValueError: if ``limit`` or ``max_tracks_per_artist`` is not positive,
             or if the seeds cannot be resolved.
     """
+
     if limit <= 0:
         raise ValueError("limit must be greater than zero")
     if max_tracks_per_artist <= 0:
