@@ -63,6 +63,9 @@ logic to a surface or handler that could live in core, move it to `core/services
 - Historical plan and architecture: `docs/implementation-plan.md`, `docs/ard/001-initial-system-design.md`
   (partially superseded by `docs/ard/002-sonic-vectors-at-query-time.md`).
 
+The docs in `docs/` also render as a MkDocs Material site (config `mkdocs.yml`); verify it with
+`.venv-docs/bin/mkdocs build --strict` from the repo root.
+
 ## Shared Commands
 
 ```bash
@@ -73,7 +76,7 @@ cd api   && uv run pytest tests -q    # offline API suite (stubs Plex/DB)
 cd web   && npx tsc --noEmit          # type-check the Next.js surface
 python3 -m compileall -q core/src/musicseed cli/src/musicseed_cli api/src/musicseed_api
 uv venv --python 3.12 .venv-docs && uv pip install --python .venv-docs -r docs/requirements-docs.txt  # one-time docs env
-.venv-docs/bin/mkdocs build           # build the MkDocs Material docs site from the repo root
+.venv-docs/bin/mkdocs build --strict # build the MkDocs Material docs site; fails on broken links/refs
 ```
 
 The MusicSeed database is a single SQLite file (default

@@ -42,7 +42,12 @@ Computational sensors:
 python3 -m compileall -q core/src/musicseed cli/src/musicseed_cli api/src/musicseed_api
 uv run ruff check src
 uv run musicseed-cli --help
+.venv-docs/bin/mkdocs build --strict
 ```
+
+`mkdocs build --strict` runs from the repo root (docs env: `docs/requirements-docs.txt` into
+`.venv-docs/`); it fails on warnings, so broken doc cross-references and docstring rendering
+errors surface at edit time instead of rotting in the site.
 
 Runtime sensors:
 
