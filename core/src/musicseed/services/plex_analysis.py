@@ -55,10 +55,12 @@ class SonicStatusResult(BaseModel):
 
     @property
     def unanalyzed_tracks(self) -> int:
+        """Tracks in the library without Plex sonic analysis."""
         return self.total_tracks - self.analyzed_tracks
 
     @property
     def recent_unanalyzed_tracks(self) -> int:
+        """Recently added tracks still without Plex sonic analysis."""
         return self.recent_tracks - self.recent_analyzed_tracks
 
 
@@ -79,6 +81,7 @@ class SonicTriggerProbeResult(BaseModel):
 
     @property
     def sonic_triggered(self) -> bool:
+        """True when the analyzed-track count increased after the trigger."""
         return self.analyzed_after > self.analyzed_before
 
 
@@ -99,10 +102,12 @@ class SonicRefreshResult(BaseModel):
 
     @property
     def analyzed_delta(self) -> int:
+        """Tracks that gained sonic analysis during the refresh."""
         return self.pending_tracks_before - self.pending_tracks_after
 
     @property
     def completed(self) -> bool:
+        """True when no tracks in the window remain unanalyzed."""
         return self.pending_tracks_after == 0
 
 
@@ -177,6 +182,15 @@ def get_sonic_status(
     Fetches every track in the library over the HTTP API, so it can be slow on
     large libraries. ``recent_days`` defines the "recent additions" window
     (based on Plex's ``addedAt``).
+
+    Args:
+        library_name: Plex music library to inspect; defaults to the
+            configured ``plex.library``.
+        recent_days: size of the "recent additions" window in days.
+
+    Returns:
+        Coverage counts for the whole library and the recent window, plus the
+        albums that still have unanalyzed tracks.
 
     Raises:
         ConfigurationError: if plex.token is not configured.
@@ -283,6 +297,9 @@ def refresh_album(album_rating_key: str) -> None:
     This recreates the album's media items, which clears the failed-analysis
     state that prevents sonic analysis from being queued.
 
+    Args:
+        album_rating_key: Plex rating key of the album to refresh.
+
     Raises:
         ConfigurationError: if plex.token is not configured.
         PlexAPIError: if the Plex API call fails.
@@ -304,6 +321,18 @@ def probe_sonic_trigger(
     unanalyzed tracks is picked automatically. Polls the album's tracks until
     the number of sonically analyzed tracks increases or ``wait_seconds``
     elapses.
+
+    Args:
+        album_rating_key: Plex rating key of the album to analyze and watch;
+            auto-picked when None.
+        library_name: library used for the auto-pick; defaults to the
+            configured ``plex.library``.
+        wait_seconds: maximum time to watch for analysis.
+        poll_interval: seconds between polls.
+
+    Returns:
+        The probe outcome, including analyzed counts before/after and the
+        Plex activities observed while waiting.
 
     Raises:
         ConfigurationError: if plex.token is not configured.
@@ -335,6 +364,19 @@ def probe_butler_trigger(
     Unlike per-item ``analyze``, the ``MusicAnalysis`` Butler task works
     through every album pending sonic analysis on the server, which can be
     CPU-heavy and long-running — it keeps going after this probe returns.
+
+    Args:
+        album_rating_key: Plex rating key of the album to watch; auto-picked
+            when None.
+        library_name: library used for the auto-pick; defaults to the
+            configured ``plex.library``.
+        butler_task: name of the Butler task to run.
+        wait_seconds: maximum time to watch for analysis.
+        poll_interval: seconds between polls.
+
+    Returns:
+        The probe outcome for the watched album, including analyzed counts
+        before/after and the Plex activities observed while waiting.
 
     Raises:
         ConfigurationError: if plex.token is not configured.
@@ -382,6 +424,19 @@ def refresh_sonic_analysis(
 
     ``on_poll(pending_now, pending_before)`` is called after each poll so a
     surface can render progress.
+
+    Args:
+        library_name: Plex music library to refresh; defaults to the
+            configured ``plex.library``.
+        days: size of the "recent additions" window in days.
+        wait_seconds: maximum time to watch the refresh.
+        poll_interval: seconds between polls.
+        stall_after: consecutive polls without progress before giving up.
+        on_poll: optional ``(pending_now, pending_before)`` progress callback.
+
+    Returns:
+        The refresh outcome, including pending counts before/after, whether a
+        stall was detected, and the albums still pending in the window.
 
     Raises:
         ConfigurationError: if plex.token is not configured.

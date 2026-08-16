@@ -10,6 +10,8 @@ from musicseed.services.library import EnrichmentCoverage, LibraryStatus, get_st
 
 
 class DashboardSnapshot(BaseModel):
+    """Combined dashboard view: discovery, library stats, and job state."""
+
     model_config = {"frozen": True}
 
     discovery: DiscoveryResult
@@ -20,6 +22,7 @@ class DashboardSnapshot(BaseModel):
 
     @property
     def ready_for_recommendations(self) -> bool:
+        """True when at least one track has been imported locally."""
         return self.library.track_count > 0
 
 
@@ -29,6 +32,17 @@ def get_dashboard(check_server: bool = False) -> DashboardSnapshot:
     ``check_server`` gates the live Plex HTTP probe inside discovery. It
     defaults to False so frequent dashboard polls never touch Plex; the
     caller (a web surface) fetches the full probe separately and less often.
+    When the library status cannot be read (e.g. no database yet), an empty
+    ``LibraryStatus`` is used instead of failing the whole snapshot.
+
+    Args:
+        check_server: whether to probe the Plex server over HTTP as part of
+            the embedded discovery result.
+
+    Returns:
+        A snapshot with discovery, library status, active and recent jobs,
+        and the last successful import (``last_sync``, None when no import
+        has succeeded yet).
     """
     discovery_result = discover(check_server=check_server)
     try:

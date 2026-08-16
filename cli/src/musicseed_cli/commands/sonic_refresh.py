@@ -158,4 +158,5 @@ def sonic_refresh(
 
 
 def register(app: typer.Typer) -> None:
+    """Attach the ``sonic-refresh`` command to the Typer app."""
     app.command("sonic-refresh")(sonic_refresh)

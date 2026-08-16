@@ -101,7 +101,16 @@ def cosine_similarity(
     a: Sequence[float] | np.ndarray | None,
     b: Sequence[float] | np.ndarray | None,
 ) -> float:
-    """Return cosine similarity normalized from [-1, 1] into [0, 1]."""
+    """Return cosine similarity normalized from [-1, 1] into [0, 1].
+
+    Args:
+        a: first vector; None or empty means "unknown".
+        b: second vector; None or empty means "unknown".
+
+    Returns:
+        The normalized similarity, or the neutral ``0.5`` when either vector
+        is missing or has zero norm.
+    """
     left = _as_vector(a)
     right = _as_vector(b)
     if left is None or right is None:
@@ -116,6 +125,17 @@ def cosine_similarity(
 
 
 def jaccard(left: set[str], right: set[str]) -> float:
+    """Return the Jaccard similarity of two tag sets.
+
+    Args:
+        left: first tag set (e.g. seed styles).
+        right: second tag set (e.g. candidate styles).
+
+    Returns:
+        ``|left ∩ right| / |left ∪ right|``. Returns the neutral ``0.5``
+        when both sets are empty (no information either way) and ``0.0``
+        when exactly one side is empty (known mismatch).
+    """
     if not left and not right:
         return 0.5
     if not left or not right:
@@ -124,6 +144,15 @@ def jaccard(left: set[str], right: set[str]) -> float:
 
 
 def average_or_none(values: Iterable[float | int | None]) -> float | None:
+    """Return the mean of the non-None values, or None when there are none.
+
+    Args:
+        values: numbers, any of which may be None.
+
+    Returns:
+        The arithmetic mean over the concrete values, or None when every
+        value is None.
+    """
     concrete = [float(value) for value in values if value is not None]
     if not concrete:
         return None
@@ -140,6 +169,20 @@ def track_popularity_value(track: Track) -> float | None:
 
 
 def build_seed_profile(seed_tracks: Sequence[Track], vectors: SonicVectors) -> SeedProfile:
+    """Aggregate one or more seed tracks into a single recommendation profile.
+
+    The sonic embedding is the element-wise mean of the seed vectors (None
+    when no seed has a vector); styles and genres are the union across seeds;
+    year and popularity are averaged over the seeds that have them.
+
+    Args:
+        seed_tracks: the resolved seed tracks.
+        vectors: the query-time Plex sonic vector store.
+
+    Returns:
+        The aggregated seed profile used for candidate generation and
+        scoring.
+    """
     embeddings = [
         vector
         for vector in (vectors.get(track.plex_id) for track in seed_tracks)
@@ -165,18 +208,56 @@ def build_seed_profile(seed_tracks: Sequence[Track], vectors: SonicVectors) -> S
 def popularity_proximity(
     seed_popularity: float | None, candidate_popularity: float | None
 ) -> float:
+    """Score how close a candidate's popularity is to the seed's.
+
+    Popularity is a *proximity* signal, not an absolute boost: a candidate at
+    the seed's popularity scores 1.0, and the score decays linearly to 0.0 at
+    100 popularity points of distance (the full 0-100 scale).
+
+    Args:
+        seed_popularity: seed popularity on a 0-100 scale, or None.
+        candidate_popularity: candidate popularity on a 0-100 scale, or None.
+
+    Returns:
+        Proximity in [0, 1], or the neutral ``0.5`` when either side is
+        unknown.
+    """
     if seed_popularity is None or candidate_popularity is None:
         return 0.5
     return max(0.0, min(1.0, 1.0 - abs(seed_popularity - candidate_popularity) / 100.0))
 
 
 def era_proximity(seed_year: int | None, candidate_year: int | None) -> float:
+    """Score how close a candidate's release year is to the seed's.
+
+    Same-year releases score 1.0; the score decays linearly to 0.0 at 50
+    years of distance.
+
+    Args:
+        seed_year: seed release year, or None.
+        candidate_year: candidate release year, or None.
+
+    Returns:
+        Proximity in [0, 1], or the neutral ``0.5`` when either side is
+        unknown.
+    """
     if seed_year is None or candidate_year is None:
         return 0.5
     return max(0.0, min(1.0, 1.0 - abs(seed_year - candidate_year) / 50.0))
 
 
 def novelty_score(play_count: int | None) -> float:
+    """Score a candidate's novelty from its local play count.
+
+    Never-played tracks score 1.0; the score decays as ``1 / (1 + 0.2 *
+    plays)``, so 5 plays yields ~0.5 and 20 plays ~0.2.
+
+    Args:
+        play_count: local play count; None is treated as 0.
+
+    Returns:
+        Novelty in (0, 1].
+    """
     count = play_count or 0
     return 1.0 / (1.0 + count * 0.2)
 
@@ -187,6 +268,24 @@ def calculate_score(
     weights: Weights,
     vectors: SonicVectors,
 ) -> ScoreBreakdown:
+    """Score one candidate against a seed profile on all six signals.
+
+    Each signal produces a component in [0, 1]; signals with missing data
+    (no sonic vector, unknown popularity/year, empty tag sets on both sides)
+    contribute the neutral ``0.5`` rather than zero, so missing data neither
+    rewards nor punishes a candidate. The total is the weighted mean of the
+    components — weights are normalized by their sum, so absolute weight
+    values only control relative importance.
+
+    Args:
+        candidate: the track to score.
+        seed: the aggregated seed profile.
+        weights: per-signal weights.
+        vectors: the query-time Plex sonic vector store.
+
+    Returns:
+        The total score plus every component score for explainability.
+    """
     candidate_styles = {style.name for style in candidate.styles}
     candidate_genres = {genre.name for genre in candidate.genres}
     play_count = candidate.stats.play_count if candidate.stats else 0

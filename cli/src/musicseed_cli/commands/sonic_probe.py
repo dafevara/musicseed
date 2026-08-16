@@ -112,7 +112,14 @@ def sonic_probe(
         typer.Option("--wait", help="Seconds to watch for sonic analysis after --trigger"),
     ] = 120,
 ) -> None:
-    """Probe Plex sonic analysis coverage for a music library."""
+    """Probe Plex sonic analysis coverage for a music library.
+
+    Without flags this is read-only: it reports how many tracks Plex has
+    sonically analyzed (overall and recently added) and lists the albums
+    still pending. --trigger / --trigger-butler ask Plex to analyze one
+    album and watch whether sonic analysis follows; both ask for
+    confirmation first.
+    """
     from musicseed.services import plex_analysis
 
     config = get_config()
@@ -220,4 +227,5 @@ def sonic_probe(
 
 
 def register(app: typer.Typer) -> None:
+    """Attach the ``sonic-probe`` command to the Typer app."""
     app.command("sonic-probe")(sonic_probe)

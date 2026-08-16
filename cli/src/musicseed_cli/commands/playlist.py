@@ -50,7 +50,12 @@ def playlist(
         typer.Option("--min-score", help="Exclude recommendations below this score (0.0–1.0)"),
     ] = None,
 ) -> None:
-    """Generate recommendations, prompt for approval, then create a Plex playlist."""
+    """Generate recommendations, prompt for approval, then create a Plex playlist.
+
+    Shows the resolved seeds and recommended tracks first; the Plex playlist
+    is only created after you confirm. The playlist contains the seed tracks
+    followed by the approved recommendations.
+    """
     from musicseed.services import recommend as recommend_service
 
     if not seed and not seed_id:
@@ -153,4 +158,5 @@ def playlist(
 
 
 def register(app: typer.Typer) -> None:
+    """Attach the ``playlist`` command to the Typer app."""
     app.command()(playlist)

@@ -20,6 +20,7 @@ app = typer.Typer(
 
 
 def version_callback(value: bool) -> None:
+    """Print the installed MusicSeed version and exit (``--version``)."""
     if value:
         console.print(f"MusicSeed version {__version__}")
         raise typer.Exit()

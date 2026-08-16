@@ -53,4 +53,5 @@ def optimize_database() -> None:
 
 
 def register(app: typer.Typer) -> None:
+    """Attach the ``optimize-db`` command to the Typer app."""
     app.command("optimize-db")(optimize_database)
