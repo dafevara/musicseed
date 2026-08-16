@@ -30,6 +30,11 @@ plugins:
             show_source: false
             show_root_heading: true
             members_order: source
+  - mkdocs-typer2:
+      # Import the Typer app in-process instead of shelling out to a `typer`
+      # binary on PATH; `pretty` renders sections with proper headings.
+      engine: native
+      pretty: true
 
 markdown_extensions:
   - admonition
@@ -54,6 +59,8 @@ nav:
       - Implementation plan: implementation-plan.md
       - ARD 001 — Initial system design: ard/001-initial-system-design.md
       - ARD 002 — Sonic vectors at query time: ard/002-sonic-vectors-at-query-time.md
+  - CLI Reference:
+      - Commands: cli-reference.md
   - API Reference:
       - Core services: api-reference/core-services.md
       - Recommender: api-reference/recommender.md
