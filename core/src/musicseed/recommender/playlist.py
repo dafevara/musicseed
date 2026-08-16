@@ -109,7 +109,6 @@ def resolve_seed_tracks(
         ValueError: when a seed id or text matches no track, a text seed is
             ambiguous (multiple matches), or no seeds were given at all.
     """
-
     seeds: list[Track] = []
     seen: set[int] = set()
 
@@ -179,7 +178,6 @@ def recommend_tracks(
         ValueError: if ``limit`` or ``max_tracks_per_artist`` is not positive,
             or if the seeds cannot be resolved.
     """
-
     if limit <= 0:
         raise ValueError("limit must be greater than zero")
     if max_tracks_per_artist <= 0:
