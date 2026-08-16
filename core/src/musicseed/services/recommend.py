@@ -44,6 +44,22 @@ def get_recommendations(
 ) -> RecommendationResult:
     """Return seed tracks and scored recommendations.
 
+    Args:
+        seed_texts: seed tracks as ``"Artist - Title"`` (or bare title)
+            strings; at least one text or id seed is required.
+        seed_ids: seed tracks by local database id.
+        limit: maximum number of recommendations to return.
+        weights: signal weights; defaults to ``Weights()`` (the "balanced"
+            preset).
+        year_min: only recommend tracks released in this year or later.
+        year_max: only recommend tracks released in this year or earlier.
+        max_tracks_per_artist: artist diversity cap applied during selection.
+        min_score: drop recommendations with a total score below this value.
+
+    Returns:
+        The resolved seed tracks, the selected recommendations, and the
+        sonic coverage of the candidate pool.
+
     Raises:
         NotFoundError: if one or more seed tracks cannot be resolved.
     """
@@ -82,6 +98,26 @@ def create_playlist(
     min_score: float | None = None,
 ) -> PlaylistCreateResult:
     """Generate recommendations and create a Plex playlist.
+
+    The created playlist contains the resolved seed tracks followed by the
+    recommendations. Accepts the same recommendation arguments as
+    ``get_recommendations``.
+
+    Args:
+        name: title of the Plex playlist to create.
+        seed_texts: seed tracks as ``"Artist - Title"`` (or bare title)
+            strings; at least one text or id seed is required.
+        seed_ids: seed tracks by local database id.
+        limit: maximum number of recommendations to include.
+        weights: signal weights; defaults to ``Weights()``.
+        year_min: only recommend tracks released in this year or later.
+        year_max: only recommend tracks released in this year or earlier.
+        max_tracks_per_artist: artist diversity cap applied during selection.
+        min_score: drop recommendations with a total score below this value.
+
+    Returns:
+        The resolved seed tracks, the recommendations, and the created Plex
+        playlist.
 
     Raises:
         ConfigurationError: if plex.token is not configured.

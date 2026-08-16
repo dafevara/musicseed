@@ -1,14 +1,17 @@
 """``init-db`` command: initialize the database schema."""
 
 import typer
-
 from musicseed.config import get_config
 
 from musicseed_cli.console import console
 
 
 def init_database() -> None:
-    """Initialize the database schema (creates tables)."""
+    """Initialize the database schema (creates tables).
+
+    Creates the SQLite database file and every table. Idempotent — safe to
+    run again on an existing database.
+    """
     from musicseed.services import library as library_service
 
     config = get_config()
@@ -29,4 +32,5 @@ def init_database() -> None:
 
 
 def register(app: typer.Typer) -> None:
+    """Attach the ``init-db`` command to the Typer app."""
     app.command("init-db")(init_database)

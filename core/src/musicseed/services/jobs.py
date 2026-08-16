@@ -21,11 +21,15 @@ from musicseed.exceptions import JobConflictError
 
 
 class JobKind(StrEnum):
+    """The kinds of long-running work the job system tracks."""
+
     IMPORT = "import"
     ENRICH = "enrich"
 
 
 class JobState(StrEnum):
+    """Lifecycle states of a job row."""
+
     PENDING = "pending"
     RUNNING = "running"
     SUCCEEDED = "succeeded"
@@ -74,6 +78,11 @@ def create_job(kind: str) -> int:
 
 
 def start_job(job_id: int) -> None:
+    """Mark a job ``running`` and stamp its start time.
+
+    Args:
+        job_id: id of the job row to update. Unknown ids are ignored.
+    """
     with get_session() as session:
         job = session.get(Job, job_id)
         if job is None:
@@ -89,6 +98,16 @@ def update_progress(
     checkpoint: str = "",
     phases: dict | None = None,
 ) -> None:
+    """Record progress for a running job.
+
+    Args:
+        job_id: id of the job row to update. Unknown ids are ignored.
+        current: units of work completed so far.
+        total: total units of work expected (0 when unknown).
+        checkpoint: human-readable status line; only stored when non-empty.
+        phases: per-phase ``{"current", "total"}`` snapshot for multi-phase
+            jobs; only stored when not None.
+    """
     with get_session() as session:
         job = session.get(Job, job_id)
         if job is None:
@@ -102,6 +121,13 @@ def update_progress(
 
 
 def complete_job(job_id: int, result_summary: str = "") -> None:
+    """Mark a job ``succeeded`` and stamp its completion time.
+
+    Args:
+        job_id: id of the job row to update. Unknown ids are ignored.
+        result_summary: optional JSON-serialized outcome summary; only stored
+            when non-empty.
+    """
     with get_session() as session:
         job = session.get(Job, job_id)
         if job is None:
@@ -113,6 +139,12 @@ def complete_job(job_id: int, result_summary: str = "") -> None:
 
 
 def fail_job(job_id: int, error_summary: str) -> None:
+    """Mark a job ``failed`` and stamp its completion time.
+
+    Args:
+        job_id: id of the job row to update. Unknown ids are ignored.
+        error_summary: failure description, truncated to 500 characters.
+    """
     with get_session() as session:
         job = session.get(Job, job_id)
         if job is None:
@@ -123,6 +155,15 @@ def fail_job(job_id: int, error_summary: str) -> None:
 
 
 def request_cancel(job_id: int) -> None:
+    """Set a job's state to ``cancel_requested`` (cooperative cancellation).
+
+    The worker still has to observe the request (via
+    ``JobManager.should_cancel``) and wind itself down; nothing is interrupted
+    forcibly.
+
+    Args:
+        job_id: id of the job row to update. Unknown ids are ignored.
+    """
     with get_session() as session:
         job = session.get(Job, job_id)
         if job is None:
@@ -131,6 +172,11 @@ def request_cancel(job_id: int) -> None:
 
 
 def cancel_job(job_id: int) -> None:
+    """Mark a job ``canceled`` and stamp its completion time.
+
+    Args:
+        job_id: id of the job row to update. Unknown ids are ignored.
+    """
     with get_session() as session:
         job = session.get(Job, job_id)
         if job is None:
@@ -140,6 +186,14 @@ def cancel_job(job_id: int) -> None:
 
 
 def get_job(job_id: int) -> dict | None:
+    """Return a snapshot of one job, or None when it does not exist.
+
+    Args:
+        job_id: id of the job row to read.
+
+    Returns:
+        The job's fields as a plain dict, or None for an unknown id.
+    """
     with get_session() as session:
         ensure_schema()
         job = session.get(Job, job_id)
@@ -158,6 +212,14 @@ def delete_job(job_id: int) -> bool:
 
 
 def list_jobs(limit: int = 20) -> list[dict]:
+    """Return the most recent jobs, newest first.
+
+    Args:
+        limit: maximum number of jobs to return.
+
+    Returns:
+        Job snapshots as plain dicts, ordered by creation time descending.
+    """
     with get_session() as session:
         ensure_schema()
         jobs = (
@@ -170,6 +232,15 @@ def list_jobs(limit: int = 20) -> list[dict]:
 
 
 def get_latest_job(kind: str) -> dict | None:
+    """Return the most recent job of a given kind, or None.
+
+    Args:
+        kind: job kind to filter on (see ``JobKind``).
+
+    Returns:
+        The newest matching job snapshot as a plain dict, or None when no
+        job of that kind exists.
+    """
     with get_session() as session:
         ensure_schema()
         job = (
@@ -182,6 +253,11 @@ def get_latest_job(kind: str) -> dict | None:
 
 
 def get_active_jobs() -> list[dict]:
+    """Return all jobs in a non-terminal state (``running`` or ``pending``).
+
+    Returns:
+        Job snapshots as plain dicts.
+    """
     with get_session() as session:
         ensure_schema()
         jobs = (
@@ -239,11 +315,36 @@ class JobManager:
     """
 
     def __init__(self, max_concurrent: int = 2) -> None:
+        """Create a manager that runs at most ``max_concurrent`` jobs at once.
+
+        Args:
+            max_concurrent: maximum number of worker threads allowed to be
+                active simultaneously; further submissions are rejected.
+        """
         self._max = max_concurrent
         self._active: dict[int, threading.Thread] = {}
         self._lock = threading.Lock()
 
     def submit(self, kind: str, target: Callable[..., None], *args, **kwargs) -> int:
+        """Create a job and run ``target`` for it in a daemon thread.
+
+        The target is called as ``target(job_id, *args, **kwargs)`` — the job
+        id is always the first positional argument.
+
+        Args:
+            kind: job kind (see ``JobKind``); only one active job per kind is
+                allowed across all processes sharing the database.
+            target: blocking callable to run in the worker thread.
+            *args (Any): extra positional arguments forwarded to ``target``.
+            **kwargs (Any): keyword arguments forwarded to ``target``.
+
+        Returns:
+            The id of the newly created job row.
+
+        Raises:
+            JobConflictError: if a job of the same kind is already active, or
+                the concurrency pool is full.
+        """
         active_kinds = {j["kind"] for j in get_active_jobs()}
         if kind in active_kinds:
             raise JobConflictError(
@@ -267,9 +368,24 @@ class JobManager:
         return job_id
 
     def request_cancel(self, job_id: int) -> None:
+        """Ask a job to stop (cooperative; see ``request_cancel``).
+
+        Args:
+            job_id: id of the job to cancel.
+        """
         request_cancel(job_id)
 
     def should_cancel(self, job_id: int) -> bool:
+        """Return True when cancellation has been requested for a job.
+
+        Workers poll this at safe checkpoints and then wind down on their own.
+
+        Args:
+            job_id: id of the job to check.
+
+        Returns:
+            True if the job exists and its state is ``cancel_requested``.
+        """
         job = get_job(job_id)
         return job is not None and job["state"] == JobState.CANCEL_REQUESTED
 
@@ -304,6 +420,14 @@ _manager: JobManager | None = None
 
 
 def get_manager() -> JobManager:
+    """Return the module-level ``JobManager`` singleton, creating it lazily.
+
+    On first access, jobs left ``running`` by dead processes are reconciled
+    to ``interrupted`` before the manager is returned.
+
+    Returns:
+        The shared ``JobManager`` instance.
+    """
     global _manager
     if _manager is None:
         reconcile_running_jobs()

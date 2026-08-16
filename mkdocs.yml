@@ -1,0 +1,67 @@
+site_name: MusicSeed Docs
+site_description: Documentation for MusicSeed — a local-first music recommendation tool for Plex.
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: deep purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: deep purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.top
+    - search.highlight
+    - content.code.copy
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            show_source: false
+            show_root_heading: true
+            members_order: source
+  - mkdocs-typer2:
+      # Import the Typer app in-process instead of shelling out to a `typer`
+      # binary on PATH; `pretty` renders sections with proper headings.
+      engine: native
+      pretty: true
+
+markdown_extensions:
+  - admonition
+  - tables
+  - fenced_code
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Product:
+      - Overview: product/overview.md
+  - Domain:
+      - Music recommendation: domain/music-recommendation.md
+  - Resolvers:
+      - Recommendation resolvers: resolvers/recommendation-resolvers.md
+  - Infrastructure:
+      - Local runtime: infra/local-runtime.md
+      - Troubleshooting: infra/troubleshooting.md
+  - Architecture:
+      - Harness engineering: harness-engineering.md
+      - Implementation plan: implementation-plan.md
+      - ARD 001 — Initial system design: ard/001-initial-system-design.md
+      - ARD 002 — Sonic vectors at query time: ard/002-sonic-vectors-at-query-time.md
+  - CLI Reference:
+      - Commands: cli-reference.md
+  - API Reference:
+      - Core services: api-reference/core-services.md
+      - Recommender: api-reference/recommender.md
+      - API handlers: api-reference/api-handlers.md

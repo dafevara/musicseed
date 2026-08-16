@@ -3,7 +3,6 @@
 from typing import Annotated, Optional
 
 import typer
-
 from musicseed.exceptions import ConfigurationError, MusicSeedError, NotFoundError
 from musicseed.logging_config import get_logger
 
@@ -37,20 +36,31 @@ def playlist(
         typer.Option("--explain", help="Show component scores and candidate sources"),
     ] = False,
     w_sonic: Annotated[float, typer.Option("--w-sonic", help="Sonic similarity weight")] = 0.30,
-    w_popularity: Annotated[float, typer.Option("--w-popularity", help="Popularity proximity weight")] = 0.15,
+    w_popularity: Annotated[
+        float, typer.Option("--w-popularity", help="Popularity proximity weight")
+    ] = 0.15,
     w_style: Annotated[float, typer.Option("--w-style", help="Style alignment weight")] = 0.10,
     w_genre: Annotated[float, typer.Option("--w-genre", help="Genre alignment weight")] = 0.15,
     w_era: Annotated[float, typer.Option("--w-era", help="Era proximity weight")] = 0.05,
     w_novelty: Annotated[float, typer.Option("--w-novelty", help="Novelty weight")] = 0.10,
-    year_min: Annotated[Optional[int], typer.Option("--year-min", help="Minimum release year")] = None,
-    year_max: Annotated[Optional[int], typer.Option("--year-max", help="Maximum release year")] = None,
+    year_min: Annotated[
+        Optional[int], typer.Option("--year-min", help="Minimum release year")
+    ] = None,
+    year_max: Annotated[
+        Optional[int], typer.Option("--year-max", help="Maximum release year")
+    ] = None,
     artist_max: Annotated[int, typer.Option("--artist-max", help="Max tracks per artist")] = 3,
     min_score: Annotated[
         Optional[float],
         typer.Option("--min-score", help="Exclude recommendations below this score (0.0–1.0)"),
     ] = None,
 ) -> None:
-    """Generate recommendations, prompt for approval, then create a Plex playlist."""
+    """Generate recommendations, prompt for approval, then create a Plex playlist.
+
+    Shows the resolved seeds and recommended tracks first; the Plex playlist
+    is only created after you confirm. The playlist contains the seed tracks
+    followed by the approved recommendations.
+    """
     from musicseed.services import recommend as recommend_service
 
     if not seed and not seed_id:
@@ -153,4 +163,5 @@ def playlist(
 
 
 def register(app: typer.Typer) -> None:
+    """Attach the ``playlist`` command to the Typer app."""
     app.command()(playlist)

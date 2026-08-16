@@ -3,7 +3,6 @@
 from typing import Annotated, Optional
 
 import typer
-
 from musicseed.exceptions import ConfigurationError, MusicSeedError, NotFoundError
 from musicseed.logging_config import get_logger
 
@@ -64,7 +63,14 @@ def populate(
         typer.Option("--min-score", help="Exclude recommendations below this score (0.0–1.0)"),
     ] = None,
 ) -> None:
-    """Recommend complementary tracks for an existing Plex playlist, then add them."""
+    """Recommend complementary tracks for an existing Plex playlist, then add them.
+
+    Previews the recommendations first; tracks are only added after you
+    confirm (--dry-run skips the write entirely). --method average scores
+    against the playlist's mean profile; --method frequency gathers
+    candidates from each playlist track individually and ranks by the
+    average per-seed score.
+    """
     from musicseed.services import populate as populate_service
 
     if method not in ("average", "frequency"):
@@ -183,4 +189,5 @@ def populate(
 
 
 def register(app: typer.Typer) -> None:
+    """Attach the ``populate`` command to the Typer app."""
     app.command()(populate)

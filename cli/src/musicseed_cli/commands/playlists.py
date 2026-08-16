@@ -1,10 +1,9 @@
 """``playlists`` command: list existing Plex audio playlists."""
 
 import typer
-from rich.table import Table
-
 from musicseed.exceptions import ConfigurationError
 from musicseed.logging_config import get_logger
+from rich.table import Table
 
 from musicseed_cli.console import console
 
@@ -40,4 +39,5 @@ def playlists() -> None:
 
 
 def register(app: typer.Typer) -> None:
+    """Attach the ``playlists`` command to the Typer app."""
     app.command()(playlists)

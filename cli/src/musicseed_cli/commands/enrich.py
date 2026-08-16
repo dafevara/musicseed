@@ -3,7 +3,6 @@
 from typing import Annotated, Optional
 
 import typer
-
 from musicseed.exceptions import ConfigurationError
 from musicseed.logging_config import get_logger
 
@@ -40,7 +39,12 @@ def enrich(
         typer.Option("--concurrency", help="Concurrent async requests"),
     ] = 5,
 ) -> None:
-    """Enrich tracks with external metadata."""
+    """Enrich tracks with external metadata.
+
+    Fetches popularity and related metadata from ListenBrainz (default,
+    keyless) or Spotify (requires configured credentials). Use --resume to
+    skip tracks that were already attempted.
+    """
     from musicseed.services import enrichment as enrichment_service
 
     if source not in {"spotify", "listenbrainz"}:
@@ -89,4 +93,5 @@ def enrich(
 
 
 def register(app: typer.Typer) -> None:
+    """Attach the ``enrich`` command to the Typer app."""
     app.command()(enrich)

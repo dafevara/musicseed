@@ -30,6 +30,15 @@ def search_tracks(
 
     Returns an empty list when the query is shorter than 2 characters. Results
     exclude ``exclude_ids``, are ordered by title, and capped at ``limit``.
+
+    Args:
+        query: substring matched (case-insensitively) against track titles
+            and artist names.
+        exclude_ids: local track ids to leave out of the results.
+        limit: maximum number of matches to return.
+
+    Returns:
+        Matching tracks as minimal JSON-safe views, ordered by title.
     """
     q = query.strip()
     if len(q) < 2:

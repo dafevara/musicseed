@@ -101,4 +101,5 @@ def status() -> None:
 
 
 def register(app: typer.Typer) -> None:
+    """Attach the ``status`` command to the Typer app."""
     app.command()(status)

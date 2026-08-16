@@ -4,11 +4,10 @@ from datetime import datetime, timedelta
 from typing import Annotated, Optional
 
 import typer
-from rich.table import Table
-
 from musicseed.config import get_config
 from musicseed.exceptions import ConfigurationError, NotFoundError
 from musicseed.logging_config import get_logger
+from rich.table import Table
 
 from musicseed_cli.console import console
 
@@ -158,4 +157,5 @@ def sonic_refresh(
 
 
 def register(app: typer.Typer) -> None:
+    """Attach the ``sonic-refresh`` command to the Typer app."""
     app.command("sonic-refresh")(sonic_refresh)

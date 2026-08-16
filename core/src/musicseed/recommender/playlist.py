@@ -22,6 +22,8 @@ from musicseed.sonic import get_sonic_vectors
 
 
 class Recommendation(BaseModel):
+    """One recommended track with its score breakdown and candidate sources."""
+
     model_config = {"frozen": True, "arbitrary_types_allowed": True}
 
     track: Track
@@ -87,8 +89,25 @@ def resolve_seed_tracks(
     seed_texts: Sequence[str] | None = None,
     seed_ids: Sequence[int] | None = None,
 ) -> list[Track]:
-    """Resolve seed IDs and seed text queries into loaded Track objects."""
+    """Resolve seed IDs and seed text queries into loaded Track objects.
 
+    Text seeds accept ``"Artist - Title"`` or a bare title; exact
+    case-insensitive matches win, otherwise a substring search must narrow to
+    exactly one track. Results are deduplicated, preserving input order.
+
+    Args:
+        session: open database session.
+        seed_texts: seed tracks as text queries.
+        seed_ids: seed tracks by local database id.
+
+    Returns:
+        The resolved seed tracks with artist, album, tags, and stats eagerly
+        loaded.
+
+    Raises:
+        ValueError: when a seed id or text matches no track, a text seed is
+            ambiguous (multiple matches), or no seeds were given at all.
+    """
     seeds: list[Track] = []
     seen: set[int] = set()
 
@@ -131,10 +150,32 @@ def recommend_tracks(
 ) -> tuple[list[Track], list[Recommendation], SonicCoverage]:
     """Generate recommendations using multi-source candidates and constrained selection.
 
-    Returns ``(seed_tracks, selected, sonic_coverage)`` where ``sonic_coverage``
-    reports how many candidate tracks had a real Plex sonic vector.
-    """
+    Pipeline: resolve the seeds, aggregate them into a ``SeedProfile``, build
+    a multi-source candidate pool, score every candidate against the profile,
+    then select greedily in descending total score. Selection enforces the
+    artist diversity constraint — at most ``max_tracks_per_artist`` tracks
+    per artist — and stops at ``limit`` tracks or at the first candidate
+    below ``min_score``. Seed tracks are never recommended.
 
+    Args:
+        session: open database session.
+        seed_texts: seed tracks as text queries (see ``resolve_seed_tracks``).
+        seed_ids: seed tracks by local database id.
+        limit: maximum number of recommendations to select.
+        weights: signal weights; defaults to ``Weights()``.
+        year_min: only recommend tracks released in this year or later.
+        year_max: only recommend tracks released in this year or earlier.
+        max_tracks_per_artist: artist diversity cap applied during selection.
+        min_score: drop recommendations with a total score below this value.
+
+    Returns:
+        ``(seed_tracks, selected, sonic_coverage)`` where ``sonic_coverage``
+        reports how many candidate tracks had a real Plex sonic vector.
+
+    Raises:
+        ValueError: if ``limit`` or ``max_tracks_per_artist`` is not positive,
+            or if the seeds cannot be resolved.
+    """
     if limit <= 0:
         raise ValueError("limit must be greater than zero")
     if max_tracks_per_artist <= 0:

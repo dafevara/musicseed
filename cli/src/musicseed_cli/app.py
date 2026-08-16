@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import Annotated, Optional
 
 import typer
-
 from musicseed import __version__
 from musicseed.config import get_config, load_config, set_config
 from musicseed.logging_config import parse_log_level, resolve_log_level, setup_logging
@@ -20,6 +19,7 @@ app = typer.Typer(
 
 
 def version_callback(value: bool) -> None:
+    """Print the installed MusicSeed version and exit (``--version``)."""
     if value:
         console.print(f"MusicSeed version {__version__}")
         raise typer.Exit()

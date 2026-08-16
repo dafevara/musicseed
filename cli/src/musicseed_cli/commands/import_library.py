@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import Annotated, Optional
 
 import typer
-
 from musicseed.config import get_config
 from musicseed.exceptions import NotFoundError
 from musicseed.logging_config import get_logger
@@ -26,7 +25,12 @@ def import_library(
         typer.Option("--full", help="Full re-import (default: incremental)"),
     ] = False,
 ) -> None:
-    """Import metadata from Plex database."""
+    """Import metadata from the Plex database.
+
+    Reads artists, albums, tracks, and play history from Plex's own SQLite
+    database into MusicSeed. Incremental by default — pass --full for a
+    complete re-import.
+    """
     from musicseed.services import library as library_service
 
     config = get_config()
@@ -62,4 +66,5 @@ def import_library(
 
 
 def register(app: typer.Typer) -> None:
+    """Attach the ``import`` command to the Typer app."""
     app.command("import")(import_library)

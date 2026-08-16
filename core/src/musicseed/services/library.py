@@ -18,6 +18,8 @@ _sonic_count_cache: tuple[tuple[str, int, int], int] | None = None
 
 
 class EnrichmentCoverage(BaseModel):
+    """Per-source enrichment coverage counts over the local track library."""
+
     tracks_with_mbid: int
     tracks_with_spotify: int
     spotify_attempted: int
@@ -27,6 +29,8 @@ class EnrichmentCoverage(BaseModel):
 
 
 class LibraryStatus(BaseModel):
+    """Point-in-time statistics for the local library and its configuration."""
+
     db_path: str
     db_size_bytes: int | None
     plex_url: str
@@ -44,6 +48,8 @@ class LibraryStatus(BaseModel):
 
 
 class ImportResult(BaseModel):
+    """Counts of rows written by one Plex import run."""
+
     artists: int
     albums: int
     tracks: int
@@ -51,15 +57,20 @@ class ImportResult(BaseModel):
 
 
 class CountCompare(BaseModel):
+    """Plex vs local row counts for one entity type."""
+
     plex: int
     local: int
 
     @property
     def missing(self) -> int:
+        """How many Plex rows are not yet imported locally (never negative)."""
         return max(0, self.plex - self.local)
 
 
 class ImportCoverage(BaseModel):
+    """Comparison of Plex library counts against the imported local counts."""
+
     artists: CountCompare
     albums: CountCompare
     tracks: CountCompare
@@ -67,6 +78,7 @@ class ImportCoverage(BaseModel):
 
     @property
     def complete(self) -> bool:
+        """True when every Plex artist, album, and track is imported locally."""
         return (
             self.artists.missing == 0
             and self.albums.missing == 0
@@ -75,6 +87,11 @@ class ImportCoverage(BaseModel):
 
     @property
     def setup_incomplete(self) -> bool:
+        """True when no import ever succeeded and coverage is not complete.
+
+        Surfaces use this to detect an interrupted first-time import that
+        should be resumed.
+        """
         return not self.ever_succeeded and not self.complete
 
 
@@ -84,7 +101,11 @@ def initialize_database() -> None:
 
 
 def optimize_database() -> list[IndexResult]:
-    """Create performance indexes. Returns per-index results."""
+    """Create performance indexes.
+
+    Returns:
+        Per-index results describing success or failure for each index.
+    """
     ensure_schema()
     return create_indexes()
 
@@ -96,7 +117,21 @@ def import_library(
     progress_callback: Callable[[int, int, str], None] | None = None,
     should_cancel: Callable[[], bool] | None = None,
 ) -> ImportResult:
-    """Import metadata from Plex database.
+    """Import metadata from the Plex database into the local library.
+
+    Args:
+        plex_db_path: path to the Plex SQLite database; defaults to the
+            configured ``plex.db_path``.
+        library_name: Plex library to import; defaults to the configured
+            ``plex.library``.
+        full_import: re-import everything instead of an incremental import.
+        progress_callback: optional ``(current, total, phase)`` callback
+            invoked as the import progresses.
+        should_cancel: optional callable polled by the importer; the import
+            stops early when it returns True.
+
+    Returns:
+        Counts of imported artists, albums, tracks, and play history rows.
 
     Raises:
         NotFoundError: if the Plex database file does not exist.
@@ -122,7 +157,10 @@ def import_library(
 
 
 def has_succeeded_import() -> bool:
-    """True when any import job has reached succeeded."""
+    """Return True when any import job has ever reached ``succeeded``.
+
+    Returns False (rather than raising) when the database cannot be read.
+    """
     try:
         ensure_schema()
         with get_session() as session:
@@ -139,7 +177,9 @@ def has_succeeded_import() -> bool:
 def get_import_coverage() -> ImportCoverage | None:
     """Compare MusicSeed artist/album/track counts to the configured Plex library.
 
-    Returns None when the Plex database cannot be read. Does not raise.
+    Returns:
+        The coverage comparison, or None when the Plex database cannot be
+        read. Does not raise.
     """
     config = get_config()
     plex_db = config.plex.db_path_expanded
@@ -209,7 +249,13 @@ def _count_tracks_with_sonic(session, track_count: int) -> int:
 
 
 def get_status() -> LibraryStatus:
-    """Return library statistics and enrichment coverage."""
+    """Return library statistics and enrichment coverage.
+
+    Returns:
+        Entity counts (artists, albums, tracks, plays, tags), per-source
+        enrichment coverage, import coverage against the configured Plex
+        library, and the resolved configuration paths.
+    """
     from sqlalchemy import or_
 
     from musicseed.db.models import Album, Artist, Genre, Mood, PlayHistory, Style, Track

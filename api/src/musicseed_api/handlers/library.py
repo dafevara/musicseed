@@ -11,6 +11,11 @@ IMPORT_KIND = "import"
 
 
 def get_library_status() -> LibraryStatus:
+    """Return local library statistics and enrichment coverage.
+
+    Returns:
+        The core ``LibraryStatus`` result model as-is.
+    """
     return get_status()
 
 

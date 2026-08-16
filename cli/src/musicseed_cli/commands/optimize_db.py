@@ -1,10 +1,9 @@
 """``optimize-db`` command: create performance indexes."""
 
 import typer
-from rich.table import Table
-
 from musicseed.config import get_config
 from musicseed.logging_config import get_logger
+from rich.table import Table
 
 from musicseed_cli.console import console
 
@@ -53,4 +52,5 @@ def optimize_database() -> None:
 
 
 def register(app: typer.Typer) -> None:
+    """Attach the ``optimize-db`` command to the Typer app."""
     app.command("optimize-db")(optimize_database)
