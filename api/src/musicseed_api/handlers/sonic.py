@@ -15,6 +15,16 @@ def get_sonic_coverage(
     library_name: str | None = None,
     recent_days: int = 7,
 ) -> SonicStatusResult:
+    """Report Plex sonic analysis coverage for a music library.
+
+    Args:
+        library_name: Plex music library to inspect; defaults to the
+            configured library.
+        recent_days: size of the "recent additions" window in days.
+
+    Returns:
+        The core ``SonicStatusResult`` as-is.
+    """
     return get_sonic_status(library_name, recent_days=recent_days)
 
 
@@ -23,6 +33,17 @@ def trigger_sonic_refresh(
     days: int = 7,
     wait_seconds: float = 900.0,
 ) -> SonicRefreshResult:
+    """Trigger a Plex sonic analysis refresh and reset the cached vectors.
+
+    Args:
+        library_name: Plex music library to refresh; defaults to the
+            configured library.
+        days: size of the "recent additions" window in days.
+        wait_seconds: maximum time to watch the refresh.
+
+    Returns:
+        The core ``SonicRefreshResult`` as-is.
+    """
     result = refresh_sonic_analysis(
         library_name,
         days=days,

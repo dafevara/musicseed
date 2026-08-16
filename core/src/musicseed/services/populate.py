@@ -40,7 +40,15 @@ def _plex_client() -> PlexClient:
 
 
 def list_plex_playlists() -> list[Playlist]:
-    """Return every audio playlist currently on the Plex server."""
+    """Return every audio playlist currently on the Plex server.
+
+    Returns:
+        All audio playlists on the server.
+
+    Raises:
+        ConfigurationError: if plex.token is not configured.
+        PlexAPIError: if the Plex API call fails.
+    """
     return _plex_client().list_playlists()
 
 
@@ -105,7 +113,31 @@ def get_populate_recommendations(
     max_tracks_per_artist: int = 3,
     min_score: float | None = None,
 ) -> PopulateResult:
-    """Preview complementary recommendations for an existing Plex playlist."""
+    """Preview complementary recommendations for an existing Plex playlist.
+
+    Args:
+        playlist_id: Plex rating key of the playlist to populate.
+        method: populate strategy (see ``PopulateMethod``).
+        limit: maximum number of recommendations to return.
+        per_seed_limit: candidates gathered per playlist track ("frequency"
+            method only).
+        weights: signal weights; defaults to ``Weights()``.
+        year_min: only recommend tracks released in this year or later.
+        year_max: only recommend tracks released in this year or earlier.
+        max_tracks_per_artist: artist diversity cap applied during selection.
+        min_score: drop recommendations with a total score below this value.
+
+    Returns:
+        The playlist identity, how many of its tracks matched the local
+        library, and the previewed recommendations. Nothing is written to
+        Plex.
+
+    Raises:
+        ConfigurationError: if plex.token is not configured.
+        NotFoundError: if the playlist doesn't exist or none of its tracks
+            are in the local library.
+        PlexAPIError: if the Plex API call fails.
+    """
     client = _plex_client()
     with get_session() as session:
         playlist, plex_track_count, local_ids = _resolve_playlist_local_tracks(
@@ -151,6 +183,23 @@ def populate_playlist(
     When ``track_ids`` is provided, only those local track ids are added (the
     recommendation step is skipped). This supports surfaces that let a user
     prune a preview before confirming.
+
+    Args:
+        playlist_id: Plex rating key of the playlist to populate.
+        method: populate strategy (see ``PopulateMethod``).
+        limit: maximum number of recommendations to add.
+        per_seed_limit: candidates gathered per playlist track ("frequency"
+            method only).
+        weights: signal weights; defaults to ``Weights()``.
+        year_min: only recommend tracks released in this year or later.
+        year_max: only recommend tracks released in this year or earlier.
+        max_tracks_per_artist: artist diversity cap applied during selection.
+        min_score: drop recommendations with a total score below this value.
+        track_ids: explicit local track ids to add instead of recommending.
+
+    Returns:
+        The playlist identity, match counts, the recommendations (empty when
+        ``track_ids`` was given), and how many tracks were actually added.
 
     Raises:
         ConfigurationError: if plex.token is not configured.

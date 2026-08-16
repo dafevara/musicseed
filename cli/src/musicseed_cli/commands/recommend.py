@@ -46,7 +46,13 @@ def recommend(
         typer.Option("--min-score", help="Exclude recommendations below this score (0.0–1.0)"),
     ] = None,
 ) -> None:
-    """Preview recommendations from seed tracks without writing to Plex."""
+    """Preview recommendations from seed tracks without writing to Plex.
+
+    Scores your local library against one or more seed tracks (--seed
+    "Artist - Title" or --seed-id) across six signals: sonic similarity,
+    popularity proximity, style, genre, era, and novelty. Use --explain to
+    show the per-signal score breakdown and candidate sources.
+    """
     from musicseed.services import recommend as recommend_service
 
     if not seed and not seed_id:
@@ -109,4 +115,5 @@ def recommend(
 
 
 def register(app: typer.Typer) -> None:
+    """Attach the ``recommend`` command to the Typer app."""
     app.command()(recommend)

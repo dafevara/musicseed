@@ -16,7 +16,19 @@ def build_weights(
     era: float,
     novelty: float,
 ) -> Weights:
-    """Assemble a Weights object from individual scoring weights."""
+    """Assemble a Weights object from individual scoring weights.
+
+    Args:
+        sonic: sonic similarity weight.
+        popularity: popularity proximity weight.
+        style: style alignment weight.
+        genre: genre alignment weight.
+        era: era proximity weight.
+        novelty: novelty weight.
+
+    Returns:
+        The assembled ``Weights``; normalization happens at scoring time.
+    """
     return Weights(
         sonic=sonic,
         popularity=popularity,
@@ -28,6 +40,15 @@ def build_weights(
 
 
 def popularity_cell(track) -> str:
+    """Format a track's popularity for a table cell ("" when unknown).
+
+    Args:
+        track: a Track ORM object.
+
+    Returns:
+        The popularity value (0-100 scale) rounded to an integer string, or
+        an empty string when the track has no popularity data.
+    """
     from musicseed.recommender.scoring import track_popularity_value
 
     value = track_popularity_value(track)
@@ -35,6 +56,11 @@ def popularity_cell(track) -> str:
 
 
 def print_seed_table(seed_tracks: list) -> None:
+    """Render the resolved seed tracks as a Rich table.
+
+    Args:
+        seed_tracks: Track ORM objects with artist eagerly loaded.
+    """
     table = Table(title="Resolved Seeds")
     table.add_column("ID", justify="right", style="cyan")
     table.add_column("Artist", style="green")
@@ -53,6 +79,14 @@ def print_seed_table(seed_tracks: list) -> None:
 
 
 def print_recommendations_table(recommendations: list, *, explain: bool) -> None:
+    """Render recommendations as a Rich table.
+
+    Args:
+        recommendations: ``Recommendation`` objects (track, score breakdown,
+            candidate sources).
+        explain: also show the per-signal component scores and the candidate
+            sources that produced each recommendation.
+    """
     table = Table(title="Recommendations")
     table.add_column("#", justify="right", style="cyan")
     table.add_column("Score", justify="right", style="green")

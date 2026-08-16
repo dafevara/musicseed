@@ -24,6 +24,26 @@ def enrich_tracks(
 ) -> EnrichmentStats:
     """Enrich tracks with external metadata from Spotify or ListenBrainz.
 
+    Runs the async enrichment pipeline via ``asyncio.run()`` internally —
+    never call this from inside a running event loop; offload to a thread
+    instead.
+
+    Args:
+        source: enrichment source, ``"spotify"`` or ``"listenbrainz"``.
+        batch_size: tracks processed per batch.
+        limit: maximum number of tracks to enrich (None for all).
+        artist: only enrich tracks whose artist name matches this pattern.
+        album: only enrich tracks whose album title matches this pattern.
+        resume: skip tracks that were already attempted.
+        concurrency: maximum concurrent requests inside the async pipeline.
+        progress_callback: optional ``(current, total, message)`` callback.
+        should_cancel: optional callable polled by the pipeline; enrichment
+            stops early when it returns True.
+
+    Returns:
+        Aggregate enrichment statistics (processed, matched, unmatched,
+        errors).
+
     Raises:
         ConfigurationError: if Spotify credentials are missing when source='spotify'.
     """

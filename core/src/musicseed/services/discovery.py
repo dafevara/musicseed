@@ -61,6 +61,15 @@ def read_plex_token(
     When no explicit paths are given, probes macOS and Linux Plex data dirs.
     Returns ``None`` when neither is readable. Read-only — the token value is
     never logged or returned in discovery results.
+
+    Args:
+        preferences_path: explicit path to ``Preferences.xml``; when omitted,
+            the default Plex data dir candidates are probed.
+        local_admin_token_path: explicit path to ``.LocalAdminToken``; same
+            default behavior as ``preferences_path``.
+
+    Returns:
+        The token string, or None when no readable token is found.
     """
     if preferences_path is not None or local_admin_token_path is not None:
         prefs = (
@@ -385,6 +394,23 @@ def discover(
     expected failures — they are reported via ``reason`` codes instead.
 
     Overrides apply to this call only and never mutate global configuration.
+
+    Args:
+        musicseed_db_path: override for the MusicSeed database path.
+        plex_db_path: override for the Plex library database path.
+        plex_url: override for the Plex server URL.
+        plex_token: override for the Plex token.
+        plex_library: override for the Plex library name.
+        check_server: whether to probe the Plex HTTP API (False skips the
+            network call and reports the server check as ``skipped``).
+        timeout: seconds before the Plex HTTP probe gives up.
+        config: explicit config to probe against; defaults to the global
+            ``get_config()``.
+
+    Returns:
+        The complete discovery result, including per-check ``reason`` codes,
+        enrichment readiness, missing inputs, and the derived first-run
+        status. The Plex token is never included.
     """
     cfg = config if config is not None else get_config()
     default_plex = PlexConfig()

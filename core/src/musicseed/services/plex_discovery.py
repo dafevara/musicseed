@@ -62,6 +62,7 @@ class DiscoveredPlexServer(BaseModel):
 
     @property
     def url(self) -> str:
+        """The server's base URL (``scheme://host:port``)."""
         return f"{self.scheme}://{self.host}:{self.port}"
 
 
@@ -254,6 +255,13 @@ def discover_plex_account_servers(
     Requires a Plex token and internet access. Returns an empty list (never
     raises) when the token is missing or the call fails — e.g. offline,
     invalid token, or no servers on the account.
+
+    Args:
+        token: Plex account token used to authenticate against plex.tv.
+        timeout: HTTP timeout in seconds for the plex.tv request.
+
+    Returns:
+        One entry per best-ranked connection of each account server.
     """
     if not token:
         return []
@@ -289,6 +297,14 @@ def discover_plex_servers(
     With ``token`` set, also queries ``plex.tv/api/resources`` so servers on
     other subnets (invisible to multicast) are included. Results are deduplicated
     by address. Returns an empty list when nothing responds; never raises.
+
+    Args:
+        timeout: seconds to listen for local multicast replies; also the
+            plex.tv request timeout when ``token`` is set.
+        token: optional Plex account token enabling cross-subnet discovery.
+
+    Returns:
+        Discovered servers sorted by ``(host, port, name)``.
     """
     servers: dict[tuple[str, str, int], DiscoveredPlexServer] = {}
     _discover_local_servers(servers, timeout)

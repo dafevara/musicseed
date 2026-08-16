@@ -40,4 +40,5 @@ def playlists() -> None:
 
 
 def register(app: typer.Typer) -> None:
+    """Attach the ``playlists`` command to the Typer app."""
     app.command()(playlists)
