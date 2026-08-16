@@ -72,6 +72,8 @@ cd core  && uv run ruff check src
 cd api   && uv run pytest tests -q    # offline API suite (stubs Plex/DB)
 cd web   && npx tsc --noEmit          # type-check the Next.js surface
 python3 -m compileall -q core/src/musicseed cli/src/musicseed_cli api/src/musicseed_api
+uv venv --python 3.12 .venv-docs && uv pip install --python .venv-docs -r docs/requirements-docs.txt  # one-time docs env
+.venv-docs/bin/mkdocs build           # build the MkDocs Material docs site from the repo root
 ```
 
 The MusicSeed database is a single SQLite file (default
