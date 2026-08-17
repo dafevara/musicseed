@@ -133,11 +133,14 @@ export function HealthStrip({
   const tracks = lib.track_count;
   const enrichment = lib.enrichment;
 
-  const enrichJob = activeJobs.find((j) => j.kind === "enrich" && (j.state === "running" || j.state === "pending"));
-  const importJob = activeJobs.find((j) => j.kind === "import" && (j.state === "running" || j.state === "pending"));
+  const isActive = (j: JobSummary) => j.state === "running" || j.state === "pending";
+  const spotifyEnrichJob = activeJobs.find((j) => j.kind === "enrich:spotify" && isActive(j));
+  const lbEnrichJob = activeJobs.find((j) => j.kind === "enrich:listenbrainz" && isActive(j));
+  const importJob = activeJobs.find((j) => j.kind === "import" && isActive(j));
   const importCov = lib.import_coverage;
   const [sonicStatus, setSonicStatus] = useState<SonicStatus | null>(null);
-  const [enriching, setEnriching] = useState(false);
+  const [enrichingSpotify, setEnrichingSpotify] = useState(false);
+  const [enrichingLb, setEnrichingLb] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [confirmRefresh, setConfirmRefresh] = useState(false);
 
@@ -149,20 +152,20 @@ export function HealthStrip({
   }
 
   async function doEnrich() {
-    setEnriching(true);
+    setEnrichingSpotify(true);
     try {
       await onEnrich();
     } finally {
-      setEnriching(false);
+      setEnrichingSpotify(false);
     }
   }
 
   async function doEnrichListenBrainz() {
-    setEnriching(true);
+    setEnrichingLb(true);
     try {
       await onEnrichListenBrainz();
     } finally {
-      setEnriching(false);
+      setEnrichingLb(false);
     }
   }
 
@@ -261,11 +264,11 @@ export function HealthStrip({
             covered={enrichment.tracks_with_spotify}
             total={tracks}
             zeroHint={spotifyHint}
-            activeJob={enrichJob}
-            action={enrichJob ? undefined : {
+            activeJob={spotifyEnrichJob}
+            action={spotifyEnrichJob ? undefined : {
               label: spotifyCovered > 0 ? "Resume enrichment" : "Enrich",
               icon: "play",
-              busy: enriching,
+              busy: enrichingSpotify,
               onClick: doEnrich,
             }}
           />
@@ -274,11 +277,11 @@ export function HealthStrip({
             covered={enrichment.tracks_with_listenbrainz}
             total={tracks}
             zeroHint={lbHint}
-            activeJob={enrichJob}
-            action={enrichJob ? undefined : {
+            activeJob={lbEnrichJob}
+            action={lbEnrichJob ? undefined : {
               label: lbCovered > 0 ? "Resume" : "Enrich",
               icon: "play",
-              busy: enriching,
+              busy: enrichingLb,
               onClick: doEnrichListenBrainz,
             }}
           />

@@ -7,7 +7,7 @@ from typing import Annotated
 from fastapi import APIRouter, Form
 
 from musicseed_api.handlers.enrichment import (
-    ENRICH_KIND,
+    enrich_kind,
     run_enrich_job,
     save_listenbrainz_token,
     save_spotify_creds,
@@ -25,7 +25,7 @@ def start_spotify_enrich(
     save_spotify_creds(
         spotify_client_id.strip(), spotify_client_secret.strip(),
     )
-    job_id = submit_job(ENRICH_KIND, run_enrich_job)
+    job_id = submit_job(enrich_kind("spotify"), run_enrich_job)
     return {"job_id": job_id}
 
 
@@ -34,5 +34,5 @@ def start_listenbrainz_enrich(
     listenbrainz_token: Annotated[str, Form()] = "",
 ) -> dict:
     save_listenbrainz_token(listenbrainz_token.strip())
-    job_id = submit_job(ENRICH_KIND, run_enrich_job, "listenbrainz")
+    job_id = submit_job(enrich_kind("listenbrainz"), run_enrich_job, "listenbrainz")
     return {"job_id": job_id}

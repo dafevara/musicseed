@@ -11,6 +11,16 @@ from musicseed.services.jobs import complete_job, get_manager, update_progress
 ENRICH_KIND = "enrich"
 
 
+def enrich_kind(source: str) -> str:
+    """Job kind for an enrichment source.
+
+    Each source gets its own kind (``enrich:spotify`` / ``enrich:listenbrainz``)
+    so the job system's one-active-job-per-kind rule applies per source and the
+    UI can track each provider's job independently.
+    """
+    return f"{ENRICH_KIND}:{source}"
+
+
 def save_spotify_creds(client_id: str, client_secret: str) -> None:
     """Persist Spotify credentials to config. No-op when both are empty."""
     if not client_id and not client_secret:

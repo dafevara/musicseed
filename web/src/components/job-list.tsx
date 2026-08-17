@@ -52,7 +52,7 @@ function formatResult(job: JobSummary): React.ReactNode {
     return parts.join(" · ");
   }
 
-  if (job.kind === "enrich") {
+  if (job.kind.startsWith("enrich")) {
     const parts: string[] = [];
     if (result.enriched !== undefined) parts.push(`${result.enriched.toLocaleString()} enriched`);
     if (result.total) parts.push(`of ${result.total.toLocaleString()} tracks`);
@@ -199,7 +199,11 @@ function JobRow({
     }
   };
 
-  const kindLabel = job.kind === "import" ? "Library sync" : "Enrichment";
+  const kindLabel =
+    job.kind === "import" ? "Library sync"
+    : job.kind === "enrich:spotify" ? "Spotify enrichment"
+    : job.kind === "enrich:listenbrainz" ? "ListenBrainz enrichment"
+    : "Enrichment";
 
   return (
     <div className="activity-row">

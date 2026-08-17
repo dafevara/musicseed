@@ -145,7 +145,7 @@ export default function SetupPage() {
     try {
       const { job_id } = await api.post<{ job_id: number }>(`/enrichment/${source}`);
       setJobId(job_id);
-      setJobKind("enrich");
+      setJobKind(`enrich:${source}`);
     } catch {
       setStep("done");
     }
