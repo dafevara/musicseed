@@ -67,18 +67,6 @@ def test_enrichment_listenbrainz_route(monkeypatch):
     assert submitted["args"] == ("listenbrainz",)
 
 
-def test_enrichment_listenbrainz_route(monkeypatch):
-    submitted = {}
-    monkeypatch.setattr(
-        enrichment_routes,
-        "submit_job",
-        lambda kind, target, *args: submitted.update(kind=kind, args=args) or 123,
-    )
-    resp = TestClient(create_app()).post("/enrichment/listenbrainz")
-    assert resp.json() == {"job_id": 123}
-    assert submitted["args"] == ("listenbrainz",)
-
-
 def test_recommend_typeahead_route(monkeypatch):
     monkeypatch.setattr(recommend_routes, "typeahead_search", lambda q, exclude: [])
     resp = TestClient(create_app()).get("/recommend/typeahead", params={"q": "ab"})

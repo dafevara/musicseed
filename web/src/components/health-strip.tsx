@@ -169,15 +169,6 @@ export function HealthStrip({
     }
   }
 
-  async function doEnrichListenBrainz() {
-    setEnriching(true);
-    try {
-      await onEnrichListenBrainz();
-    } finally {
-      setEnriching(false);
-    }
-  }
-
   useEffect(() => {
     api.get<{ total_tracks: number; analyzed_tracks: number; unanalyzed_albums: SonicStatus["unanalyzed_albums"] }>("/sonic/status")
       .then(setSonicStatus)
@@ -286,11 +277,11 @@ export function HealthStrip({
             covered={enrichment.tracks_with_listenbrainz}
             total={tracks}
             zeroHint={lbHint}
-            activeJob={enrichJob}
-            action={enrichJob ? undefined : {
+            activeJob={lbEnrichJob}
+            action={lbEnrichJob ? undefined : {
               label: lbCovered > 0 ? "Resume" : "Enrich",
               icon: "play",
-              busy: enriching,
+              busy: enrichingLb,
               onClick: doEnrichListenBrainz,
             }}
           />
