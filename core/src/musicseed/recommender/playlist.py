@@ -89,7 +89,6 @@ def resolve_seed_tracks(
     seed_texts: Sequence[str] | None = None,
     seed_ids: Sequence[int] | None = None,
 ) -> list[Track]:
-
     """Resolve seed IDs and seed text queries into loaded Track objects.
 
     Text seeds accept ``"Artist - Title"`` or a bare title; exact
@@ -149,7 +148,6 @@ def recommend_tracks(
     max_tracks_per_artist: int = 3,
     min_score: float | None = None,
 ) -> tuple[list[Track], list[Recommendation], SonicCoverage]:
-
     """Generate recommendations using multi-source candidates and constrained selection.
 
     Pipeline: resolve the seeds, aggregate them into a ``SeedProfile``, build
