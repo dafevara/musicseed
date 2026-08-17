@@ -42,8 +42,10 @@ def enrich(
     """Enrich tracks with external metadata.
 
     Fetches popularity and related metadata from ListenBrainz (default,
-    keyless) or Spotify (requires configured credentials). Use --resume to
-    skip tracks that were already attempted.
+    requires a ListenBrainz user token — get one free at
+    https://listenbrainz.org/settings/) or Spotify (requires configured
+    client credentials). Use --resume to skip tracks that were already
+    attempted.
     """
     from musicseed.services import enrichment as enrichment_service
 

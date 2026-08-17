@@ -10,7 +10,9 @@ actions.
   `api/src/musicseed_api` (REST API).
 - A Next.js + React + TypeScript web UI under `web/` (client-rendered SPA) that talks to the API
   over HTTP.
-- uv for dependency management and command execution.
+- uv for dependency management and command execution during **development** (per-app lockfiles,
+  `uv sync`, `uv run`). Not required for end users: `scripts/install.sh` builds the runtime from
+  a plain `python3 -m venv` + `pip`.
 - One local SQLite file for MusicSeed's own state (default
   `~/.local/share/musicseed/musicseed.db`, WAL mode) — no database server.
 - Plex SQLite database as a read-only import source.
@@ -28,9 +30,9 @@ keys enabled.
 Commands:
 
 ```bash
-uv run musicseed-cli init-db       # creates the file (and parent dir) and tables
-uv run musicseed-cli optimize-db   # search, queue, and tag indexes
-uv run musicseed-cli status        # shows the DB path and file size
+musicseed-cli init-db       # creates the file (and parent dir) and tables
+musicseed-cli optimize-db   # search, queue, and tag indexes
+musicseed-cli status        # shows the DB path and file size
 ```
 
 `init-db` creates tables. `optimize-db` creates search, queue, and tag
@@ -133,7 +135,9 @@ Ask before running:
 ## External APIs
 
 ListenBrainz enrichment uses recording MBIDs and should be the default enrichment path when
-possible. Spotify requires credentials and text matching, so treat it as optional fallback.
+possible. It requires a free ListenBrainz user token (`listenbrainz.token`), which raises rate
+limits over anonymous access. Spotify requires credentials and text matching, so treat it as a
+fallback.
 
 HTTP clients should:
 

@@ -29,16 +29,17 @@ class ListenBrainzRecordingPopularity(BaseModel):
 class ListenBrainzClient:
     """Async ListenBrainz client for batched recording popularity lookups."""
 
-    def __init__(self, requests_per_second: float = 1.0):
+    def __init__(self, requests_per_second: float = 1.0, token: str = ""):
         self.requests_per_second = requests_per_second
+        self.token = token
         self._client: httpx.AsyncClient | None = None
         self._last_request_time: float = 0
 
     async def __aenter__(self) -> "ListenBrainzClient":
-        self._client = httpx.AsyncClient(
-            timeout=30.0,
-            headers={"User-Agent": LISTENBRAINZ_USER_AGENT},
-        )
+        headers = {"User-Agent": LISTENBRAINZ_USER_AGENT}
+        if self.token:
+            headers["Authorization"] = f"Token {self.token}"
+        self._client = httpx.AsyncClient(timeout=30.0, headers=headers)
         return self
 
     async def __aexit__(self, *args) -> None:

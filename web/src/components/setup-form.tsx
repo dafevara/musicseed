@@ -11,7 +11,7 @@ const FIELD_FOR_MISSING: Record<string, string[]> = {
   plex_library: ["plexLibrary"],
   plex_db_path: ["plexDbPath"],
   db_location: ["musicseedDbPath"],
-  spotify_credentials: ["spotifyId", "spotifySecret"],
+  enrichment_credentials: ["listenbrainzToken", "spotifyId", "spotifySecret"],
 };
 
 export function SetupForm({
@@ -30,6 +30,7 @@ export function SetupForm({
   const [musicseedDbPath, setMusicseedDbPath] = useState("");
   const [spotifyId, setSpotifyId] = useState("");
   const [spotifySecret, setSpotifySecret] = useState("");
+  const [listenbrainzToken, setListenbrainzToken] = useState("");
 
   const visible =
     missing && missing.length > 0
@@ -46,6 +47,7 @@ export function SetupForm({
     if (musicseedDbPath.trim()) vals.musicseed_db_path = musicseedDbPath.trim();
     if (spotifyId.trim()) vals.spotify_client_id = spotifyId.trim();
     if (spotifySecret.trim()) vals.spotify_client_secret = spotifySecret.trim();
+    if (listenbrainzToken.trim()) vals.listenbrainz_token = listenbrainzToken.trim();
     onSubmit(vals);
   }
 
@@ -110,6 +112,21 @@ export function SetupForm({
               value={musicseedDbPath}
               onChange={(e) => setMusicseedDbPath(e.target.value)}
               placeholder={result.musicseed_db.path}
+            />
+          </label>
+        )}
+        {(!visible || visible.has("listenbrainzToken")) && (
+          <label className="grid gap-1 text-sm">
+            ListenBrainz user token{" "}
+            <span className="text-[var(--muted)]">
+              (free — listenbrainz.org/settings; either this or Spotify enables enrichment)
+            </span>
+            <input
+              type="password"
+              value={listenbrainzToken}
+              onChange={(e) => setListenbrainzToken(e.target.value)}
+              autoComplete="off"
+              placeholder={result.enrichers.listenbrainz.configured ? "configured" : "not set"}
             />
           </label>
         )}

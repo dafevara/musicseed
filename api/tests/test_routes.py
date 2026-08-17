@@ -42,9 +42,29 @@ def test_library_import_route(monkeypatch):
 
 
 def test_enrichment_spotify_route(monkeypatch):
-    monkeypatch.setattr(enrichment_routes, "submit_job", lambda kind, target: 123)
+    submitted = {}
+    monkeypatch.setattr(
+        enrichment_routes,
+        "submit_job",
+        lambda kind, target, *args: submitted.update(kind=kind, args=args) or 123,
+    )
     resp = TestClient(create_app()).post("/enrichment/spotify", data={})
     assert resp.json() == {"job_id": 123}
+    assert submitted["kind"] == "enrich:spotify"
+    assert submitted["args"] == ()
+
+
+def test_enrichment_listenbrainz_route(monkeypatch):
+    submitted = {}
+    monkeypatch.setattr(
+        enrichment_routes,
+        "submit_job",
+        lambda kind, target, *args: submitted.update(kind=kind, args=args) or 123,
+    )
+    resp = TestClient(create_app()).post("/enrichment/listenbrainz")
+    assert resp.json() == {"job_id": 123}
+    assert submitted["kind"] == "enrich:listenbrainz"
+    assert submitted["args"] == ("listenbrainz",)
 
 
 def test_recommend_typeahead_route(monkeypatch):

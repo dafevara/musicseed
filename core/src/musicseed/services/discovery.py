@@ -178,13 +178,21 @@ class SpotifyCredentialsCheck(BaseModel):
     client_secret_set: bool
 
 
+class ListenBrainzTokenCheck(BaseModel):
+    """Presence of the ListenBrainz user token (value never exposed)."""
+
+    model_config = {"frozen": True}
+
+    configured: bool
+
+
 class EnrichmentDiscovery(BaseModel):
-    """Enrichment-provider readiness. ListenBrainz needs no credentials."""
+    """Enrichment-provider readiness. Either provider's credentials suffice."""
 
     model_config = {"frozen": True}
 
     spotify: SpotifyCredentialsCheck
-    listenbrainz_requires_key: bool = False
+    listenbrainz: ListenBrainzTokenCheck
 
 
 class FirstRunStatus(BaseModel):
@@ -482,7 +490,8 @@ def discover(
         client_id_set=bool(cfg.spotify.client_id),
         client_secret_set=bool(cfg.spotify.client_secret),
     )
-    enrichers = EnrichmentDiscovery(spotify=spotify)
+    listenbrainz = ListenBrainzTokenCheck(configured=bool(cfg.listenbrainz.token))
+    enrichers = EnrichmentDiscovery(spotify=spotify, listenbrainz=listenbrainz)
 
     missing: list[str] = []
     if not musicseed_db.ok:
@@ -498,8 +507,8 @@ def discover(
             missing.append("plex_library")
         else:
             missing.append("plex_server")
-    if not spotify.configured:
-        missing.append("spotify_credentials")
+    if not spotify.configured and not listenbrainz.configured:
+        missing.append("enrichment_credentials")
 
     no_config = get_config_path() is None
     db_missing = not musicseed_db.exists

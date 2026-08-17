@@ -111,6 +111,12 @@ class SpotifyConfig(BaseModel):
     client_secret: str = ""
 
 
+class ListenBrainzConfig(BaseModel):
+    # User token from https://listenbrainz.org/settings/ — required for
+    # ListenBrainz enrichment (authenticated requests get higher rate limits).
+    token: str = ""
+
+
 class EnrichmentConfig(BaseModel):
     concurrency: int = 5
     batch_size: int = 50
@@ -141,6 +147,7 @@ class Config(BaseModel):
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     plex: PlexConfig = Field(default_factory=PlexConfig)
     spotify: SpotifyConfig = Field(default_factory=SpotifyConfig)
+    listenbrainz: ListenBrainzConfig = Field(default_factory=ListenBrainzConfig)
     enrichment: EnrichmentConfig = Field(default_factory=EnrichmentConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     recommendation: RecommendationConfig = Field(default_factory=RecommendationConfig)

@@ -38,8 +38,8 @@ Service entry points:
   Plex token in results. `read_plex_token` reads a token from the local Plex install
   (`Preferences.xml` → `PlexOnlineToken`, falling back to `.LocalAdminToken`); `discover` uses
   it when no token is configured and reports `plex_server.token_source`. Also reports
-  `enrichers` (Spotify credential presence — ListenBrainz is keyless), `missing_inputs`
-  (machine-readable keys like `plex_token`, `spotify_credentials`, `plex_unreachable`,
+  `enrichers` (Spotify credential and ListenBrainz token presence), `missing_inputs`
+  (machine-readable keys like `plex_token`, `enrichment_credentials`, `plex_unreachable`,
   `db_location`), and a derived `first_run` status (`no_config` / `db_missing` /
   `library_empty`; no persisted flag). The setup wizard / dashboard consume this.
 - `services/plex_discovery.py`: `discover_plex_servers` — passive, read-only Plex discovery.
@@ -81,7 +81,8 @@ Service entry points:
   `reset_engine` (dispose engine — the hook for tests/config reload).
 - `importers/plex.py`: Plex SQLite metadata import. Track years fall back to the album year when
   Plex doesn't set one on the track row.
-- `enrichers/`: ListenBrainz, Spotify, MusicBrainz clients + the async enrichment pipeline.
+- `enrichers/`: ListenBrainz and Spotify clients + the async enrichment pipeline. (The old
+  MusicBrainz MBID→Spotify cross-reference client was removed; it was never wired in.)
 - `sonic.py`: Plex sonic analysis vectors read at query time from the Plex blobs DB into an
   in-memory L2-normalized matrix (`SonicVectors`, keyed by `plex_id`). Lazy global cache via
   `get_sonic_vectors()` / `reset_sonic_vectors()`; raises `NotFoundError` when the Plex databases

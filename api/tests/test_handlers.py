@@ -7,7 +7,7 @@ from musicseed.db.session import init_db, reset_engine
 from musicseed.exceptions import JobConflictError, NotFoundError
 from musicseed.services.jobs import create_job
 from musicseed.services.populate import PopulateApplyResult
-from musicseed_api.handlers.enrichment import save_spotify_creds
+from musicseed_api.handlers.enrichment import save_listenbrainz_token, save_spotify_creds
 from musicseed_api.handlers.jobs import cancel_job, delete_job, get_job_progress
 from musicseed_api.handlers.recommend import parse_seed_ids
 
@@ -41,6 +41,60 @@ def test_save_spotify_creds_noop_when_empty(tmp_path):
     save_spotify_creds("", "")
 
     assert config_module._config.spotify.client_id == ""
+
+
+def test_save_listenbrainz_token_persists(tmp_path):
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text("")
+    set_config(load_config(cfg_path))
+
+    save_listenbrainz_token("lb-tok")
+
+    config_module._config = None
+    config_module._config_path = None
+    reloaded = load_config(cfg_path)
+    assert reloaded.listenbrainz.token == "lb-tok"
+
+
+def test_save_listenbrainz_token_noop_when_empty(tmp_path):
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text("")
+    set_config(load_config(cfg_path))
+
+    save_listenbrainz_token("")
+
+    assert config_module._config.listenbrainz.token == ""
+
+
+def test_run_enrich_job_passes_source(monkeypatch, tmp_path):
+    import musicseed.services.jobs as jobs_module
+    import musicseed_api.handlers.enrichment as enrich_handler
+
+    set_config(Config.model_validate({"database": {"path": str(tmp_path / "db.sqlite")}}))
+    reset_engine()
+    init_db()
+    jobs_module._manager = None
+
+    captured = {}
+
+    class FakeStats:
+        matched = 3
+        total = 10
+        errors = 0
+
+    def fake_enrich_tracks(**kwargs):
+        captured.update(kwargs)
+        return FakeStats()
+
+    monkeypatch.setattr(enrich_handler, "enrich_tracks", fake_enrich_tracks)
+
+    jid = create_job("enrich")
+    enrich_handler.run_enrich_job(jid, "listenbrainz")
+
+    assert captured["source"] == "listenbrainz"
+    job = get_job_progress(jid)
+    assert job["state"] == "succeeded"
+    assert '"source": "listenbrainz"' in job["result_summary"]
 
 
 def test_jobs_handlers(tmp_path):

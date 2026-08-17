@@ -19,7 +19,7 @@ DISCOVERY_KEYS = frozenset({
     "musicseed_db_path", "plex_db_path", "plex_url", "plex_token", "plex_library",
 })
 
-_SECRET_FIELDS = frozenset({"plex_token", "spotify_client_secret"})
+_SECRET_FIELDS = frozenset({"plex_token", "spotify_client_secret", "listenbrainz_token"})
 
 
 def wizard_ready(result: DiscoveryResult) -> bool:
@@ -66,6 +66,7 @@ def _apply_config_overrides(
     musicseed_db_path: str = "",
     spotify_client_id: str = "",
     spotify_client_secret: str = "",
+    listenbrainz_token: str = "",
     plex_url: str = "",
     plex_token: str = "",
     plex_library: str = "",
@@ -81,6 +82,9 @@ def _apply_config_overrides(
         changed = True
     if spotify_client_secret:
         cfg.spotify.client_secret = spotify_client_secret
+        changed = True
+    if listenbrainz_token:
+        cfg.listenbrainz.token = listenbrainz_token
         changed = True
     if plex_url:
         cfg.plex.url = plex_url
@@ -101,6 +105,7 @@ def save_config_overrides(
     musicseed_db_path: str = "",
     spotify_client_id: str = "",
     spotify_client_secret: str = "",
+    listenbrainz_token: str = "",
     plex_url: str = "",
     plex_token: str = "",
     plex_library: str = "",
@@ -123,6 +128,7 @@ def save_config_overrides(
         musicseed_db_path=musicseed_db_path,
         spotify_client_id=spotify_client_id,
         spotify_client_secret=spotify_client_secret,
+        listenbrainz_token=listenbrainz_token,
         plex_url=plex_url,
         plex_token=plex_token,
         plex_library=plex_library,
@@ -138,6 +144,7 @@ def apply_config_and_init_db(
     musicseed_db_path: str = "",
     spotify_client_id: str = "",
     spotify_client_secret: str = "",
+    listenbrainz_token: str = "",
     plex_url: str = "",
     plex_token: str = "",
     plex_library: str = "",
@@ -155,6 +162,7 @@ def apply_config_and_init_db(
         musicseed_db_path=musicseed_db_path,
         spotify_client_id=spotify_client_id,
         spotify_client_secret=spotify_client_secret,
+        listenbrainz_token=listenbrainz_token,
         plex_url=plex_url,
         plex_token=plex_token,
         plex_library=plex_library,

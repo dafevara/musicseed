@@ -26,6 +26,13 @@ spotify:
   client_id: ${SPOTIFY_CLIENT_ID}
   client_secret: ${SPOTIFY_CLIENT_SECRET}
 
+# Required for ListenBrainz enrichment (the default source), unless Spotify
+# credentials are set above. Get a free user token at
+# https://listenbrainz.org/settings/ — authenticated requests get higher
+# rate limits. Leave empty (or omit) if you only use Spotify enrichment.
+listenbrainz:
+  token: ${LISTENBRAINZ_TOKEN}
+
 enrichment:
   concurrency: 5
   batch_size: 50

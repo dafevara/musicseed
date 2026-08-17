@@ -11,6 +11,16 @@ from musicseed.services.jobs import complete_job, get_manager, update_progress
 ENRICH_KIND = "enrich"
 
 
+def enrich_kind(source: str) -> str:
+    """Job kind for an enrichment source.
+
+    Each source gets its own kind (``enrich:spotify`` / ``enrich:listenbrainz``)
+    so the job system's one-active-job-per-kind rule applies per source and the
+    UI can track each provider's job independently.
+    """
+    return f"{ENRICH_KIND}:{source}"
+
+
 def save_spotify_creds(client_id: str, client_secret: str) -> None:
     """Persist Spotify credentials to config. No-op when both are empty."""
     if not client_id and not client_secret:
@@ -23,9 +33,18 @@ def save_spotify_creds(client_id: str, client_secret: str) -> None:
     save_config(cfg)
 
 
-def run_enrich_job(job_id: int) -> None:
-    """Job target: enrich tracks via Spotify and update job progress."""
-    update_progress(job_id, 0, 1, "enriching via Spotify…")
+def save_listenbrainz_token(token: str) -> None:
+    """Persist the ListenBrainz user token to config. No-op when empty."""
+    if not token:
+        return
+    cfg = get_config()
+    cfg.listenbrainz.token = token
+    save_config(cfg)
+
+
+def run_enrich_job(job_id: int, source: str = "spotify") -> None:
+    """Job target: enrich tracks via the given source and update job progress."""
+    update_progress(job_id, 0, 1, f"enriching via {source}…")
 
     cancelled = [False]
 
@@ -39,7 +58,7 @@ def run_enrich_job(job_id: int) -> None:
         update_progress(job_id, current, total, message)
 
     stats = enrich_tracks(
-        source="spotify",
+        source=source,
         resume=True,
         batch_size=10,
         concurrency=10,
@@ -65,6 +84,6 @@ def run_enrich_job(job_id: int) -> None:
             "enriched": stats.matched,
             "total": stats.total,
             "errors": stats.errors,
-            "source": "spotify",
+            "source": source,
         }),
     )

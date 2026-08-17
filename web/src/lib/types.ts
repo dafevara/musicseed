@@ -47,9 +47,13 @@ export interface SpotifyCredentialsCheck {
   client_secret_set: boolean;
 }
 
+export interface ListenBrainzTokenCheck {
+  configured: boolean;
+}
+
 export interface EnrichmentDiscovery {
   spotify: SpotifyCredentialsCheck;
-  listenbrainz_requires_key: boolean;
+  listenbrainz: ListenBrainzTokenCheck;
 }
 
 export interface FirstRunStatus {

@@ -89,6 +89,15 @@ export default function DashboardPage() {
     }
   }
 
+  async function handleEnrichListenBrainz() {
+    try {
+      await api.post<{ job_id: number }>("/enrichment/listenbrainz");
+      await fetchSnapshot();
+    } catch {
+      // ignore
+    }
+  }
+
   async function handleSonicRefresh() {
     try {
       await api.post("/sonic/refresh");
@@ -122,6 +131,7 @@ export default function DashboardPage() {
         snapshot={snapshot}
         activeJobs={snapshot.active_jobs}
         onEnrich={handleEnrich}
+        onEnrichListenBrainz={handleEnrichListenBrainz}
         onSonicRefresh={handleSonicRefresh}
         plexServer={plexServer}
       />

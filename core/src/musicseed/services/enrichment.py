@@ -45,7 +45,9 @@ def enrich_tracks(
         errors).
 
     Raises:
-        ConfigurationError: if Spotify credentials are missing when source='spotify'.
+        ConfigurationError: if Spotify credentials are missing when
+            source='spotify', or the ListenBrainz user token is missing when
+            source='listenbrainz'.
     """
     config = get_config()
 
@@ -57,12 +59,20 @@ def enrich_tracks(
             "Add spotify.client_id and spotify.client_secret to your config file."
         )
 
+    if source == "listenbrainz" and not config.listenbrainz.token:
+        raise ConfigurationError(
+            "ListenBrainz user token not configured. "
+            "Get a free token at https://listenbrainz.org/settings/ and add "
+            "listenbrainz.token to your config file."
+        )
+
     ensure_schema()
     return asyncio.run(
         run_enrichment(
             source=source,
             client_id=config.spotify.client_id,
             client_secret=config.spotify.client_secret,
+            listenbrainz_token=config.listenbrainz.token,
             batch_size=batch_size,
             limit=limit,
             artist=artist,
