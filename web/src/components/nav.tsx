@@ -31,21 +31,17 @@ export function Nav() {
 
   return (
     <nav
-      className="[grid-area:nav] py-4 px-3 border-r border-[var(--border)] bg-[var(--panel)] max-lg:border-r-0 max-lg:border-b max-lg:py-2 max-lg:px-3 max-lg:overflow-x-auto"
+      className="app-nav [grid-area:nav]"
       aria-label="Sections"
     >
-      <ul className="list-none m-0 p-0 grid gap-0.5 max-lg:grid-flow-col max-lg:auto-cols-max max-lg:gap-1">
+      <ul className="app-nav-list">
         {SECTIONS.map((s) => {
           if (s.href) {
             return (
               <li key={s.key}>
                 <Link
                   href={s.href}
-                  className={`flex items-baseline justify-between gap-2 px-3 py-2 rounded-md text-[0.95rem] whitespace-nowrap no-underline
-                    ${s.key === active
-                      ? "bg-[var(--brand)] text-white font-semibold"
-                      : "text-[var(--fg)] hover:bg-[var(--bg)]"
-                    }`}
+                  className={`app-nav-link ${s.key === active ? "app-nav-link-active" : ""}`}
                   {...(s.key === active ? { "aria-current": "page" as const } : {})}
                 >
                   {s.label}
@@ -56,11 +52,11 @@ export function Nav() {
           return (
             <li key={s.key}>
               <span
-                className="flex items-baseline justify-between gap-2 px-3 py-2 rounded-md text-[0.95rem] whitespace-nowrap text-[var(--muted)] cursor-default"
+                className="app-nav-link app-nav-link-disabled"
                 aria-disabled="true"
               >
                 <span>{s.label}</span>
-                <span className="text-[0.72rem] text-[var(--muted)]">soon</span>
+                <span className="app-nav-soon">soon</span>
               </span>
             </li>
           );
