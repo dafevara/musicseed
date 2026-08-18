@@ -26,6 +26,7 @@ tokens=(
   --ms-accent
   --ms-accent-secondary
   --ms-accent-gradient
+  --ms-accent-foreground
   --ms-border
   --ms-border-strong
   --ms-focus
