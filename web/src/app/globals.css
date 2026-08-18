@@ -1,43 +1,13 @@
+@import "./tokens.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --brand: #b57a00;
-  --bg: #f7f6f3;
-  --fg: #1a1d23;
-  --muted: #5f6773;
-  --panel: #ffffff;
-  --border: #e2e0da;
-  --status-ok: #1e7a45;
-  --status-ok-bg: #e1f2e7;
-  --status-problem: #b91c1c;
-  --status-problem-bg: #fbe9e7;
-  --status-running: #1a5dc7;
-  --status-running-bg: #e8f0fe;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --brand: #d4a017;
-    --bg: #181a1f;
-    --fg: #e1e3e8;
-    --muted: #9098a6;
-    --panel: #22252e;
-    --border: #343840;
-    --status-ok: #4ade80;
-    --status-ok-bg: #14291a;
-    --status-problem: #f87171;
-    --status-problem-bg: #2d1515;
-    --status-running: #60a5fa;
-    --status-running-bg: #13223b;
-  }
-}
-
 body {
   background: var(--bg);
   color: var(--fg);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: var(--ms-font-sans);
   font-size: 0.95rem;
   line-height: 1.5;
 }

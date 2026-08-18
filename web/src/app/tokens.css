@@ -1,0 +1,92 @@
+/* MusicSeed shared visual tokens.
+   Keep this vocabulary aligned with website/assets/tokens.css. */
+
+:root {
+  color-scheme: dark;
+
+  --ms-canvas: #0b0a12;
+  --ms-canvas-muted: #100e1a;
+  --ms-surface: #16131f;
+  --ms-surface-raised: #1c1827;
+  --ms-surface-code: #0a0812;
+  --ms-text: #f4f1ff;
+  --ms-text-muted: #c7c0dd;
+  --ms-text-subtle: #9a92b8;
+  --ms-accent: #8b5cf6;
+  --ms-accent-secondary: #ec4899;
+  --ms-accent-gradient: linear-gradient(120deg, #8b5cf6 0%, #ec4899 100%);
+  --ms-accent-soft: linear-gradient(120deg, rgba(139, 92, 246, 0.16), rgba(236, 72, 153, 0.16));
+  --ms-focus: rgba(139, 92, 246, 0.48);
+  --ms-success: #4ade80;
+  --ms-success-soft: rgba(74, 222, 128, 0.14);
+  --ms-warning: #fbbf24;
+  --ms-warning-soft: rgba(251, 191, 36, 0.14);
+  --ms-danger: #f87171;
+  --ms-danger-soft: rgba(248, 113, 113, 0.14);
+  --ms-info: #60a5fa;
+  --ms-info-soft: rgba(96, 165, 250, 0.14);
+  --ms-border: rgba(255, 255, 255, 0.08);
+  --ms-border-strong: rgba(255, 255, 255, 0.14);
+  --ms-space-1: 4px;
+  --ms-space-2: 8px;
+  --ms-space-3: 12px;
+  --ms-space-4: 16px;
+  --ms-space-5: 24px;
+  --ms-space-6: 32px;
+  --ms-space-7: 48px;
+  --ms-radius-sm: 8px;
+  --ms-radius-control: 10px;
+  --ms-radius-panel: 16px;
+  --ms-radius-lg: 22px;
+  --ms-radius-pill: 999px;
+  --ms-shadow-panel: 0 18px 44px -20px rgba(139, 92, 246, 0.28);
+  --ms-shadow-popover: 0 12px 32px rgba(0, 0, 0, 0.32);
+  --ms-duration-fast: 150ms;
+  --ms-duration-normal: 180ms;
+  --ms-ease: ease;
+  --ms-font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --ms-font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace;
+
+  /* Compatibility aliases for the existing product UI rules. */
+  --brand: var(--ms-accent);
+  --bg: var(--ms-canvas);
+  --fg: var(--ms-text);
+  --muted: var(--ms-text-subtle);
+  --panel: var(--ms-surface);
+  --border: var(--ms-border);
+  --status-ok: var(--ms-success);
+  --status-ok-bg: var(--ms-success-soft);
+  --status-problem: var(--ms-danger);
+  --status-problem-bg: var(--ms-danger-soft);
+  --status-running: var(--ms-info);
+  --status-running-bg: var(--ms-info-soft);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --ms-canvas: #f7f5fb;
+    --ms-canvas-muted: #f0edf7;
+    --ms-surface: #ffffff;
+    --ms-surface-raised: #fbfaff;
+    --ms-surface-code: #f1eef8;
+    --ms-text: #211b2d;
+    --ms-text-muted: #554d66;
+    --ms-text-subtle: #756b86;
+    --ms-accent: #6d42d8;
+    --ms-accent-secondary: #d93687;
+    --ms-accent-gradient: linear-gradient(120deg, #6d42d8 0%, #d93687 100%);
+    --ms-accent-soft: linear-gradient(120deg, rgba(109, 66, 216, 0.1), rgba(217, 54, 135, 0.1));
+    --ms-focus: rgba(109, 66, 216, 0.4);
+    --ms-border: rgba(45, 31, 69, 0.14);
+    --ms-border-strong: rgba(45, 31, 69, 0.24);
+    --ms-success: #18733f;
+    --ms-success-soft: #e2f3e8;
+    --ms-warning: #956d00;
+    --ms-warning-soft: #fff4cf;
+    --ms-danger: #b4232d;
+    --ms-danger-soft: #fce8ea;
+    --ms-info: #245ca6;
+    --ms-info-soft: #e8f0fe;
+  }
+}

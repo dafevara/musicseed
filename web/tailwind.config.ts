@@ -6,23 +6,23 @@ export default {
     extend: {
       colors: {
         brand: {
-          DEFAULT: "#b57a00",
-          fg: "#ffffff",
+          DEFAULT: "var(--ms-accent)",
+          fg: "var(--ms-text)",
         },
         surface: {
-          bg: "#f7f6f3",
-          fg: "#1a1d23",
-          muted: "#5f6773",
-          panel: "#ffffff",
-          border: "#e2e0da",
+          bg: "var(--ms-canvas)",
+          fg: "var(--ms-text)",
+          muted: "var(--ms-text-muted)",
+          panel: "var(--ms-surface)",
+          border: "var(--ms-border)",
         },
         status: {
-          ok: "#1e7a45",
-          "ok-bg": "#e1f2e7",
-          problem: "#b91c1c",
-          "problem-bg": "#fbe9e7",
-          running: "#1a5dc7",
-          "running-bg": "#e8f0fe",
+          ok: "var(--ms-success)",
+          "ok-bg": "var(--ms-success-soft)",
+          problem: "var(--ms-danger)",
+          "problem-bg": "var(--ms-danger-soft)",
+          running: "var(--ms-info)",
+          "running-bg": "var(--ms-info-soft)",
         },
       },
       fontSize: {
