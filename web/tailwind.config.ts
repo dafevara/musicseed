@@ -33,6 +33,13 @@ export default {
         xl: "1.25rem",
         "2xl": "1.5rem",
       },
+      borderRadius: {
+        DEFAULT: "var(--ms-radius-sm)",
+        sm: "var(--ms-radius-sm)",
+        md: "var(--ms-radius-control)",
+        lg: "var(--ms-radius-panel)",
+        full: "var(--ms-radius-pill)",
+      },
     },
   },
   plugins: [],
