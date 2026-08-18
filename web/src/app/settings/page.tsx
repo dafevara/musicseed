@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { DiscoveryResponse } from "@/lib/types";
 import { DiscoveryChecks } from "@/components/discovery-checks";
+import { PageHeader } from "@/components/page-header";
 
 export default function SettingsPage() {
   const [data, setData] = useState<DiscoveryResponse | null>(null);
@@ -67,8 +68,14 @@ export default function SettingsPage() {
 
   return (
     <>
+      <PageHeader
+        eyebrow="Workspace"
+        title="Settings"
+        description="Keep your local paths, Plex connection, and optional enrichment services ready for MusicSeed."
+      />
+
       <section className="panel">
-        <h2 className="mt-0 text-lg font-semibold">Settings</h2>
+        <h2 className="mt-0 text-lg font-semibold">Connection status</h2>
         <p className="muted text-sm">
           Update your Plex connection, database location, and enrichment credentials.
           Saving here never starts an import, enrichment, or database initialization.

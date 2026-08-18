@@ -8,6 +8,7 @@ import { SeedChips } from "@/components/seed-chips";
 import { Typeahead } from "@/components/typeahead";
 import { RecommendResults } from "@/components/recommend-results";
 import { WeightControls } from "@/components/weight-controls";
+import { PageHeader } from "@/components/page-header";
 
 type Presets = Record<string, Record<string, number>>;
 
@@ -118,6 +119,12 @@ export default function RecommendPage() {
 
   return (
     <>
+      <PageHeader
+        eyebrow="Discover"
+        title="Find your next favorite"
+        description="Start with a few tracks you love, then tune the mix to balance sonic similarity, style, era, and novelty."
+      />
+
       <section className="panel">
         <h2 className="mt-0 text-lg font-semibold">Seed tracks</h2>
         <p className="muted text-sm">

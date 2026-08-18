@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import type { DashboardSnapshot, DiscoveryResponse, JobSummary, PlexServerCheck } from "@/lib/types";
 import { HealthStrip } from "@/components/health-strip";
 import { JobList } from "@/components/job-list";
+import { PageHeader } from "@/components/page-header";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -127,6 +128,12 @@ export default function DashboardPage() {
 
   return (
     <>
+      <PageHeader
+        eyebrow="Library"
+        title="Your music library"
+        description="Keep Plex in sync, monitor background work, and maintain the signals that power your recommendations."
+      />
+
       <HealthStrip
         snapshot={snapshot}
         activeJobs={snapshot.active_jobs}

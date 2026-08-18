@@ -9,6 +9,7 @@ import { SetupIntro } from "@/components/setup-intro";
 import { PlexServerPicker } from "@/components/plex-server-picker";
 import { HelpIcon } from "@/components/help-icon";
 import { JobProgress } from "@/components/job-progress";
+import { PageHeader } from "@/components/page-header";
 
 type Step = "detect" | "review" | "importing" | "enriching" | "done";
 
@@ -173,6 +174,12 @@ export default function SetupPage() {
 
   return (
     <>
+      <PageHeader
+        eyebrow="Welcome"
+        title="Set up MusicSeed"
+        description="Connect Plex, prepare your local library, and start building recommendations from the music you already own."
+      />
+
       <SetupIntro />
       <StepIndicator current={step} />
 

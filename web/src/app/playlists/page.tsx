@@ -9,6 +9,7 @@ import type { RecommendationItem, PopulatePreview, RecommendResponse, TypeaheadT
 import { Typeahead } from "@/components/typeahead";
 import { SeedChips } from "@/components/seed-chips";
 import { RecommendResults } from "@/components/recommend-results";
+import { PageHeader } from "@/components/page-header";
 
 interface PlexPlaylist {
   name: string;
@@ -201,9 +202,15 @@ function PlaylistsPageInner() {
 
   return (
     <>
+      <PageHeader
+        eyebrow="Organize"
+        title="Playlists"
+        description="Turn recommendations into Plex playlists, or add fresh tracks to playlists you already enjoy."
+      />
+
       <section className="panel">
         <div className="flex items-baseline justify-between flex-wrap gap-2">
-          <h2 className="mt-0 text-lg font-semibold">Plex Playlists</h2>
+          <h2 className="mt-0 text-lg font-semibold">Your Plex playlists</h2>
           <button
             className="btn btn-primary"
             onClick={() => { setShowCreate(!showCreate); setCreatePreview(null); setCreateResult(null); }}
