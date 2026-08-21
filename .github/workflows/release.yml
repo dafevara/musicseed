@@ -2,8 +2,12 @@ name: Release
 
 on:
   push:
-    tags:
-      - "v*"
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -15,12 +19,30 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Previous tag
-        id: prev
+      - name: Next tag
+        id: ver
         run: |
-          prev="$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)"
-          echo "ref=${prev}" >> "$GITHUB_OUTPUT"
+          if git describe --exact-match HEAD >/dev/null 2>&1; then
+            echo "HEAD already tagged; skip"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          prev="$(git tag --list 'v[0-9]*' --sort=-v:refname | head -1)"
+          if [ -z "$prev" ]; then
+            tag=v0.1.0
+          else
+            ver="${prev#v}"
+            major="${ver%%.*}"
+            rest="${ver#*.}"
+            minor="${rest%%.*}"
+            patch="${rest#*.}"
+            tag="v${major}.${minor}.$((patch + 1))"
+          fi
+          echo "prev=${prev}" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
       - name: Release notes
+        if: steps.ver.outputs.skip != 'true'
         run: |
           {
             echo "Unpack the source archive, then:"
@@ -35,12 +57,15 @@ jobs:
             echo "## Changes"
             echo ""
           } > notes.md
-          if [ -n "${{ steps.prev.outputs.ref }}" ]; then
-            git log --pretty=format:"- %s (%h)" "${{ steps.prev.outputs.ref }}..HEAD" >> notes.md
+          if [ -n "${{ steps.ver.outputs.prev }}" ]; then
+            git log --pretty=format:"- %s (%h)" "${{ steps.ver.outputs.prev }}..HEAD" >> notes.md
           else
             git log --pretty=format:"- %s (%h)" >> notes.md
           fi
       - uses: softprops/action-gh-release@v2
+        if: steps.ver.outputs.skip != 'true'
         with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           generate_release_notes: false
           body_path: notes.md
