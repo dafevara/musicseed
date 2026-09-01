@@ -13,8 +13,6 @@ from musicseed.db.session import IndexResult, create_indexes, ensure_schema, ini
 from musicseed.exceptions import NotFoundError
 from musicseed.importers.plex import PlexImporter, import_from_plex
 
-_sonic_count_cache: tuple[tuple[str, int, int], int] | None = None
-
 
 class EnrichmentCoverage(BaseModel):
     """Per-source enrichment coverage counts over the local track library."""
@@ -232,41 +230,15 @@ def get_import_coverage(
     )
 
 
-def _count_tracks_with_sonic(
-    context: MusicSeedContext, session, track_count: int
-) -> int:
-    """Count local tracks Plex currently has a sonic vector for.
+def _count_tracks_with_sonic(session) -> int:
+    """Count local tracks that have a stored Plex sonic vector."""
+    from musicseed.db.models import Track, TrackVector
 
-    Returns 0 rather than raising when Plex's databases are unavailable, so
-    status still renders the rest of the library.
-
-    The count is cached by ``(db_path, track_count, vector_count)``: it only
-    changes when tracks are imported (track_count changes) or Plex analyzes
-    more items (vector count changes), so the full ``tracks.plex_id`` scan is
-    avoided on repeat dashboard polls.
-    """
-    from musicseed.db.models import Track
-
-    global _sonic_count_cache
-
-    try:
-        vectors = context.sonic_vectors
-    except NotFoundError:
-        return 0
-
-    plex_ids = vectors.plex_ids
-    db_key = str(context.config.database.path_expanded)
-    cache_key = (db_key, track_count, len(plex_ids))
-    if _sonic_count_cache is not None and _sonic_count_cache[0] == cache_key:
-        return _sonic_count_cache[1]
-
-    track_plex_ids = {
-        row[0]
-        for row in session.query(Track.plex_id).filter(Track.plex_id.isnot(None))
-    }
-    count = len(plex_ids & track_plex_ids)
-    _sonic_count_cache = (cache_key, count)
-    return count
+    return (
+        session.query(Track)
+        .join(TrackVector, Track.plex_id == TrackVector.plex_id)
+        .count()
+    )
 
 
 def get_status(context: MusicSeedContext | None = None) -> LibraryStatus:
@@ -297,7 +269,7 @@ def get_status(context: MusicSeedContext | None = None) -> LibraryStatus:
         tracks_with_mbid = session.query(Track).filter(Track.mbid.isnot(None)).count()
         tracks_with_spotify = session.query(Track).filter(Track.spotify_id.isnot(None)).count()
         spotify_attempted = session.query(Track).filter(Track.spotify_matched.is_(True)).count()
-        tracks_with_sonic = _count_tracks_with_sonic(ctx, session, track_count)
+        tracks_with_sonic = _count_tracks_with_sonic(session)
         tracks_with_listenbrainz = (
             session.query(Track)
             .filter(

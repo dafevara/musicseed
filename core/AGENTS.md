@@ -63,6 +63,8 @@ Service entry points:
   `POST /butler/MusicAnalysis` (proven to work; per-item `analyze` does NOT trigger sonic
   analysis). The Butler task always processes Plex's whole pending backlog; date windows only
   scope watching/reporting.
+- `services/sonic_vectors.py`: `import_plex_sonic` — reads the Plex blobs DB once and upserts
+  vectors into the local `track_vectors` table (idempotent); scoring then reads the local store.
 
 ## Code Map
 
@@ -73,15 +75,17 @@ Service entry points:
   `no_config` first-run signal. This is the CLI's config mechanism; future apps may populate
   the same `Config` from `.env` instead.
 - `context.py`: `MusicSeedContext` bundles a resolved `Config` with a lazily-created SQLite
-  engine/session factory and a lazily-loaded, signature-invalidated `SonicVectors` cache.
-  `get_context()`/`set_context()`/`reset_context()` manage the process-default context; services
-  take an optional ``context`` kwarg and fall back to the default.
+  engine/session factory and a lazily-loaded `SonicVectors` cache backed by the local
+  `track_vectors` table. `get_context()`/`set_context()`/`reset_context()` manage the
+  process-default context; services take an optional ``context`` kwarg and fall back to the
+  default.
 - `exceptions.py`: `MusicSeedError` (base), `ConfigurationError`, `NotFoundError`.
 - `logging_config.py`: `setup_logging`/`get_logger`. Default log dir is
   `~/.local/share/musicseed/logs/` (or `$XDG_DATA_HOME/musicseed/logs`). Pass `log_dir` to
   override.
 - `db/models.py`: SQLAlchemy 2.0 ORM (Artist, Album, Track, tag tables, play history, stats,
-  playlists). No vector columns: sonic vectors are not stored.
+  playlists, jobs). `TrackVector` persists Plex sonic vectors locally (MUS-83), keyed by
+  `plex_id`.
 - `db/session.py`: pure `create_engine_for_url` (SQLite, sets `journal_mode=WAL` +
   `foreign_keys=ON` on connect) and `create_session_factory` (`expire_on_commit=False`);
   `get_engine`/`get_session_factory`/`get_session` are thin wrappers over the default context.
@@ -92,11 +96,10 @@ Service entry points:
   Plex doesn't set one on the track row.
 - `enrichers/`: ListenBrainz and Spotify clients + the async enrichment pipeline. (The old
   MusicBrainz MBID→Spotify cross-reference client was removed; it was never wired in.)
-- `sonic.py`: Plex sonic analysis vectors read at query time from the Plex blobs DB into an
-  in-memory L2-normalized matrix (`SonicVectors`, keyed by `plex_id`). `load_sonic_vectors` and
-  `blobs_signature` are pure; the cache lives on `MusicSeedContext`, with
-  `get_sonic_vectors()` / `reset_sonic_vectors()` as thin wrappers over the default context.
-  Raises `NotFoundError` when the Plex databases are unavailable.
+- `sonic.py`: `load_sonic_vectors` reads Plex sonic-analysis vectors from the Plex blobs DB
+  (used only by `import_plex_sonic`); `sonic_vectors_from_mapping` rebuilds the in-memory
+  L2-normalized `SonicVectors` matrix (keyed by `plex_id`) from the local `track_vectors` table.
+  `get_sonic_vectors()` / `reset_sonic_vectors()` are thin wrappers over the default context.
 - `recommender/`: `scoring.py` (`Weights`, `ScoreBreakdown`, `SeedProfile`, `calculate_score`),
   `candidates.py` (`build_candidate_pool`), `playlist.py` (`Recommendation`, `recommend_tracks`,
   `resolve_seed_tracks` — raises `ValueError` on unresolved seeds), `populate.py`

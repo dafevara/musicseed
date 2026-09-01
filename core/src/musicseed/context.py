@@ -2,9 +2,10 @@
 
 MusicSeed's services used to read three pieces of process-global state
 directly: the resolved ``Config``, a database engine/session factory, and a
-cached ``SonicVectors`` matrix. Those three are all derived from config, so
-hiding them behind module singletons made service behavior depend on call
-order and forced config changes to reach into ``reset_engine()``.
+cached ``SonicVectors`` matrix (loaded from the local database). The engine
+and session factory are derived from config; hiding all three behind module
+singletons made service behavior depend on call order and forced config
+changes to reach into ``reset_engine()``.
 
 ``MusicSeedContext`` groups them into one object that a surface (or a test)
 can construct explicitly and hand to a service. The module-level default
@@ -23,7 +24,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from musicseed.config import Config, get_config
 from musicseed.db.session import create_engine_for_url, create_session_factory
-from musicseed.sonic import SonicVectors, blobs_signature, load_sonic_vectors
+from musicseed.sonic import SonicVectors, sonic_vectors_from_mapping
 
 
 @dataclass
@@ -41,7 +42,6 @@ class MusicSeedContext:
     _engine: Engine | None = field(default=None, init=False, repr=False)
     _session_factory: sessionmaker | None = field(default=None, init=False, repr=False)
     _sonic_vectors: SonicVectors | None = field(default=None, init=False, repr=False)
-    _sonic_signature: tuple | None = field(default=None, init=False, repr=False)
 
     @property
     def engine(self) -> Engine:
@@ -76,29 +76,26 @@ class MusicSeedContext:
 
     @property
     def sonic_vectors(self) -> SonicVectors:
-        """Plex sonic vectors for this context's library, cached and reloadable.
+        """Plex sonic vectors persisted in this context's database.
 
-        The cache reloads whenever the Plex blobs database changes (newly
-        analyzed tracks), matching the historical ``get_sonic_vectors()``
-        behavior. Raises ``NotFoundError`` when the Plex databases are
-        unavailable.
+        Loaded from the local ``track_vectors`` table on first use and cached
+        on the context; call ``reset_sonic_vectors`` after importing vectors.
+        Returns an empty ``SonicVectors`` when none are stored.
         """
-        blobs_db_path = self.config.plex.blobs_db_path_expanded
-        signature = blobs_signature(blobs_db_path)
-        if self._sonic_vectors is not None and signature == self._sonic_signature:
-            return self._sonic_vectors
-        self._sonic_vectors = load_sonic_vectors(
-            plex_db_path=self.config.plex.db_path_expanded,
-            blobs_db_path=blobs_db_path,
-            library_name=self.config.plex.library,
-        )
-        self._sonic_signature = signature
+        if self._sonic_vectors is None:
+            self._sonic_vectors = self._load_sonic_vectors()
         return self._sonic_vectors
+
+    def _load_sonic_vectors(self) -> SonicVectors:
+        from musicseed.db.models import TrackVector
+
+        with self.session() as session:
+            rows = session.query(TrackVector).all()
+        return sonic_vectors_from_mapping({row.plex_id: row.vector for row in rows})
 
     def reset_sonic_vectors(self) -> None:
         """Drop this context's cached vectors so the next access reloads them."""
         self._sonic_vectors = None
-        self._sonic_signature = None
 
 
 # The default context used by the legacy module-level convenience functions

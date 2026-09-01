@@ -173,21 +173,20 @@ def load_sonic_vectors(
     return SonicVectors(plex_ids, matrix)
 
 
-def blobs_signature(blobs_db_path: Path) -> tuple:
-    """A cheap fingerprint of the blobs DB (main + WAL) used to detect change.
+def sonic_vectors_from_mapping(vectors: dict[int, list[float]]) -> SonicVectors:
+    """Build a ``SonicVectors`` matrix from a ``{plex_id: vector}`` mapping.
 
-    Plex appends sonic blobs to the WAL file before checkpointing, so both
-    files are inspected; ``(mtime, size)`` per file is enough to notice a new
-    analysis without re-reading the database.
+    Used to reconstruct the in-memory matrix from the locally persisted
+    ``track_vectors`` table. Every vector must already be ``PLEX_SONIC_DIM``
+    long (``load_sonic_vectors`` guarantees this via ``decode_sonic_blob``).
     """
-    parts: list[tuple[float, int] | None] = []
-    for candidate in (blobs_db_path, Path(f"{blobs_db_path}-wal")):
-        try:
-            st = candidate.stat()
-            parts.append((st.st_mtime, st.st_size))
-        except OSError:
-            parts.append(None)
-    return tuple(parts)
+    plex_ids = list(vectors)
+    matrix = (
+        np.asarray([vectors[pid] for pid in plex_ids], dtype=np.float32)
+        if plex_ids
+        else np.empty((0, PLEX_SONIC_DIM), dtype=np.float32)
+    )
+    return SonicVectors(plex_ids, matrix)
 
 
 def get_sonic_vectors() -> SonicVectors:
