@@ -57,8 +57,8 @@ def sonic_refresh(
     """Refresh Plex sonic analysis for recently added music.
 
     Triggers Plex's MusicAnalysis task and watches until the tracks added in
-    the last --days days are analyzed. Run ``import-plex-sonic`` afterwards to
-    pull the new vectors into MusicSeed.
+    the last --days days are analyzed. Run ``musicseed-cli import-plex-sonic``
+    afterwards to pull the new vectors into MusicSeed.
     """
     from musicseed.services import plex_analysis
 
@@ -124,10 +124,21 @@ def sonic_refresh(
 
         if result.completed:
             console.print(
-                "\n[green]✓ Sonic analysis refreshed for the window. Run "
-                "[bold]musicseed import-plex-sonic[/bold] to pull the new vectors "
-                "into MusicSeed.[/green]\n"
+                "\n[green]✓ Sonic analysis refreshed for the window.[/green]"
             )
+            if typer.confirm("Import the new vectors into MusicSeed now?", default=True):
+                from musicseed.services import sonic_vectors as sonic_vectors_service
+
+                stats = sonic_vectors_service.import_plex_sonic()
+                console.print(
+                    f"[green]✓ Imported {stats.imported:,} new and {stats.updated:,} "
+                    "updated sonic vectors.[/green]\n"
+                )
+            else:
+                console.print(
+                    "\n[dim]Run 'musicseed-cli import-plex-sonic' later to import "
+                    "the new vectors.[/dim]\n"
+                )
         else:
             if result.stall_detected:
                 console.print(
