@@ -16,7 +16,6 @@ export default function SettingsPage() {
   const [plexUrl, setPlexUrl] = useState("");
   const [plexToken, setPlexToken] = useState("");
   const [plexLibrary, setPlexLibrary] = useState("");
-  const [plexDbPath, setPlexDbPath] = useState("");
   const [musicseedDbPath, setMusicseedDbPath] = useState("");
   const [spotifyId, setSpotifyId] = useState("");
   const [spotifySecret, setSpotifySecret] = useState("");
@@ -51,7 +50,6 @@ export default function SettingsPage() {
         plex_url: plexUrl,
         plex_token: plexToken,
         plex_library: plexLibrary,
-        plex_db_path: plexDbPath,
       });
       setPlexToken("");
       setSpotifySecret("");
@@ -172,15 +170,6 @@ export default function SettingsPage() {
               value={plexLibrary}
               onChange={(e) => setPlexLibrary(e.target.value)}
               placeholder={plex?.library || "Music"}
-            />
-          </label>
-          <label className="grid gap-1 text-sm">
-            Plex database path
-            <input
-              type="text"
-              value={plexDbPath}
-              onChange={(e) => setPlexDbPath(e.target.value)}
-              placeholder={data?.result.plex_library_db.selected?.path || "…/com.plexapp.plugins.library.db"}
             />
           </label>
           <label className="grid gap-1 text-sm">
