@@ -23,7 +23,7 @@ from sqlalchemy import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from musicseed.config import Config, get_config
-from musicseed.db.session import create_engine_for_url, create_session_factory
+from musicseed.db.session import create_engine_for_url, create_session_factory, ensure_schema
 from musicseed.sonic import SonicVectors, sonic_vectors_from_mapping
 
 
@@ -89,6 +89,10 @@ class MusicSeedContext:
     def _load_sonic_vectors(self) -> SonicVectors:
         from musicseed.db.models import TrackVector
 
+        # Additive-create the track_vectors table if this database predates it;
+        # this is the single choke point for sonic-vector reads, so it must be
+        # safe on a pre-MUS-83 database as well as a fresh one.
+        ensure_schema(self)
         with self.session() as session:
             rows = session.query(TrackVector).all()
         return sonic_vectors_from_mapping({row.plex_id: row.vector for row in rows})

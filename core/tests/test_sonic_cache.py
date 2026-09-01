@@ -5,6 +5,7 @@ from musicseed.config import Config
 from musicseed.context import MusicSeedContext, reset_context, set_context
 from musicseed.db.models import TrackVector
 from musicseed.db.session import init_db
+from sqlalchemy import text
 
 
 def _context_for(tmp_path) -> MusicSeedContext:
@@ -58,3 +59,17 @@ def test_get_sonic_vectors_delegates_to_default_context(tmp_path):
         assert sonic.get_sonic_vectors() is ctx.sonic_vectors
     finally:
         reset_context()
+
+
+def test_sonic_vectors_handles_pre_existing_db_without_table(tmp_path):
+    ctx = _context_for(tmp_path)
+    init_db(ctx)
+    # Simulate a database created before the track_vectors table existed.
+    with ctx.session() as session:
+        session.execute(text("DROP TABLE track_vectors"))
+    ctx.reset_sonic_vectors()
+
+    vectors = ctx.sonic_vectors  # must re-create the table and return empty
+    assert len(vectors) == 0
+    with ctx.session() as session:
+        assert session.query(TrackVector).count() == 0
