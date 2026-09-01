@@ -338,6 +338,15 @@ export default function SetupPage() {
               Use <code>musicseed recommend</code> in the CLI to create playlists.
             </li>
           </ul>
+          {data.result.sonic_vectors.imported_count === 0 && (
+            <p className="mt-3 mb-0 text-sm text-[var(--muted)]">
+              Plex sonic vectors aren&apos;t imported yet —{" "}
+              <a href="/settings" className="text-[var(--brand)] underline">
+                import them from Settings
+              </a>{" "}
+              to enable the sonic similarity signal.
+            </p>
+          )}
         </div>
       )}
 

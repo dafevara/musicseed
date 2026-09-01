@@ -77,10 +77,15 @@ export interface ImportCoverage {
   ever_succeeded: boolean;
 }
 
+export interface SonicVectorsDiscovery {
+  imported_count: number;
+}
+
 export interface DiscoveryResult {
   musicseed_db: CheckResult;
   plex_library_db: CheckResult;
   plex_blobs_db: CheckResult;
+  sonic_vectors: SonicVectorsDiscovery;
   plex_server: PlexServerCheck;
   enrichers: EnrichmentDiscovery;
   first_run: FirstRunStatus;

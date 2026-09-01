@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { DiscoveryResponse } from "@/lib/types";
 import { DiscoveryChecks } from "@/components/discovery-checks";
+import { JobProgress } from "@/components/job-progress";
 import { PageHeader } from "@/components/page-header";
 
 export default function SettingsPage() {
@@ -20,6 +21,8 @@ export default function SettingsPage() {
   const [spotifyId, setSpotifyId] = useState("");
   const [spotifySecret, setSpotifySecret] = useState("");
   const [listenbrainzToken, setListenbrainzToken] = useState("");
+  const [sonicJobId, setSonicJobId] = useState<number | null>(null);
+  const [sonicJobKind, setSonicJobKind] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -62,6 +65,17 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleSonicImport() {
+    setError(null);
+    try {
+      const { job_id } = await api.post<{ job_id: number }>("/sonic/import");
+      setSonicJobId(job_id);
+      setSonicJobKind("sonic_import");
+    } catch (e) {
+      setError(String(e).replace("Error: ", ""));
+    }
+  }
+
   const plex = data?.result.plex_server;
   const spotify = data?.result.enrichers.spotify;
   const listenbrainz = data?.result.enrichers.listenbrainz;
@@ -82,6 +96,36 @@ export default function SettingsPage() {
         </p>
 
         {data && <DiscoveryChecks result={data.result} ready={data.ready} />}
+      </section>
+
+      <section className="panel">
+        <h2 className="mt-0 text-lg font-semibold">Sonic vectors</h2>
+        <p className="muted text-sm">
+          Recommendations use Plex&apos;s sonic-analysis vectors for the similarity
+          signal. MusicSeed stores them locally so it never needs Plex&apos;s files at
+          runtime.
+        </p>
+        <p className="text-sm">
+          Imported locally:{" "}
+          <strong>
+            {data ? data.result.sonic_vectors.imported_count.toLocaleString() : "…"}
+          </strong>
+        </p>
+        {sonicJobId !== null && sonicJobKind !== null ? (
+          <JobProgress
+            jobId={sonicJobId}
+            kind={sonicJobKind}
+            onDone={() => {
+              setSonicJobId(null);
+              setSonicJobKind(null);
+              load();
+            }}
+          />
+        ) : (
+          <button type="button" className="btn btn-primary" onClick={handleSonicImport}>
+            Import from Plex
+          </button>
+        )}
       </section>
 
       <section className="panel">
