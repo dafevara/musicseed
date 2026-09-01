@@ -45,7 +45,7 @@ JSON. Handlers are the reusable part — routes are the HTTP-specific projection
 |---|---|
 | `handlers/discovery.run_discovery` | `services.discovery.discover` (with key filtering) |
 | `handlers/discovery.run_plex_discovery` | `services.plex_discovery.discover_plex_servers` |
-| `handlers/discovery.save_config_overrides` | `config.get_config` → `save_config` → `db.session.reset_engine` (persist only — no DB init) |
+| `handlers/discovery.save_config_overrides` | `config.get_config` → `save_config` → `context.set_context` (persist only — no DB init) |
 | `handlers/discovery.apply_config_and_init_db` | `save_config_overrides` → `services.library.initialize_database` |
 | `handlers/library.get_library_status` | `services.library.get_status` |
 | `handlers/library.run_import_job` | `services.jobs.update_progress` → `services.library.import_library` |
@@ -57,6 +57,7 @@ JSON. Handlers are the reusable part — routes are the HTTP-specific projection
 | `handlers/recommend.run_recommendations` | `services.recommend.get_recommendations` |
 | `handlers/sonic.get_sonic_coverage` | `services.plex_analysis.get_sonic_status` |
 | `handlers/sonic.trigger_sonic_refresh` | `services.plex_analysis.refresh_sonic_analysis` |
+| `handlers/sonic.run_sonic_import_job` | `services.jobs.update_progress` → `services.sonic_vectors.import_plex_sonic` |
 | `handlers/jobs.submit_job` | `services.jobs.get_manager` → `JobManager.submit` |
 | `handlers/jobs.get_job_progress` | `services.jobs.get_job` |
 | `handlers/jobs.cancel_job` | `services.jobs.get_manager` → `JobManager.request_cancel` |

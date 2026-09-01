@@ -27,7 +27,6 @@ def wizard_ready(result: DiscoveryResult) -> bool:
     return (
         result.musicseed_db.reason not in DB_BLOCKERS
         and result.plex_library_db.ok
-        and result.plex_blobs_db.ok
         and result.plex_server.ok
     )
 

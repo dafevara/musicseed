@@ -195,6 +195,14 @@ class EnrichmentDiscovery(BaseModel):
     listenbrainz: ListenBrainzTokenCheck
 
 
+class SonicVectorsDiscovery(BaseModel):
+    """Locally persisted Plex sonic vectors (imported via ``import_plex_sonic``)."""
+
+    model_config = {"frozen": True}
+
+    imported_count: int
+
+
 class FirstRunStatus(BaseModel):
     """Derived first-run state and the reasons it is considered a first run."""
 
@@ -216,6 +224,7 @@ class DiscoveryResult(BaseModel):
     musicseed_db: DatabasePathDiscovery
     plex_library_db: FileDiscovery
     plex_blobs_db: FileDiscovery
+    sonic_vectors: SonicVectorsDiscovery
     plex_server: PlexServerDiscovery
     ready: bool  # every check ok; surfaces can gate "start import" on this
     enrichers: EnrichmentDiscovery
@@ -419,8 +428,10 @@ def discover(
 
     Returns:
         The complete discovery result, including per-check ``reason`` codes,
-        enrichment readiness, missing inputs, and the derived first-run
-        status. The Plex token is never included.
+        enrichment readiness, missing inputs, the count of locally stored
+        sonic vectors, and the derived first-run status. The Plex blobs
+        database is reported but no longer blocks ``ready`` (it is only needed
+        to import sonic vectors). The Plex token is never included.
     """
     cfg = config if config is not None else get_config()
     default_plex = PlexConfig()
@@ -481,7 +492,6 @@ def discover(
     ready = all([
         musicseed_db.ok,
         plex_library_db.ok,
-        plex_blobs_db.ok,
         plex_server.ok,
     ])
 
@@ -496,7 +506,7 @@ def discover(
     missing: list[str] = []
     if not musicseed_db.ok:
         missing.append("db_location")
-    if not plex_library_db.ok or not plex_blobs_db.ok:
+    if not plex_library_db.ok:
         missing.append("plex_db_path")
     if not plex_server.ok:
         if plex_server.reason in (Reason.MISSING_TOKEN, Reason.UNAUTHORIZED):
@@ -513,6 +523,7 @@ def discover(
     no_config = get_config_path() is None
     db_missing = not musicseed_db.exists
     track_count = _count_tracks(Path(musicseed_db.path)) if not db_missing else None
+    vectors_imported = _count_vectors(Path(musicseed_db.path)) if not db_missing else 0
     library_empty = track_count == 0
     import_incomplete = False
     if not db_missing and not library_empty:
@@ -543,12 +554,35 @@ def discover(
         musicseed_db=musicseed_db,
         plex_library_db=plex_library_db,
         plex_blobs_db=plex_blobs_db,
+        sonic_vectors=SonicVectorsDiscovery(imported_count=vectors_imported),
         plex_server=plex_server,
         ready=ready,
         enrichers=enrichers,
         first_run=first_run,
         missing_inputs=missing,
     )
+
+
+def _count_vectors(db_path: Path) -> int:
+    """Return the number of locally stored sonic vectors, or 0 when unknown.
+
+    Reads the discovered database read-only (``mode=ro``) so discovery never
+    writes. Any error — missing file, missing schema, locked database — yields
+    0 rather than raising.
+    """
+    if not db_path.exists() or not db_path.is_file():
+        return 0
+    try:
+        conn = sqlite3.connect(f"file:{quote(str(db_path))}?mode=ro", uri=True)
+    except sqlite3.Error:
+        return 0
+    try:
+        cur = conn.execute("SELECT COUNT(*) FROM track_vectors")
+        return int(cur.fetchone()[0])
+    except sqlite3.Error:
+        return 0
+    finally:
+        conn.close()
 
 
 def _count_tracks(db_path: Path) -> int | None:

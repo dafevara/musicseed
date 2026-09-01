@@ -41,10 +41,11 @@ Service entry points:
   Plex token in results. `read_plex_token` reads a token from the local Plex install
   (`Preferences.xml` → `PlexOnlineToken`, falling back to `.LocalAdminToken`); `discover` uses
   it when no token is configured and reports `plex_server.token_source`. Also reports
-  `enrichers` (Spotify credential and ListenBrainz token presence), `missing_inputs`
-  (machine-readable keys like `plex_token`, `enrichment_credentials`, `plex_unreachable`,
-  `db_location`), and a derived `first_run` status (`no_config` / `db_missing` /
-  `library_empty`; no persisted flag). The setup wizard / dashboard consume this.
+  `enrichers` (Spotify credential and ListenBrainz token presence), `sonic_vectors` (count of
+  locally imported vectors), `missing_inputs` (machine-readable keys like `plex_token`,
+  `enrichment_credentials`, `plex_unreachable`, `db_location`), and a derived `first_run`
+  status (`no_config` / `db_missing` / `library_empty`; no persisted flag). The Plex blobs DB
+  is reported but does not block `ready`. The setup wizard / dashboard consume this.
 - `services/plex_discovery.py`: `discover_plex_servers` — passive, read-only Plex discovery.
   Local network via GDM multicast (`239.0.0.250:32414`) + SSDP fallback
   (`239.255.255.250:1900`, stdlib `socket` only), plus — when a Plex token is supplied —

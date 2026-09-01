@@ -116,6 +116,18 @@ def test_sonic_status_route(monkeypatch):
     assert resp.json()["total_tracks"] == 0
 
 
+def test_sonic_import_route(monkeypatch):
+    submitted = {}
+    monkeypatch.setattr(
+        sonic_routes,
+        "submit_job",
+        lambda kind, target: submitted.update(kind=kind) or 123,
+    )
+    resp = TestClient(create_app()).post("/sonic/import")
+    assert resp.json() == {"job_id": 123}
+    assert submitted["kind"] == "sonic_import"
+
+
 def test_dashboard_route(monkeypatch):
     class Fake(BaseModel):
         ok: bool = True
