@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from musicseed.db.models import Track
 from musicseed.recommender.playlist import Recommendation, recommend_tracks
 from musicseed.recommender.scoring import ScoreBreakdown, Weights
+from musicseed.sonic import SonicVectors
 
 PopulateMethod = Literal["average", "frequency"]
 """Playlist populate strategies: ``"average"`` scores against the playlist's
@@ -39,6 +40,7 @@ def populate_average(
     year_max: int | None = None,
     max_tracks_per_artist: int = 3,
     min_score: float | None = None,
+    vectors: SonicVectors | None = None,
 ) -> list[Recommendation]:
     """Recommend tracks against the mean sonic/metadata profile of a playlist.
 
@@ -54,6 +56,8 @@ def populate_average(
         year_max: only recommend tracks released in this year or earlier.
         max_tracks_per_artist: artist diversity cap applied during selection.
         min_score: drop recommendations with a total score below this value.
+        vectors: Plex sonic vectors to score against; defaults to the default
+            context's cached vectors.
 
     Returns:
         Scored recommendations, best first.
@@ -67,6 +71,7 @@ def populate_average(
         year_max=year_max,
         max_tracks_per_artist=max_tracks_per_artist,
         min_score=min_score,
+        vectors=vectors,
     )
     return recommendations
 
@@ -82,6 +87,7 @@ def populate_frequency(
     year_max: int | None = None,
     max_tracks_per_artist: int = 3,
     min_score: float | None = None,
+    vectors: SonicVectors | None = None,
 ) -> list[Recommendation]:
     """Recommend tracks voted for by multiple individual playlist tracks.
 
@@ -104,6 +110,8 @@ def populate_frequency(
         year_max: only recommend tracks released in this year or earlier.
         max_tracks_per_artist: artist diversity cap applied during selection.
         min_score: drop recommendations with a total score below this value.
+        vectors: Plex sonic vectors to score against; defaults to the default
+            context's cached vectors.
 
     Returns:
         Aggregated recommendations, best first; each recommendation's
@@ -121,6 +129,7 @@ def populate_frequency(
             year_min=year_min,
             year_max=year_max,
             max_tracks_per_artist=max_tracks_per_artist,
+            vectors=vectors,
         )
         for rec in recs:
             if rec.track.id not in playlist_ids:
@@ -165,6 +174,7 @@ def populate_playlist_recommendations(
     year_max: int | None = None,
     max_tracks_per_artist: int = 3,
     min_score: float | None = None,
+    vectors: SonicVectors | None = None,
 ) -> list[Recommendation]:
     """Dispatch to the requested populate strategy.
 
@@ -180,6 +190,8 @@ def populate_playlist_recommendations(
         year_max: only recommend tracks released in this year or earlier.
         max_tracks_per_artist: artist diversity cap applied during selection.
         min_score: drop recommendations with a total score below this value.
+        vectors: Plex sonic vectors to score against; defaults to the default
+            context's cached vectors.
 
     Returns:
         Scored recommendations, best first.
@@ -197,6 +209,7 @@ def populate_playlist_recommendations(
             year_max=year_max,
             max_tracks_per_artist=max_tracks_per_artist,
             min_score=min_score,
+            vectors=vectors,
         )
     if method == "frequency":
         return populate_frequency(
@@ -209,5 +222,6 @@ def populate_playlist_recommendations(
             year_max=year_max,
             max_tracks_per_artist=max_tracks_per_artist,
             min_score=min_score,
+            vectors=vectors,
         )
     raise ValueError(f"Unknown populate method: {method}")

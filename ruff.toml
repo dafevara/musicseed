@@ -27,6 +27,7 @@ convention = "google"
 "**/tests/**" = ["D"]
 "core/src/musicseed/__init__.py" = ["D"]
 "core/src/musicseed/config.py" = ["D"]
+"core/src/musicseed/context.py" = ["D"]
 "core/src/musicseed/exceptions.py" = ["D"]
 "core/src/musicseed/logging_config.py" = ["D"]
 "core/src/musicseed/sonic.py" = ["D"]

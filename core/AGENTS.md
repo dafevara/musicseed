@@ -21,7 +21,10 @@ This file covers the core library only.
 `services/` is the **surface-agnostic application layer** — this is the public API of core, and the
 only layer app surfaces should call. Each service function:
 
-- opens and closes its own DB session via the `get_session()` context manager,
+- resolves its runtime context — an optional ``context: MusicSeedContext`` kwarg defaulting
+  to the default context — and opens/closes a DB session via ``context.session()``. The
+  legacy ``get_session()`` / ``get_config()`` / ``get_sonic_vectors()`` conveniences remain
+  as thin wrappers over the default context during migration,
 - accepts plain kwargs (plus a `recommender.scoring.Weights` object where relevant),
 - returns a **Pydantic result model**, and
 - raises typed exceptions (`NotFoundError`, `ConfigurationError`, `clients.plex_api.PlexAPIError`)
@@ -64,29 +67,36 @@ Service entry points:
 ## Code Map
 
 - `config.py`: Pydantic YAML config + `${ENV}`/`~` expansion. `get_config()`/`set_config()`/
-  `load_config()`/`get_config_path()` global singleton. `get_config_path()` returns the resolved
-  config file path (or `None` when no file was found) — discovery uses it for the `no_config`
-  first-run signal. This is the CLI's config mechanism; future apps may populate
+  `load_config()`/`get_config_path()` global singleton (the resolved-config source for the
+  default context; `set_config` also resets that context). `get_config_path()` returns the
+  resolved config file path (or `None` when no file was found) — discovery uses it for the
+  `no_config` first-run signal. This is the CLI's config mechanism; future apps may populate
   the same `Config` from `.env` instead.
+- `context.py`: `MusicSeedContext` bundles a resolved `Config` with a lazily-created SQLite
+  engine/session factory and a lazily-loaded, signature-invalidated `SonicVectors` cache.
+  `get_context()`/`set_context()`/`reset_context()` manage the process-default context; services
+  take an optional ``context`` kwarg and fall back to the default.
 - `exceptions.py`: `MusicSeedError` (base), `ConfigurationError`, `NotFoundError`.
 - `logging_config.py`: `setup_logging`/`get_logger`. Default log dir is
   `~/.local/share/musicseed/logs/` (or `$XDG_DATA_HOME/musicseed/logs`). Pass `log_dir` to
   override.
 - `db/models.py`: SQLAlchemy 2.0 ORM (Artist, Album, Track, tag tables, play history, stats,
   playlists). No vector columns: sonic vectors are not stored.
-- `db/session.py`: `get_engine` (SQLite, sets `journal_mode=WAL` + `foreign_keys=ON` on
-  connect), `get_session_factory` (`expire_on_commit=False`), `get_session`
-  (commit/rollback/close context manager), `init_db` (creates the DB file's parent dir),
-  `ensure_schema` (additive migrations via `PRAGMA table_info`), `create_indexes`,
-  `reset_engine` (dispose engine — the hook for tests/config reload).
+- `db/session.py`: pure `create_engine_for_url` (SQLite, sets `journal_mode=WAL` +
+  `foreign_keys=ON` on connect) and `create_session_factory` (`expire_on_commit=False`);
+  `get_engine`/`get_session_factory`/`get_session` are thin wrappers over the default context.
+  `init_db` (creates the DB file's parent dir), `ensure_schema` (additive migrations via
+  `PRAGMA table_info`), and `create_indexes` accept an optional ``context``. `reset_engine`
+  drops the whole default context (engine + sonic cache) — kept as a test/config-change hook.
 - `importers/plex.py`: Plex SQLite metadata import. Track years fall back to the album year when
   Plex doesn't set one on the track row.
 - `enrichers/`: ListenBrainz and Spotify clients + the async enrichment pipeline. (The old
   MusicBrainz MBID→Spotify cross-reference client was removed; it was never wired in.)
 - `sonic.py`: Plex sonic analysis vectors read at query time from the Plex blobs DB into an
-  in-memory L2-normalized matrix (`SonicVectors`, keyed by `plex_id`). Lazy global cache via
-  `get_sonic_vectors()` / `reset_sonic_vectors()`; raises `NotFoundError` when the Plex databases
-  are unavailable.
+  in-memory L2-normalized matrix (`SonicVectors`, keyed by `plex_id`). `load_sonic_vectors` and
+  `blobs_signature` are pure; the cache lives on `MusicSeedContext`, with
+  `get_sonic_vectors()` / `reset_sonic_vectors()` as thin wrappers over the default context.
+  Raises `NotFoundError` when the Plex databases are unavailable.
 - `recommender/`: `scoring.py` (`Weights`, `ScoreBreakdown`, `SeedProfile`, `calculate_score`),
   `candidates.py` (`build_candidate_pool`), `playlist.py` (`Recommendation`, `recommend_tracks`,
   `resolve_seed_tracks` — raises `ValueError` on unresolved seeds), `populate.py`

@@ -3,9 +3,8 @@
 from pydantic import BaseModel
 
 from musicseed.clients.plex import Playlist, PlexClient
-from musicseed.config import get_config
+from musicseed.context import MusicSeedContext, get_context
 from musicseed.db.models import Track
-from musicseed.db.session import get_session
 from musicseed.exceptions import ConfigurationError, NotFoundError
 from musicseed.recommender.playlist import Recommendation, recommend_tracks
 from musicseed.recommender.scoring import SonicCoverage, Weights
@@ -41,6 +40,7 @@ def get_recommendations(
     year_max: int | None = None,
     max_tracks_per_artist: int = 3,
     min_score: float | None = None,
+    context: MusicSeedContext | None = None,
 ) -> RecommendationResult:
     """Return seed tracks and scored recommendations.
 
@@ -55,6 +55,7 @@ def get_recommendations(
         year_max: only recommend tracks released in this year or earlier.
         max_tracks_per_artist: artist diversity cap applied during selection.
         min_score: drop recommendations with a total score below this value.
+        context: runtime context to use; defaults to the default context.
 
     Returns:
         The resolved seed tracks, the selected recommendations, and the
@@ -63,8 +64,9 @@ def get_recommendations(
     Raises:
         NotFoundError: if one or more seed tracks cannot be resolved.
     """
+    ctx = context or get_context()
     try:
-        with get_session() as session:
+        with ctx.session() as session:
             seed_tracks, recommendations, sonic_coverage = recommend_tracks(
                 session,
                 seed_texts=seed_texts,
@@ -75,6 +77,7 @@ def get_recommendations(
                 year_max=year_max,
                 max_tracks_per_artist=max_tracks_per_artist,
                 min_score=min_score,
+                vectors=ctx.sonic_vectors,
             )
         return RecommendationResult(
             seed_tracks=seed_tracks,
@@ -96,6 +99,7 @@ def create_playlist(
     year_max: int | None = None,
     max_tracks_per_artist: int = 3,
     min_score: float | None = None,
+    context: MusicSeedContext | None = None,
 ) -> PlaylistCreateResult:
     """Generate recommendations and create a Plex playlist.
 
@@ -114,6 +118,7 @@ def create_playlist(
         year_max: only recommend tracks released in this year or earlier.
         max_tracks_per_artist: artist diversity cap applied during selection.
         min_score: drop recommendations with a total score below this value.
+        context: runtime context to use; defaults to the default context.
 
     Returns:
         The resolved seed tracks, the recommendations, and the created Plex
@@ -124,7 +129,8 @@ def create_playlist(
         NotFoundError: if seed tracks cannot be resolved.
         PlexAPIError: if the Plex API call fails.
     """
-    config = get_config()
+    ctx = context or get_context()
+    config = ctx.config
     if not config.plex.token:
         raise ConfigurationError(
             "plex.token is not configured. Add it to your config file."
@@ -139,6 +145,7 @@ def create_playlist(
         year_max=year_max,
         max_tracks_per_artist=max_tracks_per_artist,
         min_score=min_score,
+        context=ctx,
     )
 
     plex_ids = [t.plex_id for t in result.seed_tracks if t.plex_id is not None] + [

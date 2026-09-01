@@ -2,6 +2,7 @@
 
 import math
 from collections.abc import Callable
+from contextlib import AbstractContextManager
 
 from pydantic import BaseModel
 from rich.console import Console
@@ -23,6 +24,10 @@ from musicseed.logging_config import get_logger
 
 logger = get_logger("enrichers.pipeline")
 console = Console()
+
+# A zero-argument callable that opens a session (commit/rollback/close): either
+# the default context's ``get_session`` or a context's bound ``session`` method.
+SessionScope = Callable[[], AbstractContextManager[Session]]
 
 
 class EnrichmentStats(BaseModel):
@@ -171,6 +176,7 @@ async def enrich_tracks_with_listenbrainz(
     batch_size: int,
     progress_callback: Callable[[int, int, str], None] | None = None,
     should_cancel: Callable[[], bool] | None = None,
+    session_scope: SessionScope | None = None,
 ) -> tuple[int, int, int]:
     """Enrich tracks with ListenBrainz recording listen/user counts.
 
@@ -188,6 +194,7 @@ async def enrich_tracks_with_listenbrainz(
     errors = 0
     processed = 0
     cancelled = False
+    scope = session_scope or get_session
 
     for start in range(0, total, batch_size):
         if should_cancel is not None and should_cancel():
@@ -200,7 +207,7 @@ async def enrich_tracks_with_listenbrainz(
 
         try:
             results = await listenbrainz_client.get_recording_popularity(mbids)
-            with get_session() as session:
+            with scope() as session:
                 for result in results:
                     track = session.get(Track, id_by_mbid[result.recording_mbid])
                     if track is None:
@@ -226,7 +233,7 @@ async def enrich_tracks_with_listenbrainz(
             progress.advance(task, advance=len(batch))
 
     if not cancelled:
-        with get_session() as session:
+        with scope() as session:
             normalize_listenbrainz_popularity(session)
     return matched, unmatched, errors
 
@@ -238,6 +245,7 @@ async def enrich_tracks(
     batch_size: int = 100,
     progress_callback: Callable[[int, int, str], None] | None = None,
     should_cancel: Callable[[], bool] | None = None,
+    session_scope: SessionScope | None = None,
 ) -> tuple[int, int, int]:
     """Enrich tracks via Spotify search.
 
@@ -265,13 +273,14 @@ async def enrich_tracks(
     unmatched = 0
     errors = 0
     processed = 0
+    scope = session_scope or get_session
 
     for start in range(0, total, batch_size):
         if should_cancel is not None and should_cancel():
             logger.info("Cancellation requested — stopping Spotify enrichment")
             break
         chunk = tracks[start : start + batch_size]
-        with get_session() as session:
+        with scope() as session:
             for track_data in chunk:
                 try:
                     result = await spotify_client.match_track(
@@ -329,12 +338,13 @@ async def run_spotify_enrichment(
     album: str | None = None,
     progress_callback: Callable[[int, int, str], None] | None = None,
     should_cancel: Callable[[], bool] | None = None,
+    session_scope: SessionScope | None = None,
 ) -> EnrichmentStats:
     """Run the enrichment pipeline via Spotify search."""
     logger.info("Starting Spotify enrichment pipeline")
     logger.info(f"Rate limit: {requests_per_second} requests/second")
 
-    with get_session() as session:
+    with (session_scope or get_session)() as session:
         tracks = get_tracks_to_enrich(
             session,
             limit=limit,
@@ -375,6 +385,7 @@ async def run_spotify_enrichment(
                 batch_size=max(batch_size, 1),
                 progress_callback=progress_callback,
                 should_cancel=should_cancel,
+                session_scope=session_scope,
             )
 
             completed[0] = matched + unmatched + errors
@@ -399,12 +410,13 @@ async def run_listenbrainz_enrichment(
     album: str | None = None,
     progress_callback: Callable[[int, int, str], None] | None = None,
     should_cancel: Callable[[], bool] | None = None,
+    session_scope: SessionScope | None = None,
 ) -> EnrichmentStats:
     """Run ListenBrainz popularity enrichment for tracks with MBIDs."""
     logger.info("Starting ListenBrainz enrichment pipeline")
     logger.info(f"Rate limit: {requests_per_second} requests/second")
 
-    with get_session() as session:
+    with (session_scope or get_session)() as session:
         tracks = get_tracks_for_listenbrainz(
             session,
             limit=limit,
@@ -445,6 +457,7 @@ async def run_listenbrainz_enrichment(
                 max(batch_size, 1),
                 progress_callback=progress_callback,
                 should_cancel=should_cancel,
+                session_scope=session_scope,
             )
 
     logger.info(
@@ -468,6 +481,7 @@ async def run_enrichment(
     album: str | None = None,
     progress_callback: Callable[[int, int, str], None] | None = None,
     should_cancel: Callable[[], bool] | None = None,
+    session_scope: SessionScope | None = None,
 ) -> EnrichmentStats:
     """Run enrichment for the selected source."""
     if source == "spotify":
@@ -483,6 +497,7 @@ async def run_enrichment(
             album=album,
             progress_callback=progress_callback,
             should_cancel=should_cancel,
+            session_scope=session_scope,
         )
     if source == "listenbrainz":
         return await run_listenbrainz_enrichment(
@@ -495,5 +510,6 @@ async def run_enrichment(
             album=album,
             progress_callback=progress_callback,
             should_cancel=should_cancel,
+            session_scope=session_scope,
         )
     raise ValueError(f"Unknown enrichment source: {source}")

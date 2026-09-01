@@ -18,7 +18,6 @@ from pathlib import Path
 
 import numpy as np
 
-from musicseed.config import get_config
 from musicseed.exceptions import NotFoundError
 from musicseed.logging_config import get_logger
 
@@ -174,14 +173,7 @@ def load_sonic_vectors(
     return SonicVectors(plex_ids, matrix)
 
 
-# Global instance (lazy loaded), mirroring the config module's pattern.
-_vectors: SonicVectors | None = None
-# Signature of the Plex blobs database files at the time ``_vectors`` was
-# loaded, so a change (newly analyzed tracks) invalidates the cache.
-_vectors_signature: tuple | None = None
-
-
-def _blobs_signature(blobs_db_path: Path) -> tuple:
+def blobs_signature(blobs_db_path: Path) -> tuple:
     """A cheap fingerprint of the blobs DB (main + WAL) used to detect change.
 
     Plex appends sonic blobs to the WAL file before checkpointing, so both
@@ -199,30 +191,19 @@ def _blobs_signature(blobs_db_path: Path) -> tuple:
 
 
 def get_sonic_vectors() -> SonicVectors:
-    """Get the global sonic vector store, loading it on first use.
+    """Get the default context's sonic vector store, loading it on first use.
 
-    Cached because recommendation flows (notably playlist population) run many
-    seed queries in one process and must not re-read Plex each time. The cache
-    reloads whenever the underlying blobs database changes, so newly analyzed
-    tracks contribute to scoring without a process restart.
+    Thin wrapper over ``musicseed.context.get_context().sonic_vectors`` so
+    callers that don't pass an explicit context keep working during the
+    context migration.
     """
-    global _vectors, _vectors_signature
-    config = get_config()
-    blobs_db_path = config.plex.blobs_db_path_expanded
-    signature = _blobs_signature(blobs_db_path)
-    if _vectors is not None and signature == _vectors_signature:
-        return _vectors
-    _vectors = load_sonic_vectors(
-        plex_db_path=config.plex.db_path_expanded,
-        blobs_db_path=blobs_db_path,
-        library_name=config.plex.library,
-    )
-    _vectors_signature = signature
-    return _vectors
+    from musicseed.context import get_context
+
+    return get_context().sonic_vectors
 
 
 def reset_sonic_vectors() -> None:
-    """Drop the cached vectors (useful for testing or config changes)."""
-    global _vectors, _vectors_signature
-    _vectors = None
-    _vectors_signature = None
+    """Drop the default context's cached vectors (testing / config changes)."""
+    from musicseed.context import get_context
+
+    get_context().reset_sonic_vectors()

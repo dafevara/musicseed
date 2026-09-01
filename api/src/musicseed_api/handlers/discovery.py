@@ -8,7 +8,7 @@ callable from the CLI, a JSON route, or the web rendering layer.
 from __future__ import annotations
 
 from musicseed.config import Config, get_config, save_config
-from musicseed.db.session import reset_engine
+from musicseed.context import MusicSeedContext, set_context
 from musicseed.services.discovery import DiscoveryResult, Reason, discover, read_plex_token
 from musicseed.services.library import initialize_database
 from musicseed.services.plex_discovery import DiscoveredPlexServer, discover_plex_servers
@@ -136,7 +136,9 @@ def save_config_overrides(
     )
     if changed:
         save_config(cfg)
-        reset_engine()
+        # Install a fresh runtime context so the new config's database engine
+        # and sonic-vector cache take effect without resetting hidden globals.
+        set_context(MusicSeedContext(cfg))
     return changed
 
 

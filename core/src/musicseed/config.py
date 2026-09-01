@@ -216,9 +216,17 @@ def get_config_path() -> Path | None:
 
 
 def set_config(config: Config) -> None:
-    """Set the global config instance."""
+    """Set the global config instance and drop the derived runtime context.
+
+    The default ``MusicSeedContext`` caches an engine and sonic vectors derived
+    from config, so replacing the config must invalidate it; the next access
+    rebuilds from this config.
+    """
     global _config
     _config = config
+    from musicseed.context import reset_context
+
+    reset_context()
 
 
 def save_config(config: Config, path: Path | None = None) -> Path:

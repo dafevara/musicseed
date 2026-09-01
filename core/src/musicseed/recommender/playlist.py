@@ -18,7 +18,7 @@ from musicseed.recommender.scoring import (
     build_seed_profile,
     calculate_score,
 )
-from musicseed.sonic import get_sonic_vectors
+from musicseed.sonic import SonicVectors, get_sonic_vectors
 
 
 class Recommendation(BaseModel):
@@ -147,6 +147,7 @@ def recommend_tracks(
     year_max: int | None = None,
     max_tracks_per_artist: int = 3,
     min_score: float | None = None,
+    vectors: SonicVectors | None = None,
 ) -> tuple[list[Track], list[Recommendation], SonicCoverage]:
     """Generate recommendations using multi-source candidates and constrained selection.
 
@@ -167,6 +168,8 @@ def recommend_tracks(
         year_max: only recommend tracks released in this year or earlier.
         max_tracks_per_artist: artist diversity cap applied during selection.
         min_score: drop recommendations with a total score below this value.
+        vectors: Plex sonic vectors to score against; defaults to the default
+            context's cached vectors.
 
     Returns:
         ``(seed_tracks, selected, sonic_coverage)`` where ``sonic_coverage``
@@ -182,7 +185,8 @@ def recommend_tracks(
         raise ValueError("max_tracks_per_artist must be greater than zero")
 
     weights = weights or Weights()
-    vectors = get_sonic_vectors()
+    if vectors is None:
+        vectors = get_sonic_vectors()
     seed_tracks = resolve_seed_tracks(session, seed_texts=seed_texts, seed_ids=seed_ids)
     seed_profile = build_seed_profile(seed_tracks, vectors)
     candidate_pool = build_candidate_pool(

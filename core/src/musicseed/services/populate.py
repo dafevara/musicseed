@@ -3,9 +3,8 @@
 from pydantic import BaseModel
 
 from musicseed.clients.plex import Playlist, PlexClient
-from musicseed.config import get_config
+from musicseed.context import MusicSeedContext, get_context
 from musicseed.db.models import Track
-from musicseed.db.session import get_session
 from musicseed.exceptions import ConfigurationError, NotFoundError
 from musicseed.recommender.playlist import Recommendation
 from musicseed.recommender.populate import PopulateMethod, populate_playlist_recommendations
@@ -30,8 +29,8 @@ class PopulateApplyResult(PopulateResult):
     added_count: int
 
 
-def _plex_client() -> PlexClient:
-    config = get_config()
+def _plex_client(context: MusicSeedContext | None = None) -> PlexClient:
+    config = (context or get_context()).config
     if not config.plex.token:
         raise ConfigurationError(
             "plex.token is not configured. Add it to your config file."
@@ -39,8 +38,11 @@ def _plex_client() -> PlexClient:
     return PlexClient(base_url=config.plex.url, token=config.plex.token)
 
 
-def list_plex_playlists() -> list[Playlist]:
+def list_plex_playlists(context: MusicSeedContext | None = None) -> list[Playlist]:
     """Return every audio playlist currently on the Plex server.
+
+    Args:
+        context: runtime context to use; defaults to the default context.
 
     Returns:
         All audio playlists on the server.
@@ -49,7 +51,7 @@ def list_plex_playlists() -> list[Playlist]:
         ConfigurationError: if plex.token is not configured.
         PlexAPIError: if the Plex API call fails.
     """
-    return _plex_client().list_playlists()
+    return _plex_client(context).list_playlists()
 
 
 def _plex_ids_for_track_ids(session, track_ids: list[int]) -> list[int]:
@@ -112,6 +114,7 @@ def get_populate_recommendations(
     year_max: int | None = None,
     max_tracks_per_artist: int = 3,
     min_score: float | None = None,
+    context: MusicSeedContext | None = None,
 ) -> PopulateResult:
     """Preview complementary recommendations for an existing Plex playlist.
 
@@ -126,6 +129,7 @@ def get_populate_recommendations(
         year_max: only recommend tracks released in this year or earlier.
         max_tracks_per_artist: artist diversity cap applied during selection.
         min_score: drop recommendations with a total score below this value.
+        context: runtime context to use; defaults to the default context.
 
     Returns:
         The playlist identity, how many of its tracks matched the local
@@ -138,8 +142,9 @@ def get_populate_recommendations(
             are in the local library.
         PlexAPIError: if the Plex API call fails.
     """
-    client = _plex_client()
-    with get_session() as session:
+    ctx = context or get_context()
+    client = _plex_client(ctx)
+    with ctx.session() as session:
         playlist, plex_track_count, local_ids = _resolve_playlist_local_tracks(
             client, session, playlist_id
         )
@@ -154,6 +159,7 @@ def get_populate_recommendations(
             year_max=year_max,
             max_tracks_per_artist=max_tracks_per_artist,
             min_score=min_score,
+            vectors=ctx.sonic_vectors,
         )
 
         return PopulateResult(
@@ -177,6 +183,7 @@ def populate_playlist(
     max_tracks_per_artist: int = 3,
     min_score: float | None = None,
     track_ids: list[int] | None = None,
+    context: MusicSeedContext | None = None,
 ) -> PopulateApplyResult:
     """Generate recommendations and add them to an existing Plex playlist.
 
@@ -196,6 +203,7 @@ def populate_playlist(
         max_tracks_per_artist: artist diversity cap applied during selection.
         min_score: drop recommendations with a total score below this value.
         track_ids: explicit local track ids to add instead of recommending.
+        context: runtime context to use; defaults to the default context.
 
     Returns:
         The playlist identity, match counts, the recommendations (empty when
@@ -206,8 +214,9 @@ def populate_playlist(
         NotFoundError: if the playlist or its local tracks cannot be resolved.
         PlexAPIError: if the Plex API call fails.
     """
-    client = _plex_client()
-    with get_session() as session:
+    ctx = context or get_context()
+    client = _plex_client(ctx)
+    with ctx.session() as session:
         playlist, plex_track_count, local_ids = _resolve_playlist_local_tracks(
             client, session, playlist_id
         )
@@ -227,6 +236,7 @@ def populate_playlist(
                 year_max=year_max,
                 max_tracks_per_artist=max_tracks_per_artist,
                 min_score=min_score,
+                vectors=ctx.sonic_vectors,
             )
             plex_ids = [
                 rec.track.plex_id
