@@ -16,7 +16,9 @@ actions.
 - One local SQLite file for MusicSeed's own state (default
   `~/.local/share/musicseed/musicseed.db`, WAL mode) — no database server.
 - Plex SQLite database as a read-only import source.
-- Plex blobs SQLite database as a read-only source of sonic analysis vectors (read at query time).
+- Plex blobs SQLite database as a read-only source of sonic analysis vectors, imported into
+  MusicSeed's local `track_vectors` store (MUS-83); a remote snapshot can be served over HTTP
+  via `plex.db_http_url` (see [Remote Plex DB access](#remote-plex-db-access)).
 - Optional Plex HTTP API for playlist creation (`core/src/musicseed/clients/plex_api.py`).
 - Optional external HTTP APIs: ListenBrainz and Spotify.
 - Local logs under `~/.local/share/musicseed/logs/`.
@@ -60,6 +62,36 @@ macOS path (`~/Library/Application Support/Plex Media Server/`) and Linux locati
 settings persists the detected token into `config.yaml`; when none is found the UI shows how
 to retrieve one from app.plex.tv.
 
+## Remote Plex DB Access
+
+By default MusicSeed reads Plex's two SQLite files (library metadata + blobs/sonic vectors)
+from the local filesystem. For a remote Plex server (e.g. a NAS on the LAN), set
+`plex.db_http_url` to a base URL that serves consistent snapshots of both files:
+
+- `com.plexapp.plugins.library.db`
+- `com.plexapp.plugins.library.blobs.db`
+
+The snapshots must be **consistent** copies produced on the Plex host with `VACUUM INTO` (or
+`sqlite3 .backup`), not the live WAL files. A helper is provided:
+
+```bash
+# run on the Plex host
+scripts/serve-plex-db-snapshot.sh [PLEX_DATA_DIR] [PORT]
+```
+
+Then configure MusicSeed:
+
+```yaml
+plex:
+  db_http_url: "http://<plex-host-ip>:9000"
+```
+
+MusicSeed downloads the snapshots into `~/.cache/musicseed/plex-dbs/` at import time and
+reads them from there; `import` and `import-plex-sonic` re-fetch fresh snapshots. The
+recommendation runtime never touches the remote files. The served directory is LAN-only and
+unauthenticated; it contains metadata and sonic vectors but never the Plex token (that stays
+in `plex.token`).
+
 ## Web UI, First-Run Wizard, And Settings
 
 The web UI is the default onboarding path. Users run `./scripts/install.sh` then `musicseed`,
@@ -70,9 +102,9 @@ hot reload (API + `next dev` on port 3000).
   manual URL), initializes the database, and optionally runs import and enrichment. Non-setup
   pages (dashboard, recommend, playlists) redirect back here while the library is missing or
   empty.
-- **Settings** (`/settings`): a persistent view for Plex URL/token/library, the Plex database
-  path, the MusicSeed database path, and Spotify credentials. Saving persists config without
-  starting any import, enrichment, or database initialization.
+- **Settings** (`/settings`): a persistent view for Plex URL/token/library, the MusicSeed
+  database path, Spotify credentials, and the local sonic-vector import action. Saving persists
+  config without starting any import, enrichment, or database initialization.
 - **Plex discovery**: local-network discovery is passive and read-only — GDM multicast on
   `239.0.0.250:32414` with an SSDP fallback on `239.255.255.250:1900`
   (`urn:plex-com:service:pms:1`), stdlib-only. Multicast never crosses routers, so servers on
