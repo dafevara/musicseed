@@ -30,6 +30,15 @@ def _make_sqlite(path: Path) -> Path:
     return path
 
 
+def _http_resp(content: bytes, status_code: int = 200):
+    class Response:
+        pass
+    resp = Response()
+    resp.content = content
+    resp.status_code = status_code
+    return resp
+
+
 @pytest.fixture
 def isolated_plex(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Redirect default Plex paths into a temp dir."""
@@ -173,6 +182,43 @@ def test_sonic_vectors_imported_count(
                       config=_config(tmp_path))
 
     assert result.sonic_vectors.imported_count == 3
+
+
+def test_http_source_probed_ok(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = Config.model_validate({
+        "database": {"path": str(tmp_path / "ms" / "musicseed.db")},
+        "plex": {"db_http_url": "http://nas.local:9000/plex-dbs"},
+    })
+    monkeypatch.setattr(
+        discovery.httpx, "get",
+        lambda url, **kwargs: _http_resp(discovery.SQLITE_HEADER + b"x"),
+    )
+
+    result = discover(check_server=False, config=cfg)
+
+    assert result.plex_library_db.ok
+    assert result.plex_library_db.selected.source == "http"
+    assert result.plex_library_db.selected.path.endswith(discovery.PLEX_LIBRARY_DB_NAME)
+    assert result.plex_blobs_db.ok
+
+
+def test_http_source_missing_reports_plex_db_url(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = Config.model_validate({
+        "database": {"path": str(tmp_path / "ms" / "musicseed.db")},
+        "plex": {"db_http_url": "http://nas.local:9000/plex-dbs"},
+    })
+    monkeypatch.setattr(
+        discovery.httpx, "get",
+        lambda url, **kwargs: _http_resp(b"", status_code=404),
+    )
+
+    result = discover(check_server=False, config=cfg)
+
+    assert not result.plex_library_db.ok
+    assert "plex_db_url" in result.missing_inputs
+    assert "plex_db_path" not in result.missing_inputs
 
 
 def test_plex_db_missing(tmp_path: Path, isolated_plex: Path) -> None:

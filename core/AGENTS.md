@@ -35,7 +35,8 @@ Service entry points:
 - `services/library.py`: `initialize_database`, `optimize_database`, `import_library`,
   `get_status`, `get_import_coverage` (Plex vs local artist/album/track counts).
 - `services/discovery.py`: `discover` — read-only local environment probe (MusicSeed DB path,
-  Plex library/blobs DB candidates, Plex server reachability/auth/library). Returns frozen
+  Plex library/blobs DB candidates — local or a remote HTTP snapshot via `plex_db_url` — plus
+  Plex server reachability/auth/library). Returns frozen
   Pydantic models with machine-readable `Reason` codes; expected failures are data, not
   exceptions. Accepts per-call overrides (never mutates global config) and never includes the
   Plex token in results. `read_plex_token` reads a token from the local Plex install
@@ -73,8 +74,9 @@ Service entry points:
   `load_config()`/`get_config_path()` global singleton (the resolved-config source for the
   default context; `set_config` also resets that context). `get_config_path()` returns the
   resolved config file path (or `None` when no file was found) — discovery uses it for the
-  `no_config` first-run signal. This is the CLI's config mechanism; future apps may populate
-  the same `Config` from `.env` instead.
+  `no_config` first-run signal. `plex.db_http_url` (optional) points at a remote snapshot of
+  the Plex DBs; when set it takes precedence over the local `db_path`. This is the CLI's config
+  mechanism; future apps may populate the same `Config` from `.env` instead.
 - `context.py`: `MusicSeedContext` bundles a resolved `Config` with a lazily-created SQLite
   engine/session factory and a lazily-loaded `SonicVectors` cache backed by the local
   `track_vectors` table. `get_context()`/`set_context()`/`reset_context()` manage the
@@ -95,6 +97,10 @@ Service entry points:
   drops the whole default context (engine + sonic cache) — kept as a test/config-change hook.
 - `importers/plex.py`: Plex SQLite metadata import. Track years fall back to the album year when
   Plex doesn't set one on the track row.
+- `plex_db_source.py`: `resolve_plex_dbs(config, refresh=...)` turns the configured Plex DB
+  source into local `Path`s — local by default, or a remote HTTP snapshot fetched into
+  `~/.cache/musicseed/plex-dbs/`. Used by import/coverage/sonic-import; the recommendation
+  runtime never calls it.
 - `enrichers/`: ListenBrainz and Spotify clients + the async enrichment pipeline. (The old
   MusicBrainz MBID→Spotify cross-reference client was removed; it was never wired in.)
 - `sonic.py`: `load_sonic_vectors` reads Plex sonic-analysis vectors from the Plex blobs DB

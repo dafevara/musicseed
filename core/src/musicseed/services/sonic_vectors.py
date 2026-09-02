@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from musicseed.context import MusicSeedContext, get_context
 from musicseed.db.models import TrackVector
 from musicseed.db.session import ensure_schema
+from musicseed.plex_db_source import resolve_plex_dbs
 from musicseed.sonic import load_sonic_vectors
 
 
@@ -55,9 +56,10 @@ def import_plex_sonic(
         NotFoundError: if the Plex blobs database is unavailable.
     """
     ctx = context or get_context()
+    dbs = resolve_plex_dbs(ctx.config, refresh=True)
     vectors = load_sonic_vectors(
-        plex_db_path=ctx.config.plex.db_path_expanded,
-        blobs_db_path=ctx.config.plex.blobs_db_path_expanded,
+        plex_db_path=dbs.library_db,
+        blobs_db_path=dbs.blobs_db,
         library_name=ctx.config.plex.library,
     )
 

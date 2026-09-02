@@ -12,6 +12,7 @@ from musicseed.db.models import Job
 from musicseed.db.session import IndexResult, create_indexes, ensure_schema, init_db
 from musicseed.exceptions import NotFoundError
 from musicseed.importers.plex import PlexImporter, import_from_plex
+from musicseed.plex_db_source import resolve_plex_dbs
 
 
 class EnrichmentCoverage(BaseModel):
@@ -144,7 +145,10 @@ def import_library(
     """
     ctx = context or get_context()
     config = ctx.config
-    db_path = plex_db_path or config.plex.db_path_expanded
+    if plex_db_path is not None:
+        db_path = plex_db_path
+    else:
+        db_path = resolve_plex_dbs(config, refresh=True).library_db
     target_library = library_name or config.plex.library
 
     if not db_path.exists():
@@ -199,7 +203,10 @@ def get_import_coverage(
     """
     ctx = context or get_context()
     config = ctx.config
-    plex_db = config.plex.db_path_expanded
+    try:
+        plex_db = resolve_plex_dbs(config, refresh=False).library_db
+    except NotFoundError:
+        return None
     if not plex_db.exists():
         return None
 

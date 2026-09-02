@@ -14,6 +14,7 @@ from pathlib import Path
 from urllib.parse import quote
 from xml.etree import ElementTree
 
+import httpx
 from pydantic import BaseModel
 
 from musicseed.clients.plex import PlexClient
@@ -27,8 +28,11 @@ from musicseed.config import (
     plex_data_dir_candidates,
     plex_library_db_candidates,
 )
-
-_SQLITE_HEADER = b"SQLite format 3\x00"
+from musicseed.plex_db_source import (
+    PLEX_BLOBS_DB_NAME,
+    PLEX_LIBRARY_DB_NAME,
+    SQLITE_HEADER,
+)
 
 
 def _plex_data_dir() -> Path:
@@ -252,13 +256,13 @@ def _probe_file(path: Path, source: str) -> PathCandidate:
         )
     try:
         with open(path, "rb") as f:
-            header = f.read(len(_SQLITE_HEADER))
+            header = f.read(len(SQLITE_HEADER))
     except OSError as e:
         return PathCandidate(
             path=str(path), source=source, exists=True, usable=False,
             reason=Reason.NOT_READABLE, detail=f"Could not open file: {e}",
         )
-    if header != _SQLITE_HEADER:
+    if header != SQLITE_HEADER:
         return PathCandidate(
             path=str(path), source=source, exists=True, usable=False,
             reason=Reason.INVALID_SQLITE,
@@ -273,6 +277,53 @@ def _discover_file(candidates: list[tuple[Path, str]]) -> FileDiscovery:
     probed = [_probe_file(path, source) for path, source in candidates]
     selected = next((c for c in probed if c.usable), None)
     return FileDiscovery(candidates=probed, selected=selected, ok=selected is not None)
+
+
+def _probe_http(url: str) -> PathCandidate:
+    """Probe a remotely served SQLite snapshot (reachability + header).
+
+    Fetches only the first 16 bytes (the SQLite magic header) via an HTTP
+    range request; servers that ignore ranges simply return the whole file,
+    which is still fine for the header check.
+    """
+    try:
+        resp = httpx.get(
+            url, headers={"Range": "bytes=0-15"},
+            follow_redirects=True, timeout=5.0,
+        )
+    except httpx.HTTPError:
+        return PathCandidate(
+            path=url, source="http", exists=False, usable=False,
+            reason=Reason.UNREACHABLE, detail=f"Could not reach {url}.",
+        )
+    if resp.status_code == 404:
+        return PathCandidate(
+            path=url, source="http", exists=False, usable=False,
+            reason=Reason.NOT_FOUND, detail=f"No file at {url}.",
+        )
+    if resp.status_code not in (200, 206):
+        return PathCandidate(
+            path=url, source="http", exists=False, usable=False,
+            reason=Reason.ERROR, detail=f"HTTP {resp.status_code} from {url}.",
+        )
+    if resp.content[: len(SQLITE_HEADER)] != SQLITE_HEADER:
+        return PathCandidate(
+            path=url, source="http", exists=True, usable=False,
+            reason=Reason.INVALID_SQLITE, detail="Not a SQLite database.",
+        )
+    return PathCandidate(
+        path=url, source="http", exists=True, usable=True, reason=Reason.OK
+    )
+
+
+def _discover_http_file(base_url: str, filename: str) -> FileDiscovery:
+    """Build a single-candidate ``FileDiscovery`` for one remote snapshot file."""
+    candidate = _probe_http(f"{base_url.rstrip('/')}/{filename}")
+    return FileDiscovery(
+        candidates=[candidate],
+        selected=candidate if candidate.usable else None,
+        ok=candidate.usable,
+    )
 
 
 def _discover_musicseed_db(path: Path, source: str) -> DatabasePathDiscovery:
@@ -400,6 +451,7 @@ def discover(
     *,
     musicseed_db_path: str | None = None,
     plex_db_path: str | None = None,
+    plex_db_url: str | None = None,
     plex_url: str | None = None,
     plex_token: str | None = None,
     plex_library: str | None = None,
@@ -417,6 +469,7 @@ def discover(
     Args:
         musicseed_db_path: override for the MusicSeed database path.
         plex_db_path: override for the Plex library database path.
+        plex_db_url: override for the HTTP snapshot base URL (remote Plex).
         plex_url: override for the Plex server URL.
         plex_token: override for the Plex token.
         plex_library: override for the Plex library name.
@@ -443,22 +496,30 @@ def discover(
         Path(os.path.expanduser(db_value)), db_source
     )
 
-    # Plex library database (candidates: override/config value, then the default)
-    plex_value = plex_db_path or cfg.plex.db_path
-    plex_source = _source(plex_db_path, cfg.plex.db_path, default_plex.db_path)
-    library_candidates = _dedup_candidates([
-        (Path(os.path.expanduser(plex_value)), plex_source),
-        *[(path, "default") for path in plex_library_db_candidates()],
-    ])
-    plex_library_db = _discover_file(library_candidates)
+    # Plex library + blobs databases. When a snapshot URL is configured (or
+    # overridden) the source is remote; otherwise use the local filesystem.
+    http_url = (plex_db_url or cfg.plex.db_http_url).strip() or None
+    if http_url:
+        base = http_url.rstrip("/")
+        plex_library_db = _discover_http_file(base, PLEX_LIBRARY_DB_NAME)
+        plex_blobs_db = _discover_http_file(base, PLEX_BLOBS_DB_NAME)
+    else:
+        # Plex library database (candidates: override/config value, then the default)
+        plex_value = plex_db_path or cfg.plex.db_path
+        plex_source = _source(plex_db_path, cfg.plex.db_path, default_plex.db_path)
+        library_candidates = _dedup_candidates([
+            (Path(os.path.expanduser(plex_value)), plex_source),
+            *[(path, "default") for path in plex_library_db_candidates()],
+        ])
+        plex_library_db = _discover_file(library_candidates)
 
-    # Plex blobs database (derived from each library-db candidate, as in
-    # PlexConfig.blobs_db_path_expanded)
-    blobs_candidates = _dedup_candidates([
-        (PlexConfig(db_path=str(path)).blobs_db_path_expanded, source)
-        for path, source in library_candidates
-    ])
-    plex_blobs_db = _discover_file(blobs_candidates)
+        # Plex blobs database (derived from each library-db candidate, as in
+        # PlexConfig.blobs_db_path_expanded)
+        blobs_candidates = _dedup_candidates([
+            (PlexConfig(db_path=str(path)).blobs_db_path_expanded, source)
+            for path, source in library_candidates
+        ])
+        plex_blobs_db = _discover_file(blobs_candidates)
 
     # Plex HTTP API
     url = plex_url or cfg.plex.url
@@ -507,7 +568,7 @@ def discover(
     if not musicseed_db.ok:
         missing.append("db_location")
     if not plex_library_db.ok:
-        missing.append("plex_db_path")
+        missing.append("plex_db_url" if http_url else "plex_db_path")
     if not plex_server.ok:
         if plex_server.reason in (Reason.MISSING_TOKEN, Reason.UNAUTHORIZED):
             missing.append("plex_token")
