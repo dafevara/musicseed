@@ -9,7 +9,7 @@ const FIELD_FOR_MISSING: Record<string, string[]> = {
   plex_unreachable: ["plexUrl"],
   plex_server: ["plexUrl"],
   plex_library: ["plexLibrary"],
-  plex_db_path: ["plexDbPath", "plexDbUrl"],
+  plex_db_path: ["plexDbPath"],
   plex_db_url: ["plexDbUrl"],
   db_location: ["musicseedDbPath"],
   enrichment_credentials: ["listenbrainzToken", "spotifyId", "spotifySecret"],
@@ -29,6 +29,7 @@ export function SetupForm({
   const [plexLibrary, setPlexLibrary] = useState("");
   const [plexDbPath, setPlexDbPath] = useState("");
   const [plexDbUrl, setPlexDbUrl] = useState("");
+  const [remotePlex, setRemotePlex] = useState(false);
   const [musicseedDbPath, setMusicseedDbPath] = useState("");
   const [spotifyId, setSpotifyId] = useState("");
   const [spotifySecret, setSpotifySecret] = useState("");
@@ -45,8 +46,11 @@ export function SetupForm({
     if (plexUrl.trim()) vals.plex_url = plexUrl.trim();
     if (plexToken.trim()) vals.plex_token = plexToken.trim();
     if (plexLibrary.trim()) vals.plex_library = plexLibrary.trim();
-    if (plexDbPath.trim()) vals.plex_db_path = plexDbPath.trim();
-    if (plexDbUrl.trim()) vals.plex_db_url = plexDbUrl.trim();
+    if (remotePlex) {
+      if (plexDbUrl.trim()) vals.plex_db_url = plexDbUrl.trim();
+    } else if (plexDbPath.trim()) {
+      vals.plex_db_path = plexDbPath.trim();
+    }
     if (musicseedDbPath.trim()) vals.musicseed_db_path = musicseedDbPath.trim();
     if (spotifyId.trim()) vals.spotify_client_id = spotifyId.trim();
     if (spotifySecret.trim()) vals.spotify_client_secret = spotifySecret.trim();
@@ -96,30 +100,44 @@ export function SetupForm({
             />
           </label>
         )}
-        {(!visible || visible.has("plexDbPath")) && (
-          <label className="grid gap-1 text-sm">
-            Plex database path
-            <input
-              type="text"
-              value={plexDbPath}
-              onChange={(e) => setPlexDbPath(e.target.value)}
-              placeholder="…/com.plexapp.plugins.library.db"
-            />
-          </label>
-        )}
-        {(!visible || visible.has("plexDbUrl")) && (
-          <label className="grid gap-1 text-sm">
-            Plex database snapshot URL{" "}
-            <span className="text-[var(--muted)]">
-              (remote Plex — serves both .db files)
-            </span>
-            <input
-              type="text"
-              value={plexDbUrl}
-              onChange={(e) => setPlexDbUrl(e.target.value)}
-              placeholder="http://nas.local:9000/plex-dbs"
-            />
-          </label>
+        {(!visible || visible.has("plexDbPath") || visible.has("plexDbUrl")) && (
+          <div className="grid gap-2">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={remotePlex}
+                onChange={(e) => setRemotePlex(e.target.checked)}
+              />
+              Plex is on another machine (use a snapshot URL)
+            </label>
+            {!remotePlex ? (
+              <label className="grid gap-1 text-sm">
+                Plex database path{" "}
+                <span className="text-[var(--muted)]">
+                  (local path, or a copied/mounted copy)
+                </span>
+                <input
+                  type="text"
+                  value={plexDbPath}
+                  onChange={(e) => setPlexDbPath(e.target.value)}
+                  placeholder="…/com.plexapp.plugins.library.db"
+                />
+              </label>
+            ) : (
+              <label className="grid gap-1 text-sm">
+                Plex database snapshot URL{" "}
+                <span className="text-[var(--muted)]">
+                  (run scripts/serve-plex-db-snapshot.sh on the Plex host first)
+                </span>
+                <input
+                  type="text"
+                  value={plexDbUrl}
+                  onChange={(e) => setPlexDbUrl(e.target.value)}
+                  placeholder="http://nas.local:9000/plex-dbs"
+                />
+              </label>
+            )}
+          </div>
         )}
         {(!visible || visible.has("musicseedDbPath")) && (
           <label className="grid gap-1 text-sm">

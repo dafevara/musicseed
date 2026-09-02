@@ -61,6 +61,7 @@ export default function SetupPage() {
   const [libraryStatus, setLibraryStatus] = useState<LibraryStatus | null>(null);
   const [step, setStep] = useState<Step>("detect");
   const [dbError, setDbError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [jobId, setJobId] = useState<number | null>(null);
   const [jobKind, setJobKind] = useState<string | null>(null);
   const [formValues, setFormValues] = useState<Record<string, string>>({});
@@ -95,13 +96,15 @@ export default function SetupPage() {
 
   async function handleRecheck(vals: Record<string, string>) {
     setFormValues(vals);
+    setSaveError(null);
     try {
       // Persist (save-only) so the selected server, token, and library name
       // survive navigation, then return the fresh discovery result.
       const result = await api.post<DiscoveryResponse>("/discovery/config", vals);
       setData(result);
       setStep(resolveStep(result, libraryStatus));
-    } catch {
+    } catch (e) {
+      setSaveError(String(e).replace("Error: ", ""));
       setStep("review");
     }
   }
@@ -240,6 +243,12 @@ export default function SetupPage() {
           {dbError && (
             <div className="flash flash-error">
               <p className="m-0">{dbError}</p>
+            </div>
+          )}
+
+          {saveError && (
+            <div className="flash flash-error">
+              <p className="m-0">{saveError}</p>
             </div>
           )}
 
