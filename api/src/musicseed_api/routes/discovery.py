@@ -74,6 +74,8 @@ def init_database(
     plex_library: Annotated[str, Form()] = "",
     plex_db_path: Annotated[str, Form()] = "",
     plex_db_ssh: Annotated[str, Form()] = "",
+    plex_db_ssh_password: Annotated[str, Form()] = "",
+    plex_db_ssh_port: Annotated[str, Form()] = "",
 ) -> dict:
     overrides, _form = extract_overrides(
         musicseed_db_path=musicseed_db_path,
@@ -85,6 +87,8 @@ def init_database(
         plex_library=plex_library,
         plex_db_path=plex_db_path,
         plex_db_ssh=plex_db_ssh,
+        plex_db_ssh_password=plex_db_ssh_password,
+        plex_db_ssh_port=plex_db_ssh_port,
     )
     apply_config_and_init_db(**overrides)
     result = run_discovery()
@@ -102,6 +106,8 @@ def save_config(
     plex_library: Annotated[str, Form()] = "",
     plex_db_path: Annotated[str, Form()] = "",
     plex_db_ssh: Annotated[str, Form()] = "",
+    plex_db_ssh_password: Annotated[str, Form()] = "",
+    plex_db_ssh_port: Annotated[str, Form()] = "",
 ) -> dict:
     overrides, _form = extract_overrides(
         musicseed_db_path=musicseed_db_path,
@@ -113,6 +119,8 @@ def save_config(
         plex_library=plex_library,
         plex_db_path=plex_db_path,
         plex_db_ssh=plex_db_ssh,
+        plex_db_ssh_password=plex_db_ssh_password,
+        plex_db_ssh_port=plex_db_ssh_port,
     )
     save_config_overrides(**overrides)
     result = run_discovery()

@@ -2,18 +2,19 @@
 
 MusicSeed reads two SQLite files from the Plex host: the library database
 (metadata) and the blobs database (sonic vectors). Both are normally local,
-but for a remote Plex server MusicSeed fetches them itself over scp (using
-the user's existing ``~/.ssh`` setup) into a local cache, then reads them
-from there. The recommendation runtime never touches the remote files.
+but for a remote Plex server MusicSeed fetches them itself over SFTP (using
+password or ``~/.ssh`` key auth) into a local cache, then reads them from
+there. The recommendation runtime never touches the remote files.
 """
 
 from __future__ import annotations
 
 import hashlib
 import os
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+
+import paramiko
 
 from musicseed.config import Config
 from musicseed.exceptions import NotFoundError
@@ -35,18 +36,24 @@ class ResolvedPlexDbs:
     source: str  # "local" | "ssh"
 
 
-def parse_ssh_target(target: str) -> tuple[str, str]:
-    """Split a scp-style ``[user@]host:/remote/dir`` into ``(host, remote_dir)``.
+def parse_ssh_target(target: str) -> tuple[str | None, str, str]:
+    """Split a scp-style ``[user@]host:/remote/dir`` into ``(user, host, dir)``.
 
-    Raises:
-        NotFoundError: if the target has no ``host:/path`` shape.
+    ``user`` is ``None`` when the target omits the ``user@`` part (then the
+    local username is used). Raises ``NotFoundError`` on a malformed target.
     """
-    host, sep, remote_dir = target.partition(":")
-    if not sep or not host or not remote_dir.strip("/"):
+    host_spec, sep, remote_dir = target.partition(":")
+    if not sep or not host_spec or not remote_dir.strip("/"):
         raise NotFoundError(
             f"Invalid SSH target '{target}'; expected [user@]host:/remote/directory"
         )
-    return host, remote_dir.rstrip("/")
+    if "@" in host_spec:
+        user, host = host_spec.split("@", 1)
+    else:
+        user, host = None, host_spec
+    if not host:
+        raise NotFoundError(f"Invalid SSH target '{target}'; missing host")
+    return user, host, remote_dir.rstrip("/")
 
 
 def _cache_dir(target: str) -> Path:
@@ -57,38 +64,111 @@ def _cache_dir(target: str) -> Path:
     return root / "musicseed" / "plex-dbs" / digest
 
 
-def _scp(host: str, remote_dir: str, filename: str, dest_dir: Path, *, required: bool) -> bool:
-    """Copy one file from the remote host; return True when it was fetched.
+def _open_ssh(
+    user: str | None,
+    host: str,
+    port: int,
+    password: str,
+    timeout: float = 15.0,
+) -> paramiko.SSHClient:
+    """Open an SSH connection using password auth, or keys/agent when no password."""
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    connect_kwargs = dict(hostname=host, port=port, username=user, timeout=timeout)
+    if password:
+        connect_kwargs["password"] = password
+        connect_kwargs["look_for_keys"] = False
+        connect_kwargs["allow_agent"] = False
+    else:
+        connect_kwargs["look_for_keys"] = True
+        connect_kwargs["allow_agent"] = True
+    client.connect(**connect_kwargs)
+    return client
 
-    Optional files (WAL/SHM sidecars, or the blobs DB when absent) are skipped
-    quietly. The main ``.db`` files are validated against the SQLite header.
-    """
+
+def _sftp_get(
+    sftp: paramiko.SFTPClient,
+    remote_dir: str,
+    filename: str,
+    dest_dir: Path,
+    *,
+    required: bool,
+) -> bool:
+    """Download one file; return True when fetched, False when skipped."""
     dest = dest_dir / filename
-    result = subprocess.run(
-        ["scp", "-q", f"{host}:{remote_dir}/{filename}", str(dest)],
-        capture_output=True,
-    )
-    if result.returncode != 0:
-        if not required:
-            return False
-        detail = (result.stderr or result.stdout).decode(errors="replace").strip()
-        raise NotFoundError(
-            f"Could not fetch {host}:{remote_dir}/{filename} over scp: "
-            f"{detail or 'scp failed'}"
-        )
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        sftp.get(f"{remote_dir}/{filename}", str(dest))
+    except FileNotFoundError:
+        if required:
+            raise NotFoundError(f"No {filename} at {remote_dir} on the remote Plex host.")
+        return False
+    except (paramiko.SSHException, OSError) as e:
+        if required:
+            raise NotFoundError(f"Could not fetch {filename} over SFTP: {e}")
+        return False
     if filename.endswith(".db") and dest.read_bytes()[: len(SQLITE_HEADER)] != SQLITE_HEADER:
-        raise NotFoundError(f"{filename} fetched from {host} is not a SQLite database.")
+        raise NotFoundError(f"{filename} fetched over SFTP is not a SQLite database.")
     return True
 
 
-def _fetch_via_scp(target: str, dest_dir: Path) -> None:
-    """Download the library + blobs databases (and their WAL sidecars) via scp."""
-    host, remote_dir = parse_ssh_target(target)
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    for filename in (PLEX_LIBRARY_DB_NAME, PLEX_BLOBS_DB_NAME):
-        _scp(host, remote_dir, filename, dest_dir, required=(filename == PLEX_LIBRARY_DB_NAME))
-        for sidecar in ("-wal", "-shm"):
-            _scp(host, remote_dir, f"{filename}{sidecar}", dest_dir, required=False)
+def ssh_file_exists(
+    target: str,
+    filename: str,
+    *,
+    password: str = "",
+    port: int = 22,
+    timeout: float = 10.0,
+) -> bool | None:
+    """Return True/False whether ``filename`` exists over SSH, or None on failure.
+
+    ``None`` means the connection/auth failed (host unreachable, bad
+    credentials, etc.) — distinct from ``False`` (connected but file missing).
+    """
+    user, host, remote_dir = parse_ssh_target(target)
+    try:
+        client = _open_ssh(user, host, port, password, timeout=timeout)
+    except (paramiko.SSHException, OSError) as e:
+        logger.debug(f"SSH probe failed for {host}: {e}")
+        return None
+    try:
+        sftp = client.open_sftp()
+        try:
+            sftp.stat(f"{remote_dir}/{filename}")
+            return True
+        except FileNotFoundError:
+            return False
+        finally:
+            sftp.close()
+    except (paramiko.SSHException, OSError):
+        return None
+    finally:
+        client.close()
+
+
+def _fetch_via_sftp(config: Config, target: str, dest_dir: Path) -> None:
+    """Download the library + blobs databases (and their WAL sidecars) via SFTP."""
+    user, host, remote_dir = parse_ssh_target(target)
+    client = _open_ssh(
+        user, host, config.plex.db_ssh_port, config.plex.db_ssh_password
+    )
+    try:
+        sftp = client.open_sftp()
+        try:
+            for filename in (PLEX_LIBRARY_DB_NAME, PLEX_BLOBS_DB_NAME):
+                _sftp_get(
+                    sftp, remote_dir, filename, dest_dir,
+                    required=(filename == PLEX_LIBRARY_DB_NAME),
+                )
+                for sidecar in ("-wal", "-shm"):
+                    _sftp_get(
+                        sftp, remote_dir, f"{filename}{sidecar}", dest_dir,
+                        required=False,
+                    )
+        finally:
+            sftp.close()
+    finally:
+        client.close()
 
 
 def resolve_plex_dbs(
@@ -97,7 +177,7 @@ def resolve_plex_dbs(
     """Return local paths to the Plex library and blobs databases.
 
     With no ``db_ssh_target`` configured (or overridden), returns the
-    configured local paths. Otherwise fetches the files over scp into a local
+    configured local paths. Otherwise fetches the files over SFTP into a local
     cache, re-downloading when ``refresh`` is True (import time). When
     ``refresh`` is False and no snapshot is cached yet, raises
     ``NotFoundError`` rather than fetching.
@@ -129,7 +209,7 @@ def resolve_plex_dbs(
     blobs_db = target_dir / PLEX_BLOBS_DB_NAME
 
     if refresh:
-        _fetch_via_scp(target, target_dir)
+        _fetch_via_sftp(config, target, target_dir)
     elif not library_db.exists():
         raise NotFoundError(
             f"Plex database not cached yet; run an import to fetch it from {target}"

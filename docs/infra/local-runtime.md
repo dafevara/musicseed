@@ -71,17 +71,19 @@ from the local filesystem. For a remote Plex server (e.g. a NAS on the LAN), set
 ```yaml
 plex:
   db_ssh_target: "admin@nas.local:/volume1/Plex/.../Databases"
+  db_ssh_password: "your-password"   # optional — omit to use ~/.ssh keys
+  db_ssh_port: 22                    # optional
 ```
 
-MusicSeed fetches the files (plus their `-wal`/`-shm` sidecars) over `scp` into
-`~/.cache/musicseed/plex-dbs/` at import time, reusing the user's existing `~/.ssh`
-configuration (keys, agent, `~/.ssh/config` aliases and ports). `import` and
-`import-plex-sonic` re-fetch on each run; the recommendation runtime never touches the remote
-files.
+MusicSeed fetches the files (plus their `-wal`/`-shm` sidecars) over SFTP into
+`~/.cache/musicseed/plex-dbs/` at import time. When `db_ssh_password` is set it
+authenticates with that password; otherwise it uses the user's `~/.ssh` keys and agent.
+`import` and `import-plex-sonic` re-fetch on each run; the recommendation runtime never
+touches the remote files.
 
-SSH access must be set up once on the Plex host (public-key auth recommended). The fetched
-files contain metadata and sonic vectors but never the Plex token (that stays in
-`plex.token`).
+SSH access must be enabled on the Plex host (most NASes expose this in their settings). The
+fetched files contain metadata and sonic vectors but never the Plex token (that stays in
+`plex.token`); the SSH password is stored in `config.yaml` like the token.
 
 ## Web UI, First-Run Wizard, And Settings
 

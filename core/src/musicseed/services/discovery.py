@@ -9,7 +9,6 @@ instead of parsing exceptions. Plex tokens are never included in results.
 
 import os
 import sqlite3
-import subprocess
 from enum import StrEnum
 from pathlib import Path
 from urllib.parse import quote
@@ -33,6 +32,7 @@ from musicseed.plex_db_source import (
     PLEX_LIBRARY_DB_NAME,
     SQLITE_HEADER,
     parse_ssh_target,
+    ssh_file_exists,
 )
 
 
@@ -280,47 +280,38 @@ def _discover_file(candidates: list[tuple[Path, str]]) -> FileDiscovery:
     return FileDiscovery(candidates=probed, selected=selected, ok=selected is not None)
 
 
-def _probe_ssh(host: str, remote_dir: str, filename: str) -> PathCandidate:
+def _probe_ssh(
+    target: str, filename: str, *, password: str = "", port: int = 22
+) -> PathCandidate:
     """Probe a remote SQLite file over SSH (reachability + presence)."""
-    remote_path = f"{remote_dir}/{filename}"
-    target = f"{host}:{remote_path}"
-    try:
-        result = subprocess.run(
-            [
-                "ssh", "-q", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5",
-                host, f"test -f '{remote_path}'",
-            ],
-            capture_output=True, timeout=10.0,
-        )
-    except (subprocess.TimeoutExpired, OSError):
+    _user, host, remote_dir = parse_ssh_target(target)
+    path = f"{host}:{remote_dir}/{filename}"
+    exists = ssh_file_exists(target, filename, password=password, port=port)
+    if exists is True:
         return PathCandidate(
-            path=target, source="ssh", exists=False, usable=False,
-            reason=Reason.UNREACHABLE, detail=f"Could not reach {host} over SSH.",
+            path=path, source="ssh", exists=True, usable=True, reason=Reason.OK
         )
-    if result.returncode == 0:
+    if exists is False:
         return PathCandidate(
-            path=target, source="ssh", exists=True, usable=True, reason=Reason.OK
-        )
-    if result.returncode == 1:
-        return PathCandidate(
-            path=target, source="ssh", exists=False, usable=False,
+            path=path, source="ssh", exists=False, usable=False,
             reason=Reason.NOT_FOUND,
             detail=f"No {filename} at {host}:{remote_dir}.",
         )
-    detail = (
-        (result.stderr or b"").decode(errors="replace").strip()
-        or f"ssh exited with code {result.returncode}"
-    )
     return PathCandidate(
-        path=target, source="ssh", exists=False, usable=False,
-        reason=Reason.UNREACHABLE, detail=f"SSH to {host} failed: {detail}",
+        path=path, source="ssh", exists=False, usable=False,
+        reason=Reason.UNREACHABLE,
+        detail=(
+            f"Could not connect to {host} over SSH — check the host, port, "
+            "credentials, and that key auth is set up."
+        ),
     )
 
 
-def _discover_ssh_file(target: str, filename: str) -> FileDiscovery:
+def _discover_ssh_file(
+    target: str, filename: str, *, password: str = "", port: int = 22
+) -> FileDiscovery:
     """Build a single-candidate ``FileDiscovery`` for one remote SSH file."""
-    host, remote_dir = parse_ssh_target(target)
-    candidate = _probe_ssh(host, remote_dir, filename)
+    candidate = _probe_ssh(target, filename, password=password, port=port)
     return FileDiscovery(
         candidates=[candidate],
         selected=candidate if candidate.usable else None,
@@ -502,8 +493,14 @@ def discover(
     # overridden) the source is remote; otherwise use the local filesystem.
     ssh_target = (plex_db_ssh or cfg.plex.db_ssh_target).strip() or None
     if ssh_target:
-        plex_library_db = _discover_ssh_file(ssh_target, PLEX_LIBRARY_DB_NAME)
-        plex_blobs_db = _discover_ssh_file(ssh_target, PLEX_BLOBS_DB_NAME)
+        plex_library_db = _discover_ssh_file(
+            ssh_target, PLEX_LIBRARY_DB_NAME,
+            password=cfg.plex.db_ssh_password, port=cfg.plex.db_ssh_port,
+        )
+        plex_blobs_db = _discover_ssh_file(
+            ssh_target, PLEX_BLOBS_DB_NAME,
+            password=cfg.plex.db_ssh_password, port=cfg.plex.db_ssh_port,
+        )
     else:
         # Plex library database (candidates: override/config value, then the default)
         plex_value = plex_db_path or cfg.plex.db_path

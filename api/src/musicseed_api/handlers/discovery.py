@@ -20,7 +20,9 @@ DISCOVERY_KEYS = frozenset({
     "plex_library",
 })
 
-_SECRET_FIELDS = frozenset({"plex_token", "spotify_client_secret", "listenbrainz_token"})
+_SECRET_FIELDS = frozenset({
+    "plex_token", "spotify_client_secret", "listenbrainz_token", "plex_db_ssh_password",
+})
 
 
 def wizard_ready(result: DiscoveryResult) -> bool:
@@ -72,6 +74,8 @@ def _apply_config_overrides(
     plex_library: str = "",
     plex_db_path: str = "",
     plex_db_ssh: str = "",
+    plex_db_ssh_password: str = "",
+    plex_db_ssh_port: str = "",
 ) -> bool:
     """Apply non-blank overrides to ``cfg`` in place; return True if anything changed."""
     changed = False
@@ -102,6 +106,15 @@ def _apply_config_overrides(
     if plex_db_ssh:
         cfg.plex.db_ssh_target = plex_db_ssh
         changed = True
+    if plex_db_ssh_password:
+        cfg.plex.db_ssh_password = plex_db_ssh_password
+        changed = True
+    if plex_db_ssh_port:
+        try:
+            cfg.plex.db_ssh_port = int(plex_db_ssh_port)
+            changed = True
+        except ValueError:
+            pass
     return changed
 
 
@@ -115,6 +128,8 @@ def save_config_overrides(
     plex_library: str = "",
     plex_db_path: str = "",
     plex_db_ssh: str = "",
+    plex_db_ssh_password: str = "",
+    plex_db_ssh_port: str = "",
 ) -> bool:
     """Persist setup overrides to config without any side effects.
 
@@ -139,6 +154,8 @@ def save_config_overrides(
         plex_library=plex_library,
         plex_db_path=plex_db_path,
         plex_db_ssh=plex_db_ssh,
+        plex_db_ssh_password=plex_db_ssh_password,
+        plex_db_ssh_port=plex_db_ssh_port,
     )
     if changed:
         save_config(cfg)
@@ -158,6 +175,8 @@ def apply_config_and_init_db(
     plex_library: str = "",
     plex_db_path: str = "",
     plex_db_ssh: str = "",
+    plex_db_ssh_password: str = "",
+    plex_db_ssh_port: str = "",
 ) -> None:
     """Persist validated setup overrides to config and create the database.
 
@@ -177,5 +196,7 @@ def apply_config_and_init_db(
         plex_library=plex_library,
         plex_db_path=plex_db_path,
         plex_db_ssh=plex_db_ssh,
+        plex_db_ssh_password=plex_db_ssh_password,
+        plex_db_ssh_port=plex_db_ssh_port,
     )
     initialize_database()

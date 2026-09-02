@@ -29,6 +29,8 @@ export function SetupForm({
   const [plexLibrary, setPlexLibrary] = useState("");
   const [plexDbPath, setPlexDbPath] = useState("");
   const [plexDbSsh, setPlexDbSsh] = useState("");
+  const [plexDbSshPassword, setPlexDbSshPassword] = useState("");
+  const [plexDbSshPort, setPlexDbSshPort] = useState("");
   const [remotePlex, setRemotePlex] = useState(false);
   const [musicseedDbPath, setMusicseedDbPath] = useState("");
   const [spotifyId, setSpotifyId] = useState("");
@@ -48,6 +50,8 @@ export function SetupForm({
     if (plexLibrary.trim()) vals.plex_library = plexLibrary.trim();
     if (remotePlex) {
       if (plexDbSsh.trim()) vals.plex_db_ssh = plexDbSsh.trim();
+      if (plexDbSshPassword) vals.plex_db_ssh_password = plexDbSshPassword;
+      if (plexDbSshPort.trim()) vals.plex_db_ssh_port = plexDbSshPort.trim();
     } else if (plexDbPath.trim()) {
       vals.plex_db_path = plexDbPath.trim();
     }
@@ -124,18 +128,41 @@ export function SetupForm({
                 />
               </label>
             ) : (
-              <label className="grid gap-1 text-sm">
-                SSH target{" "}
-                <span className="text-[var(--muted)]">
-                  (scp-style — your ~/.ssh keys are used)
-                </span>
-                <input
-                  type="text"
-                  value={plexDbSsh}
-                  onChange={(e) => setPlexDbSsh(e.target.value)}
-                  placeholder="user@nas.local:/volume1/Plex/…/Databases"
-                />
-              </label>
+              <div className="grid gap-2">
+                <label className="grid gap-1 text-sm">
+                  SSH target{" "}
+                  <span className="text-[var(--muted)]">(scp-style)</span>
+                  <input
+                    type="text"
+                    value={plexDbSsh}
+                    onChange={(e) => setPlexDbSsh(e.target.value)}
+                    placeholder="user@nas.local:/volume1/Plex/…/Databases"
+                  />
+                </label>
+                <label className="grid gap-1 text-sm">
+                  SSH password{" "}
+                  <span className="text-[var(--muted)]">
+                    (leave blank to use your ~/.ssh keys)
+                  </span>
+                  <input
+                    type="password"
+                    value={plexDbSshPassword}
+                    onChange={(e) => setPlexDbSshPassword(e.target.value)}
+                    autoComplete="off"
+                    placeholder="optional"
+                  />
+                </label>
+                <label className="grid gap-1 text-sm">
+                  SSH port{" "}
+                  <span className="text-[var(--muted)]">(default 22)</span>
+                  <input
+                    type="text"
+                    value={plexDbSshPort}
+                    onChange={(e) => setPlexDbSshPort(e.target.value)}
+                    placeholder="22"
+                  />
+                </label>
+              </div>
             )}
           </div>
         )}

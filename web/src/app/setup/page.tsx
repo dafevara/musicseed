@@ -132,6 +132,8 @@ export default function SetupPage() {
         plex_library: formValues.plex_library || data.result.plex_server.library || "",
         plex_db_path: formValues.plex_db_path || data.result.plex_library_db.selected?.path || "",
         plex_db_ssh: formValues.plex_db_ssh || "",
+        plex_db_ssh_password: formValues.plex_db_ssh_password || "",
+        plex_db_ssh_port: formValues.plex_db_ssh_port || "",
       });
       await bootstrap();
     } catch (e) {

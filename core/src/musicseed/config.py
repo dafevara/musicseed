@@ -97,8 +97,12 @@ class PlexConfig(BaseModel):
     # Optional scp-style SSH target for a remote Plex server, e.g.
     # ``"admin@nas.local:/volume1/Plex/.../Databases"``. When set, MusicSeed
     # fetches the two Plex SQLite files (plus their ``-wal`` sidecars) over
-    # scp on each import. Empty means "use the local ``db_path``".
+    # SFTP on each import. Empty means "use the local ``db_path``".
     db_ssh_target: str = ""
+    # Optional SSH password. Leave empty to use the user's ``~/.ssh`` keys
+    # and agent instead.
+    db_ssh_password: str = ""
+    db_ssh_port: int = 22
 
     @property
     def db_path_expanded(self) -> Path:
