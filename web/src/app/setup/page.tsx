@@ -26,7 +26,11 @@ function resolveStep(d: DiscoveryResponse, status: LibraryStatus | null): Step {
       && (status.import_coverage.tracks.plex > status.import_coverage.tracks.local
         || status.import_coverage.albums.plex > status.import_coverage.albums.local));
   if (status && status.track_count > 0 && !incomplete) return "done";
-  if (d.result.musicseed_db.exists) return "review";
+  // "Review" once Plex is connected (or the DB already exists); "detect" is
+  // only the first step, before a server has been reached. Without the
+  // server-ok check, saving a manually entered URL/token would bounce back
+  // to the server picker forever because the DB does not exist yet.
+  if (d.result.plex_server.ok || d.result.musicseed_db.exists) return "review";
   return "detect";
 }
 
