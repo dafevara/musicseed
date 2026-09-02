@@ -26,6 +26,7 @@ def test_apply_config_persists_plex_overrides_and_creates_fresh_db(tmp_path):
         plex_token="token123",
         plex_library="Music2",
         plex_db_path=str(tmp_path / "plex.db"),
+        plex_db_url="http://nas.local:9000/plex-dbs",
     )
 
     config_module._config = None
@@ -39,6 +40,7 @@ def test_apply_config_persists_plex_overrides_and_creates_fresh_db(tmp_path):
     assert reloaded.plex.token == "token123"
     assert reloaded.plex.library == "Music2"
     assert reloaded.plex.db_path == str(tmp_path / "plex.db")
+    assert reloaded.plex.db_http_url == "http://nas.local:9000/plex-dbs"
     assert db_path.exists()
 
 
@@ -58,6 +60,7 @@ def test_init_db_route_forwards_plex_overrides(tmp_path):
             "plex_token": "secrettoken123",
             "plex_library": "Music2",
             "plex_db_path": str(tmp_path / "plex.db"),
+            "plex_db_url": "http://nas.local:9000/plex-dbs",
         },
     )
 
@@ -71,5 +74,6 @@ def test_init_db_route_forwards_plex_overrides(tmp_path):
     assert reloaded.plex.url == "http://plex.local:32400"
     assert reloaded.plex.token == "secrettoken123"
     assert reloaded.listenbrainz.token == "lb-secret-token"
+    assert reloaded.plex.db_http_url == "http://nas.local:9000/plex-dbs"
     assert reloaded.database.path == str(db_path)
     assert db_path.exists()

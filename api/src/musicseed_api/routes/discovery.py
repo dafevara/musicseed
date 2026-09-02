@@ -28,12 +28,14 @@ def get_plex_servers() -> dict:
 def get_discovery(
     musicseed_db_path: str = Query(default=""),
     plex_db_path: str = Query(default=""),
+    plex_db_url: str = Query(default=""),
     plex_url: str = Query(default=""),
     plex_library: str = Query(default=""),
 ) -> dict:
     result = run_discovery(
         musicseed_db_path=musicseed_db_path,
         plex_db_path=plex_db_path,
+        plex_db_url=plex_db_url,
         plex_url=plex_url,
         plex_library=plex_library,
     )
@@ -44,6 +46,7 @@ def get_discovery(
 def check_discovery(
     musicseed_db_path: Annotated[str, Form()] = "",
     plex_db_path: Annotated[str, Form()] = "",
+    plex_db_url: Annotated[str, Form()] = "",
     plex_url: Annotated[str, Form()] = "",
     plex_token: Annotated[str, Form()] = "",
     plex_library: Annotated[str, Form()] = "",
@@ -51,6 +54,7 @@ def check_discovery(
     overrides, _form = extract_overrides(
         musicseed_db_path=musicseed_db_path,
         plex_db_path=plex_db_path,
+        plex_db_url=plex_db_url,
         plex_url=plex_url,
         plex_token=plex_token,
         plex_library=plex_library,
@@ -69,6 +73,7 @@ def init_database(
     plex_token: Annotated[str, Form()] = "",
     plex_library: Annotated[str, Form()] = "",
     plex_db_path: Annotated[str, Form()] = "",
+    plex_db_url: Annotated[str, Form()] = "",
 ) -> dict:
     overrides, _form = extract_overrides(
         musicseed_db_path=musicseed_db_path,
@@ -79,6 +84,7 @@ def init_database(
         plex_token=plex_token,
         plex_library=plex_library,
         plex_db_path=plex_db_path,
+        plex_db_url=plex_db_url,
     )
     apply_config_and_init_db(**overrides)
     result = run_discovery()
@@ -95,6 +101,7 @@ def save_config(
     plex_token: Annotated[str, Form()] = "",
     plex_library: Annotated[str, Form()] = "",
     plex_db_path: Annotated[str, Form()] = "",
+    plex_db_url: Annotated[str, Form()] = "",
 ) -> dict:
     overrides, _form = extract_overrides(
         musicseed_db_path=musicseed_db_path,
@@ -105,6 +112,7 @@ def save_config(
         plex_token=plex_token,
         plex_library=plex_library,
         plex_db_path=plex_db_path,
+        plex_db_url=plex_db_url,
     )
     save_config_overrides(**overrides)
     result = run_discovery()

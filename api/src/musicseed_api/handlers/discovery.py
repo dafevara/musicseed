@@ -16,7 +16,8 @@ from musicseed.services.plex_discovery import DiscoveredPlexServer, discover_ple
 DB_BLOCKERS = frozenset({Reason.NOT_A_FILE, Reason.NOT_WRITABLE, Reason.PARENT_NOT_WRITABLE})
 
 DISCOVERY_KEYS = frozenset({
-    "musicseed_db_path", "plex_db_path", "plex_url", "plex_token", "plex_library",
+    "musicseed_db_path", "plex_db_path", "plex_db_url", "plex_url", "plex_token",
+    "plex_library",
 })
 
 _SECRET_FIELDS = frozenset({"plex_token", "spotify_client_secret", "listenbrainz_token"})
@@ -70,6 +71,7 @@ def _apply_config_overrides(
     plex_token: str = "",
     plex_library: str = "",
     plex_db_path: str = "",
+    plex_db_url: str = "",
 ) -> bool:
     """Apply non-blank overrides to ``cfg`` in place; return True if anything changed."""
     changed = False
@@ -97,6 +99,9 @@ def _apply_config_overrides(
     if plex_db_path:
         cfg.plex.db_path = plex_db_path
         changed = True
+    if plex_db_url:
+        cfg.plex.db_http_url = plex_db_url
+        changed = True
     return changed
 
 
@@ -109,6 +114,7 @@ def save_config_overrides(
     plex_token: str = "",
     plex_library: str = "",
     plex_db_path: str = "",
+    plex_db_url: str = "",
 ) -> bool:
     """Persist setup overrides to config without any side effects.
 
@@ -132,6 +138,7 @@ def save_config_overrides(
         plex_token=plex_token,
         plex_library=plex_library,
         plex_db_path=plex_db_path,
+        plex_db_url=plex_db_url,
     )
     if changed:
         save_config(cfg)
@@ -150,6 +157,7 @@ def apply_config_and_init_db(
     plex_token: str = "",
     plex_library: str = "",
     plex_db_path: str = "",
+    plex_db_url: str = "",
 ) -> None:
     """Persist validated setup overrides to config and create the database.
 
@@ -168,5 +176,6 @@ def apply_config_and_init_db(
         plex_token=plex_token,
         plex_library=plex_library,
         plex_db_path=plex_db_path,
+        plex_db_url=plex_db_url,
     )
     initialize_database()
