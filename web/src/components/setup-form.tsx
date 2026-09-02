@@ -10,7 +10,7 @@ const FIELD_FOR_MISSING: Record<string, string[]> = {
   plex_server: ["plexUrl"],
   plex_library: ["plexLibrary"],
   plex_db_path: ["plexDbPath"],
-  plex_db_url: ["plexDbUrl"],
+  plex_db_ssh: ["plexDbSsh"],
   db_location: ["musicseedDbPath"],
   enrichment_credentials: ["listenbrainzToken", "spotifyId", "spotifySecret"],
 };
@@ -28,7 +28,7 @@ export function SetupForm({
   const [plexToken, setPlexToken] = useState("");
   const [plexLibrary, setPlexLibrary] = useState("");
   const [plexDbPath, setPlexDbPath] = useState("");
-  const [plexDbUrl, setPlexDbUrl] = useState("");
+  const [plexDbSsh, setPlexDbSsh] = useState("");
   const [remotePlex, setRemotePlex] = useState(false);
   const [musicseedDbPath, setMusicseedDbPath] = useState("");
   const [spotifyId, setSpotifyId] = useState("");
@@ -47,7 +47,7 @@ export function SetupForm({
     if (plexToken.trim()) vals.plex_token = plexToken.trim();
     if (plexLibrary.trim()) vals.plex_library = plexLibrary.trim();
     if (remotePlex) {
-      if (plexDbUrl.trim()) vals.plex_db_url = plexDbUrl.trim();
+      if (plexDbSsh.trim()) vals.plex_db_ssh = plexDbSsh.trim();
     } else if (plexDbPath.trim()) {
       vals.plex_db_path = plexDbPath.trim();
     }
@@ -100,7 +100,7 @@ export function SetupForm({
             />
           </label>
         )}
-        {(!visible || visible.has("plexDbPath") || visible.has("plexDbUrl")) && (
+        {(!visible || visible.has("plexDbPath") || visible.has("plexDbSsh")) && (
           <div className="grid gap-2">
             <label className="flex items-center gap-2 text-sm">
               <input
@@ -108,7 +108,7 @@ export function SetupForm({
                 checked={remotePlex}
                 onChange={(e) => setRemotePlex(e.target.checked)}
               />
-              Plex is on another machine (use a snapshot URL)
+              Plex is on another machine (fetch the database over SSH)
             </label>
             {!remotePlex ? (
               <label className="grid gap-1 text-sm">
@@ -125,15 +125,15 @@ export function SetupForm({
               </label>
             ) : (
               <label className="grid gap-1 text-sm">
-                Plex database snapshot URL{" "}
+                SSH target{" "}
                 <span className="text-[var(--muted)]">
-                  (run scripts/serve-plex-db-snapshot.sh on the Plex host first)
+                  (scp-style — your ~/.ssh keys are used)
                 </span>
                 <input
                   type="text"
-                  value={plexDbUrl}
-                  onChange={(e) => setPlexDbUrl(e.target.value)}
-                  placeholder="http://nas.local:9000/plex-dbs"
+                  value={plexDbSsh}
+                  onChange={(e) => setPlexDbSsh(e.target.value)}
+                  placeholder="user@nas.local:/volume1/Plex/…/Databases"
                 />
               </label>
             )}

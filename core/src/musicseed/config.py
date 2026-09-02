@@ -94,10 +94,11 @@ class PlexConfig(BaseModel):
     token: str = ""
     library: str = "Music"
     db_path: str = Field(default_factory=default_plex_db_path)
-    # Optional base URL serving consistent snapshots of the two Plex SQLite
-    # files (``com.plexapp.plugins.library.db`` and its ``.blobs.db`` sibling)
-    # for remote Plex servers. Empty means "use the local ``db_path``".
-    db_http_url: str = ""
+    # Optional scp-style SSH target for a remote Plex server, e.g.
+    # ``"admin@nas.local:/volume1/Plex/.../Databases"``. When set, MusicSeed
+    # fetches the two Plex SQLite files (plus their ``-wal`` sidecars) over
+    # scp on each import. Empty means "use the local ``db_path``".
+    db_ssh_target: str = ""
 
     @property
     def db_path_expanded(self) -> Path:

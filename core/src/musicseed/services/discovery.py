@@ -9,12 +9,12 @@ instead of parsing exceptions. Plex tokens are never included in results.
 
 import os
 import sqlite3
+import subprocess
 from enum import StrEnum
 from pathlib import Path
 from urllib.parse import quote
 from xml.etree import ElementTree
 
-import httpx
 from pydantic import BaseModel
 
 from musicseed.clients.plex import PlexClient
@@ -32,6 +32,7 @@ from musicseed.plex_db_source import (
     PLEX_BLOBS_DB_NAME,
     PLEX_LIBRARY_DB_NAME,
     SQLITE_HEADER,
+    parse_ssh_target,
 )
 
 
@@ -279,46 +280,47 @@ def _discover_file(candidates: list[tuple[Path, str]]) -> FileDiscovery:
     return FileDiscovery(candidates=probed, selected=selected, ok=selected is not None)
 
 
-def _probe_http(url: str) -> PathCandidate:
-    """Probe a remotely served SQLite snapshot (reachability + header).
-
-    Fetches only the first 16 bytes (the SQLite magic header) via an HTTP
-    range request; servers that ignore ranges simply return the whole file,
-    which is still fine for the header check.
-    """
+def _probe_ssh(host: str, remote_dir: str, filename: str) -> PathCandidate:
+    """Probe a remote SQLite file over SSH (reachability + presence)."""
+    remote_path = f"{remote_dir}/{filename}"
+    target = f"{host}:{remote_path}"
     try:
-        resp = httpx.get(
-            url, headers={"Range": "bytes=0-15"},
-            follow_redirects=True, timeout=5.0,
+        result = subprocess.run(
+            [
+                "ssh", "-q", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5",
+                host, f"test -f '{remote_path}'",
+            ],
+            capture_output=True, timeout=10.0,
         )
-    except httpx.HTTPError:
+    except (subprocess.TimeoutExpired, OSError):
         return PathCandidate(
-            path=url, source="http", exists=False, usable=False,
-            reason=Reason.UNREACHABLE, detail=f"Could not reach {url}.",
+            path=target, source="ssh", exists=False, usable=False,
+            reason=Reason.UNREACHABLE, detail=f"Could not reach {host} over SSH.",
         )
-    if resp.status_code == 404:
+    if result.returncode == 0:
         return PathCandidate(
-            path=url, source="http", exists=False, usable=False,
-            reason=Reason.NOT_FOUND, detail=f"No file at {url}.",
+            path=target, source="ssh", exists=True, usable=True, reason=Reason.OK
         )
-    if resp.status_code not in (200, 206):
+    if result.returncode == 1:
         return PathCandidate(
-            path=url, source="http", exists=False, usable=False,
-            reason=Reason.ERROR, detail=f"HTTP {resp.status_code} from {url}.",
+            path=target, source="ssh", exists=False, usable=False,
+            reason=Reason.NOT_FOUND,
+            detail=f"No {filename} at {host}:{remote_dir}.",
         )
-    if resp.content[: len(SQLITE_HEADER)] != SQLITE_HEADER:
-        return PathCandidate(
-            path=url, source="http", exists=True, usable=False,
-            reason=Reason.INVALID_SQLITE, detail="Not a SQLite database.",
-        )
+    detail = (
+        (result.stderr or b"").decode(errors="replace").strip()
+        or f"ssh exited with code {result.returncode}"
+    )
     return PathCandidate(
-        path=url, source="http", exists=True, usable=True, reason=Reason.OK
+        path=target, source="ssh", exists=False, usable=False,
+        reason=Reason.UNREACHABLE, detail=f"SSH to {host} failed: {detail}",
     )
 
 
-def _discover_http_file(base_url: str, filename: str) -> FileDiscovery:
-    """Build a single-candidate ``FileDiscovery`` for one remote snapshot file."""
-    candidate = _probe_http(f"{base_url.rstrip('/')}/{filename}")
+def _discover_ssh_file(target: str, filename: str) -> FileDiscovery:
+    """Build a single-candidate ``FileDiscovery`` for one remote SSH file."""
+    host, remote_dir = parse_ssh_target(target)
+    candidate = _probe_ssh(host, remote_dir, filename)
     return FileDiscovery(
         candidates=[candidate],
         selected=candidate if candidate.usable else None,
@@ -451,7 +453,7 @@ def discover(
     *,
     musicseed_db_path: str | None = None,
     plex_db_path: str | None = None,
-    plex_db_url: str | None = None,
+    plex_db_ssh: str | None = None,
     plex_url: str | None = None,
     plex_token: str | None = None,
     plex_library: str | None = None,
@@ -469,7 +471,7 @@ def discover(
     Args:
         musicseed_db_path: override for the MusicSeed database path.
         plex_db_path: override for the Plex library database path.
-        plex_db_url: override for the HTTP snapshot base URL (remote Plex).
+        plex_db_ssh: override for the scp-style SSH target (remote Plex).
         plex_url: override for the Plex server URL.
         plex_token: override for the Plex token.
         plex_library: override for the Plex library name.
@@ -496,13 +498,12 @@ def discover(
         Path(os.path.expanduser(db_value)), db_source
     )
 
-    # Plex library + blobs databases. When a snapshot URL is configured (or
+    # Plex library + blobs databases. When an SSH target is configured (or
     # overridden) the source is remote; otherwise use the local filesystem.
-    http_url = (plex_db_url or cfg.plex.db_http_url).strip() or None
-    if http_url:
-        base = http_url.rstrip("/")
-        plex_library_db = _discover_http_file(base, PLEX_LIBRARY_DB_NAME)
-        plex_blobs_db = _discover_http_file(base, PLEX_BLOBS_DB_NAME)
+    ssh_target = (plex_db_ssh or cfg.plex.db_ssh_target).strip() or None
+    if ssh_target:
+        plex_library_db = _discover_ssh_file(ssh_target, PLEX_LIBRARY_DB_NAME)
+        plex_blobs_db = _discover_ssh_file(ssh_target, PLEX_BLOBS_DB_NAME)
     else:
         # Plex library database (candidates: override/config value, then the default)
         plex_value = plex_db_path or cfg.plex.db_path
@@ -568,7 +569,7 @@ def discover(
     if not musicseed_db.ok:
         missing.append("db_location")
     if not plex_library_db.ok:
-        missing.append("plex_db_url" if http_url else "plex_db_path")
+        missing.append("plex_db_ssh" if ssh_target else "plex_db_path")
     if not plex_server.ok:
         if plex_server.reason in (Reason.MISSING_TOKEN, Reason.UNAUTHORIZED):
             missing.append("plex_token")

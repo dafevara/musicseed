@@ -17,8 +17,8 @@ actions.
   `~/.local/share/musicseed/musicseed.db`, WAL mode) — no database server.
 - Plex SQLite database as a read-only import source.
 - Plex blobs SQLite database as a read-only source of sonic analysis vectors, imported into
-  MusicSeed's local `track_vectors` store (MUS-83); a remote snapshot can be served over HTTP
-  via `plex.db_http_url` (see [Remote Plex DB access](#remote-plex-db-access)).
+  MusicSeed's local `track_vectors` store (MUS-83); a remote Plex host's files can be fetched
+  over scp via `plex.db_ssh_target` (see [Remote Plex DB access](#remote-plex-db-access)).
 - Optional Plex HTTP API for playlist creation (`core/src/musicseed/clients/plex_api.py`).
 - Optional external HTTP APIs: ListenBrainz and Spotify.
 - Local logs under `~/.local/share/musicseed/logs/`.
@@ -66,31 +66,22 @@ to retrieve one from app.plex.tv.
 
 By default MusicSeed reads Plex's two SQLite files (library metadata + blobs/sonic vectors)
 from the local filesystem. For a remote Plex server (e.g. a NAS on the LAN), set
-`plex.db_http_url` to a base URL that serves consistent snapshots of both files:
-
-- `com.plexapp.plugins.library.db`
-- `com.plexapp.plugins.library.blobs.db`
-
-The snapshots must be **consistent** copies produced on the Plex host with `VACUUM INTO` (or
-`sqlite3 .backup`), not the live WAL files. A helper is provided:
-
-```bash
-# run on the Plex host
-scripts/serve-plex-db-snapshot.sh [PLEX_DATA_DIR] [PORT]
-```
-
-Then configure MusicSeed:
+`plex.db_ssh_target` to an scp-style target for the directory that holds them:
 
 ```yaml
 plex:
-  db_http_url: "http://<plex-host-ip>:9000"
+  db_ssh_target: "admin@nas.local:/volume1/Plex/.../Databases"
 ```
 
-MusicSeed downloads the snapshots into `~/.cache/musicseed/plex-dbs/` at import time and
-reads them from there; `import` and `import-plex-sonic` re-fetch fresh snapshots. The
-recommendation runtime never touches the remote files. The served directory is LAN-only and
-unauthenticated; it contains metadata and sonic vectors but never the Plex token (that stays
-in `plex.token`).
+MusicSeed fetches the files (plus their `-wal`/`-shm` sidecars) over `scp` into
+`~/.cache/musicseed/plex-dbs/` at import time, reusing the user's existing `~/.ssh`
+configuration (keys, agent, `~/.ssh/config` aliases and ports). `import` and
+`import-plex-sonic` re-fetch on each run; the recommendation runtime never touches the remote
+files.
+
+SSH access must be set up once on the Plex host (public-key auth recommended). The fetched
+files contain metadata and sonic vectors but never the Plex token (that stays in
+`plex.token`).
 
 ## Web UI, First-Run Wizard, And Settings
 

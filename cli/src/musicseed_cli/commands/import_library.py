@@ -16,12 +16,12 @@ def import_library(
         Optional[Path],
         typer.Option("--plex-db", help="Path to Plex SQLite database"),
     ] = None,
-    plex_db_url: Annotated[
+    plex_db_ssh: Annotated[
         Optional[str],
         typer.Option(
-            "--plex-db-url",
-            help="Base URL of a remote Plex DB snapshot (serves the library "
-            "and blobs .db files)",
+            "--plex-db-ssh",
+            help="scp-style SSH target of a remote Plex database directory "
+            "(e.g. user@nas.local:/volume1/Plex/.../Databases)",
         ),
     ] = None,
     library: Annotated[
@@ -37,8 +37,8 @@ def import_library(
 
     Reads artists, albums, tracks, and play history from Plex's own SQLite
     database into MusicSeed. Incremental by default — pass --full for a
-    complete re-import. Use --plex-db-url to import from a remote Plex host
-    that serves a consistent snapshot over HTTP.
+    complete re-import. Use --plex-db-ssh to fetch the database from a remote
+    Plex host over scp.
     """
     from musicseed.services import library as library_service
 
@@ -47,14 +47,14 @@ def import_library(
     target_library = library or config.plex.library
 
     console.print("\n[bold]Importing from Plex database[/bold]")
-    console.print(f"  Database: {plex_db_url or db_path}")
+    console.print(f"  Database: {plex_db_ssh or db_path}")
     console.print(f"  Library: {target_library}")
     console.print(f"  Mode: {'Full' if full else 'Incremental'}\n")
 
     try:
         result = library_service.import_library(
             plex_db_path=plex_db,
-            plex_db_url=plex_db_url,
+            plex_db_ssh=plex_db_ssh,
             library_name=library,
             full_import=full,
         )
@@ -66,8 +66,8 @@ def import_library(
     except NotFoundError as e:
         console.print(f"[red]Error: {e}[/red]")
         console.print(
-            "\nPlease specify the path with --plex-db, the URL with "
-            "--plex-db-url, or update your config file."
+            "\nPlease specify the path with --plex-db, the SSH target with "
+            "--plex-db-ssh, or update your config file."
         )
         raise typer.Exit(1)
     except Exception as e:
