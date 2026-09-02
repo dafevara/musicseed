@@ -53,7 +53,10 @@ def parse_ssh_target(target: str) -> tuple[str | None, str, str]:
         user, host = None, host_spec
     if not host:
         raise NotFoundError(f"Invalid SSH target '{target}'; missing host")
-    return user, host, remote_dir.rstrip("/")
+    remote_dir = remote_dir.rstrip("/")
+    # Tolerate shell-style escaped spaces (common when pasting from a shell).
+    remote_dir = remote_dir.replace("\\ ", " ")
+    return user, host, remote_dir
 
 
 def _cache_dir(target: str) -> Path:
@@ -84,6 +87,18 @@ def _open_ssh(
         connect_kwargs["allow_agent"] = True
     client.connect(**connect_kwargs)
     return client
+
+
+def _resolve_remote_dir(sftp: paramiko.SFTPClient, remote_dir: str) -> str:
+    """Expand a leading ``~`` to the remote user's home directory.
+
+    SFTP does not expand ``~`` the way a shell does, so resolve it via the
+    server's realpath of the current (home) directory.
+    """
+    if remote_dir == "~" or remote_dir.startswith("~/"):
+        home = sftp.normalize(".")
+        remote_dir = home + remote_dir[1:]
+    return remote_dir
 
 
 def _sftp_get(
@@ -136,6 +151,7 @@ def ssh_file_exists(
     try:
         sftp = client.open_sftp()
         try:
+            remote_dir = _resolve_remote_dir(sftp, remote_dir)
             sftp.stat(f"{remote_dir}/{filename}")
             return True, None
         except FileNotFoundError:
@@ -157,6 +173,7 @@ def _fetch_via_sftp(config: Config, target: str, dest_dir: Path) -> None:
     try:
         sftp = client.open_sftp()
         try:
+            remote_dir = _resolve_remote_dir(sftp, remote_dir)
             for filename in (PLEX_LIBRARY_DB_NAME, PLEX_BLOBS_DB_NAME):
                 _sftp_get(
                     sftp, remote_dir, filename, dest_dir,

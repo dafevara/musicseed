@@ -53,6 +53,7 @@ def test_parse_ssh_target():
         "user", "nas.local", "/volume1/Plex",
     )
     assert pds.parse_ssh_target("nas:/a/b/") == (None, "nas", "/a/b")
+    assert pds.parse_ssh_target("nas:/a\\ b") == (None, "nas", "/a b")
     with pytest.raises(NotFoundError):
         pds.parse_ssh_target("missing-colon")
 
@@ -165,3 +166,29 @@ def test_ssh_file_exists_unreachable(monkeypatch):
     status, error = pds.ssh_file_exists("u@h:/d", "file.db")
     assert status is None
     assert error and "connection refused" in error
+
+
+def test_ssh_file_exists_expands_tilde(monkeypatch):
+    statted: list[str] = []
+
+    class _Sftp:
+        def normalize(self, path):
+            return "/home/u"
+
+        def stat(self, path):
+            statted.append(path)
+            return object()
+
+        def close(self):
+            pass
+
+    class _Client:
+        def open_sftp(self):
+            return _Sftp()
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(pds, "_open_ssh", lambda *a, **k: _Client())
+    assert pds.ssh_file_exists("u@h:~/Library/App Support", "file.db") == (True, None)
+    assert statted == ["/home/u/Library/App Support/file.db"]
