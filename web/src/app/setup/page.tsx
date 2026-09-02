@@ -62,6 +62,7 @@ export default function SetupPage() {
   const [step, setStep] = useState<Step>("detect");
   const [dbError, setDbError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
   const [jobId, setJobId] = useState<number | null>(null);
   const [jobKind, setJobKind] = useState<string | null>(null);
   const [formValues, setFormValues] = useState<Record<string, string>>({});
@@ -76,6 +77,7 @@ export default function SetupPage() {
   }
 
   async function bootstrap() {
+    setSaved(false);
     try {
       const d = await api.get<DiscoveryResponse>("/discovery");
       setData(d);
@@ -97,11 +99,13 @@ export default function SetupPage() {
   async function handleRecheck(vals: Record<string, string>) {
     setFormValues(vals);
     setSaveError(null);
+    setSaved(false);
     try {
       // Persist (save-only) so the selected server, token, and library name
       // survive navigation, then return the fresh discovery result.
       const result = await api.post<DiscoveryResponse>("/discovery/config", vals);
       setData(result);
+      setSaved(true);
       setStep(resolveStep(result, libraryStatus));
     } catch (e) {
       setSaveError(String(e).replace("Error: ", ""));
@@ -239,6 +243,45 @@ export default function SetupPage() {
       {step === "review" && (
         <>
           <DiscoveryChecks result={data.result} ready={data.ready} />
+
+          {saved && (
+            <div className="flash flash-ok">
+              <p className="m-0">
+                Saved &amp; re-checked.{" "}
+                {data.ready
+                  ? "All checks passed — continue below."
+                  : "Still need to fix the highlighted items, then save &amp; re-check again."}
+              </p>
+            </div>
+          )}
+
+          <section className="panel">
+            <h2 className="mt-0 text-lg font-semibold">Status</h2>
+            <ul className="list-disc pl-5 m-0 text-sm grid gap-1">
+              <li>
+                Plex server:{" "}
+                {plex.ok
+                  ? "connected"
+                  : `not connected — ${plex.detail || plex.reason || "unknown"}`}
+              </li>
+              <li>
+                Plex library database:{" "}
+                {data.result.plex_library_db.ok
+                  ? "found"
+                  : `not found — ${data.result.plex_library_db.candidates[0]?.detail || "check the path"}`}
+              </li>
+              <li>
+                Plex blobs database:{" "}
+                {data.result.plex_blobs_db.ok
+                  ? "found"
+                  : "not found (sonic vectors can't be imported until it is)"}
+              </li>
+              <li>
+                MusicSeed database:{" "}
+                {data.result.musicseed_db.exists ? "exists" : "not created yet"}
+              </li>
+            </ul>
+          </section>
 
           {dbError && (
             <div className="flash flash-error">
