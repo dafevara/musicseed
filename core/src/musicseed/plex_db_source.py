@@ -119,29 +119,31 @@ def ssh_file_exists(
     password: str = "",
     port: int = 22,
     timeout: float = 10.0,
-) -> bool | None:
-    """Return True/False whether ``filename`` exists over SSH, or None on failure.
+) -> tuple[bool | None, str | None]:
+    """Probe whether ``filename`` exists over SSH.
 
-    ``None`` means the connection/auth failed (host unreachable, bad
-    credentials, etc.) — distinct from ``False`` (connected but file missing).
+    Returns ``(exists, error)``:
+
+    - ``(True, None)`` — file present.
+    - ``(False, None)`` — connected but file missing.
+    - ``(None, reason)`` — connection/auth failed, with a readable reason.
     """
     user, host, remote_dir = parse_ssh_target(target)
     try:
         client = _open_ssh(user, host, port, password, timeout=timeout)
     except (paramiko.SSHException, OSError) as e:
-        logger.debug(f"SSH probe failed for {host}: {e}")
-        return None
+        return None, f"{type(e).__name__}: {e}"
     try:
         sftp = client.open_sftp()
         try:
             sftp.stat(f"{remote_dir}/{filename}")
-            return True
+            return True, None
         except FileNotFoundError:
-            return False
+            return False, None
         finally:
             sftp.close()
-    except (paramiko.SSHException, OSError):
-        return None
+    except (paramiko.SSHException, OSError) as e:
+        return None, f"{type(e).__name__}: {e}"
     finally:
         client.close()
 

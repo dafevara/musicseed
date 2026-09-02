@@ -135,7 +135,7 @@ def test_ssh_file_exists_ok(monkeypatch):
             pass
 
     monkeypatch.setattr(pds, "_open_ssh", lambda *a, **k: _StatClient())
-    assert pds.ssh_file_exists("u@h:/d", "file.db") is True
+    assert pds.ssh_file_exists("u@h:/d", "file.db") == (True, None)
 
 
 def test_ssh_file_exists_missing(monkeypatch):
@@ -154,7 +154,7 @@ def test_ssh_file_exists_missing(monkeypatch):
             pass
 
     monkeypatch.setattr(pds, "_open_ssh", lambda *a, **k: _StatClient())
-    assert pds.ssh_file_exists("u@h:/d", "file.db") is False
+    assert pds.ssh_file_exists("u@h:/d", "file.db") == (False, None)
 
 
 def test_ssh_file_exists_unreachable(monkeypatch):
@@ -162,4 +162,6 @@ def test_ssh_file_exists_unreachable(monkeypatch):
         raise OSError("connection refused")
 
     monkeypatch.setattr(pds, "_open_ssh", fail)
-    assert pds.ssh_file_exists("u@h:/d", "file.db") is None
+    status, error = pds.ssh_file_exists("u@h:/d", "file.db")
+    assert status is None
+    assert error and "connection refused" in error

@@ -286,7 +286,7 @@ def _probe_ssh(
     """Probe a remote SQLite file over SSH (reachability + presence)."""
     _user, host, remote_dir = parse_ssh_target(target)
     path = f"{host}:{remote_dir}/{filename}"
-    exists = ssh_file_exists(target, filename, password=password, port=port)
+    exists, error = ssh_file_exists(target, filename, password=password, port=port)
     if exists is True:
         return PathCandidate(
             path=path, source="ssh", exists=True, usable=True, reason=Reason.OK
@@ -300,10 +300,7 @@ def _probe_ssh(
     return PathCandidate(
         path=path, source="ssh", exists=False, usable=False,
         reason=Reason.UNREACHABLE,
-        detail=(
-            f"Could not connect to {host} over SSH — check the host, port, "
-            "credentials, and that key auth is set up."
-        ),
+        detail=f"Could not connect to {host} over SSH: {error or 'unknown error'}",
     )
 
 

@@ -183,7 +183,7 @@ def test_ssh_source_probed_ok(
         "plex": {"db_ssh_target": "user@nas.local:/volume1/Plex/Databases"},
     })
 
-    monkeypatch.setattr(discovery, "ssh_file_exists", lambda *a, **k: True)
+    monkeypatch.setattr(discovery, "ssh_file_exists", lambda *a, **k: (True, None))
 
     result = discover(check_server=False, config=cfg)
 
@@ -201,7 +201,7 @@ def test_ssh_source_missing_reports_plex_db_ssh(
         "plex": {"db_ssh_target": "user@nas.local:/volume1/Plex/Databases"},
     })
 
-    monkeypatch.setattr(discovery, "ssh_file_exists", lambda *a, **k: False)
+    monkeypatch.setattr(discovery, "ssh_file_exists", lambda *a, **k: (False, None))
 
     result = discover(check_server=False, config=cfg)
 
