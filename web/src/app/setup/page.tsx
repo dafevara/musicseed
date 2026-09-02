@@ -20,6 +20,17 @@ const STEPS: { key: Step; label: string }[] = [
   { key: "done", label: "Done" },
 ];
 
+const MISSING_LABELS: Record<string, string> = {
+  plex_token: "Plex token",
+  plex_unreachable: "Plex server URL (unreachable)",
+  plex_server: "Plex server URL",
+  plex_library: "Plex library name",
+  plex_db_path: "Plex database path",
+  plex_db_ssh: "Plex SSH target",
+  db_location: "MusicSeed database location",
+  enrichment_credentials: "enrichment credentials",
+};
+
 function resolveStep(d: DiscoveryResponse, status: LibraryStatus | null): Step {
   const incomplete = d.result.first_run.import_incomplete
     || (status?.import_coverage && !status.import_coverage.ever_succeeded
@@ -247,12 +258,14 @@ export default function SetupPage() {
           <DiscoveryChecks result={data.result} ready={data.ready} />
 
           {saved && (
-            <div className="flash flash-ok">
+            <div className={data.ready ? "flash flash-ok" : "flash flash-warn"}>
               <p className="m-0">
                 Saved &amp; re-checked.{" "}
                 {data.ready
                   ? "All checks passed — continue below."
-                  : "Still need to fix the highlighted items, then save &amp; re-check again."}
+                  : `Still need: ${(data.result.missing_inputs || [])
+                      .map((k) => MISSING_LABELS[k] || k)
+                      .join(", ")}.`}
               </p>
             </div>
           )}
