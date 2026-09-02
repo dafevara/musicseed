@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Form, Query
+from musicseed.logging_config import get_logger
 
 from musicseed_api.handlers.discovery import (
     apply_config_and_init_db,
@@ -14,6 +15,21 @@ from musicseed_api.handlers.discovery import (
     save_config_overrides,
     wizard_ready,
 )
+
+logger = get_logger("api.routes.discovery")
+
+
+def _log_result(action: str, result) -> None:
+    lib = getattr(result, "plex_library_db", None)
+    detail = lib.candidates[0].detail if lib is not None and lib.candidates else None
+    logger.info(
+        "%s: ready=%s missing=%s library_db.ok=%s detail=%s",
+        action,
+        getattr(result, "ready", None),
+        getattr(result, "missing_inputs", None),
+        lib.ok if lib is not None else None,
+        detail,
+    )
 
 router = APIRouter(tags=["discovery"])
 
@@ -92,6 +108,7 @@ def init_database(
     )
     apply_config_and_init_db(**overrides)
     result = run_discovery()
+    _log_result("init-db", result)
     return {"ready": wizard_ready(result), "result": result.model_dump()}
 
 
@@ -124,4 +141,5 @@ def save_config(
     )
     save_config_overrides(**overrides)
     result = run_discovery()
+    _log_result("config saved", result)
     return {"ready": wizard_ready(result), "result": result.model_dump()}

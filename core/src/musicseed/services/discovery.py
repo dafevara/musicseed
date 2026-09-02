@@ -27,6 +27,7 @@ from musicseed.config import (
     plex_data_dir_candidates,
     plex_library_db_candidates,
 )
+from musicseed.logging_config import get_logger
 from musicseed.plex_db_source import (
     PLEX_BLOBS_DB_NAME,
     PLEX_LIBRARY_DB_NAME,
@@ -34,6 +35,8 @@ from musicseed.plex_db_source import (
     parse_ssh_target,
     ssh_file_exists,
 )
+
+logger = get_logger("discovery")
 
 
 def _plex_data_dir() -> Path:
@@ -288,20 +291,27 @@ def _probe_ssh(
     path = f"{host}:{remote_dir}/{filename}"
     exists, error = ssh_file_exists(target, filename, password=password, port=port)
     if exists is True:
-        return PathCandidate(
+        candidate = PathCandidate(
             path=path, source="ssh", exists=True, usable=True, reason=Reason.OK
         )
-    if exists is False:
-        return PathCandidate(
+    elif exists is False:
+        candidate = PathCandidate(
             path=path, source="ssh", exists=False, usable=False,
             reason=Reason.NOT_FOUND,
             detail=f"No {filename} at {host}:{remote_dir}.",
         )
-    return PathCandidate(
-        path=path, source="ssh", exists=False, usable=False,
-        reason=Reason.UNREACHABLE,
-        detail=f"Could not connect to {host} over SSH: {error or 'unknown error'}",
+    else:
+        candidate = PathCandidate(
+            path=path, source="ssh", exists=False, usable=False,
+            reason=Reason.UNREACHABLE,
+            detail=f"Could not connect to {host} over SSH: {error or 'unknown error'}",
+        )
+    logger.debug(
+        "SSH probe %s -> %s%s",
+        path, candidate.reason.value,
+        f": {candidate.detail}" if candidate.detail else "",
     )
+    return candidate
 
 
 def _discover_ssh_file(
@@ -606,6 +616,10 @@ def discover(
         reasons=first_run_reasons,
     )
 
+    logger.debug(
+        "discover: ready=%s missing=%s library_db=%s blobs=%s server=%s",
+        ready, missing, plex_library_db.ok, plex_blobs_db.ok, plex_server.ok,
+    )
     return DiscoveryResult(
         musicseed_db=musicseed_db,
         plex_library_db=plex_library_db,
