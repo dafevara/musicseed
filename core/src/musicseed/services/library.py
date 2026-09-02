@@ -151,6 +151,8 @@ def import_library(
     if plex_db_path is not None:
         db_path = plex_db_path
     else:
+        if config.plex.db_ssh_target and progress_callback is not None:
+            progress_callback(0, 0, "downloading Plex database")
         db_path = resolve_plex_dbs(config, refresh=True, ssh_target=plex_db_ssh).library_db
     target_library = library_name or config.plex.library
 

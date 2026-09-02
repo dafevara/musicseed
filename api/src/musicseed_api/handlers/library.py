@@ -34,8 +34,9 @@ def run_import_job(job_id: int) -> None:
 
     def on_progress(current: int, total: int, phase: str) -> None:
         phases[phase] = {"current": current, "total": total}
+        checkpoint = phase if phase == "downloading Plex database" else f"importing {phase}"
         update_progress(
-            job_id, current, total, f"importing {phase}…", phases=phases,
+            job_id, current, total, f"{checkpoint}…", phases=phases,
         )
 
     result = import_library(progress_callback=on_progress, should_cancel=should_cancel)

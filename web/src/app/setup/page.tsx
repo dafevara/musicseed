@@ -423,7 +423,21 @@ export default function SetupPage() {
       )}
 
       {(step === "importing" || step === "enriching") && jobId && (
-        <JobProgress jobId={jobId} kind={jobKind!} onDone={handleJobDone} />
+        <>
+          <section className="panel">
+            <h2 className="mt-0 text-lg font-semibold">
+              {jobKind === "import" ? "Importing your library" : "Enriching your library"}
+            </h2>
+            <p className="muted text-sm m-0">
+              {jobKind === "import"
+                ? "Reading artists, albums, tracks, and play history from Plex into " +
+                  "MusicSeed's local database. For a remote Plex server it first downloads " +
+                  "the database files — this can take a few minutes."
+                : "Fetching popularity and metadata from ListenBrainz or Spotify for your tracks."}
+            </p>
+          </section>
+          <JobProgress jobId={jobId} kind={jobKind!} onDone={handleJobDone} />
+        </>
       )}
     </>
   );

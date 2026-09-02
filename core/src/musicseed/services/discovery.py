@@ -593,9 +593,12 @@ def discover(
     library_empty = track_count == 0
     import_incomplete = False
     if not db_missing and not library_empty:
+        from musicseed.context import MusicSeedContext
         from musicseed.services.library import get_import_coverage
 
-        coverage = get_import_coverage()
+        # Probe against the same config discover was given, not the process
+        # global config (which may differ when a surface passes an override).
+        coverage = get_import_coverage(context=MusicSeedContext(cfg))
         import_incomplete = bool(coverage and coverage.setup_incomplete)
     first_run_reasons = [
         reason
