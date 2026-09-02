@@ -64,17 +64,22 @@ def _fetch(url: str, dest: Path) -> None:
     dest.write_bytes(resp.content)
 
 
-def resolve_plex_dbs(config: Config, *, refresh: bool = False) -> ResolvedPlexDbs:
+def resolve_plex_dbs(
+    config: Config, *, refresh: bool = False, http_url: str | None = None
+) -> ResolvedPlexDbs:
     """Return local paths to the Plex library and blobs databases.
 
-    With no ``db_http_url`` configured, returns the configured local paths.
-    With one, returns a locally cached snapshot, re-downloading both files
-    when ``refresh`` is True (import time). When ``refresh`` is False and no
-    snapshot is cached yet, raises ``NotFoundError`` rather than fetching.
+    With no ``db_http_url`` configured (or overridden), returns the configured
+    local paths. Otherwise returns a locally cached snapshot, re-downloading
+    both files when ``refresh`` is True (import time). When ``refresh`` is
+    False and no snapshot is cached yet, raises ``NotFoundError`` rather than
+    fetching.
 
     Args:
         config: resolved MusicSeed config.
         refresh: force a re-download of the remote snapshot.
+        http_url: per-call override for the snapshot base URL; falls back to
+            ``config.plex.db_http_url``.
 
     Returns:
         The resolved local paths and the source label (``"local"`` or
@@ -84,14 +89,15 @@ def resolve_plex_dbs(config: Config, *, refresh: bool = False) -> ResolvedPlexDb
         NotFoundError: if the HTTP snapshot cannot be fetched or (when not
             refreshing) has not been cached yet.
     """
-    if not config.plex.db_http_url:
+    url = http_url or config.plex.db_http_url
+    if not url:
         return ResolvedPlexDbs(
             library_db=config.plex.db_path_expanded,
             blobs_db=config.plex.blobs_db_path_expanded,
             source="local",
         )
 
-    base = config.plex.db_http_url.rstrip("/")
+    base = url.rstrip("/")
     target_dir = _cache_dir(base)
     library_db = target_dir / PLEX_LIBRARY_DB_NAME
     blobs_db = target_dir / PLEX_BLOBS_DB_NAME

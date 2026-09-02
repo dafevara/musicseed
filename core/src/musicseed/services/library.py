@@ -117,6 +117,7 @@ def optimize_database(context: MusicSeedContext | None = None) -> list[IndexResu
 
 def import_library(
     plex_db_path: Path | None = None,
+    plex_db_url: str | None = None,
     library_name: str | None = None,
     full_import: bool = False,
     progress_callback: Callable[[int, int, str], None] | None = None,
@@ -126,8 +127,10 @@ def import_library(
     """Import metadata from the Plex database into the local library.
 
     Args:
-        plex_db_path: path to the Plex SQLite database; defaults to the
-            configured ``plex.db_path``.
+        plex_db_path: path to the Plex SQLite database; overrides the
+            configured source when given.
+        plex_db_url: base URL of a remote Plex DB snapshot; overrides the
+            configured ``plex.db_http_url`` when given.
         library_name: Plex library to import; defaults to the configured
             ``plex.library``.
         full_import: re-import everything instead of an incremental import.
@@ -148,7 +151,7 @@ def import_library(
     if plex_db_path is not None:
         db_path = plex_db_path
     else:
-        db_path = resolve_plex_dbs(config, refresh=True).library_db
+        db_path = resolve_plex_dbs(config, refresh=True, http_url=plex_db_url).library_db
     target_library = library_name or config.plex.library
 
     if not db_path.exists():

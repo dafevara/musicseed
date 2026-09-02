@@ -67,6 +67,22 @@ def test_http_source_missing_cache_without_refresh_raises(monkeypatch, tmp_path)
         pds.resolve_plex_dbs(cfg, refresh=False)
 
 
+def test_http_url_override_wins(monkeypatch, tmp_path):
+    cfg = _config(tmp_path)  # no configured db_http_url
+    cache = tmp_path / "cache"
+    monkeypatch.setattr(pds, "_cache_dir", lambda url: cache)
+    monkeypatch.setattr(
+        pds.httpx, "get",
+        lambda url, **kwargs: _FakeResponse(pds.SQLITE_HEADER + b"x"),
+    )
+
+    resolved = pds.resolve_plex_dbs(
+        cfg, refresh=True, http_url="http://nas.local:9000/plex-dbs"
+    )
+    assert resolved.source == "http"
+    assert resolved.library_db.parent == cache
+
+
 def test_http_fetch_error_maps_to_notfound(monkeypatch, tmp_path):
     cfg = _config(tmp_path, db_http_url="http://nas.local:9000/plex-dbs")
     monkeypatch.setattr(pds, "_cache_dir", lambda url: tmp_path / "cache")
