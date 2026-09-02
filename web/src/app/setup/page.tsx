@@ -120,6 +120,7 @@ export default function SetupPage() {
         plex_token: formValues.plex_token || "",
         plex_library: formValues.plex_library || data.result.plex_server.library || "",
         plex_db_path: formValues.plex_db_path || data.result.plex_library_db.selected?.path || "",
+        plex_db_url: formValues.plex_db_url || "",
       });
       await bootstrap();
     } catch (e) {

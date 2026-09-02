@@ -9,7 +9,8 @@ const FIELD_FOR_MISSING: Record<string, string[]> = {
   plex_unreachable: ["plexUrl"],
   plex_server: ["plexUrl"],
   plex_library: ["plexLibrary"],
-  plex_db_path: ["plexDbPath"],
+  plex_db_path: ["plexDbPath", "plexDbUrl"],
+  plex_db_url: ["plexDbUrl"],
   db_location: ["musicseedDbPath"],
   enrichment_credentials: ["listenbrainzToken", "spotifyId", "spotifySecret"],
 };
@@ -27,6 +28,7 @@ export function SetupForm({
   const [plexToken, setPlexToken] = useState("");
   const [plexLibrary, setPlexLibrary] = useState("");
   const [plexDbPath, setPlexDbPath] = useState("");
+  const [plexDbUrl, setPlexDbUrl] = useState("");
   const [musicseedDbPath, setMusicseedDbPath] = useState("");
   const [spotifyId, setSpotifyId] = useState("");
   const [spotifySecret, setSpotifySecret] = useState("");
@@ -44,6 +46,7 @@ export function SetupForm({
     if (plexToken.trim()) vals.plex_token = plexToken.trim();
     if (plexLibrary.trim()) vals.plex_library = plexLibrary.trim();
     if (plexDbPath.trim()) vals.plex_db_path = plexDbPath.trim();
+    if (plexDbUrl.trim()) vals.plex_db_url = plexDbUrl.trim();
     if (musicseedDbPath.trim()) vals.musicseed_db_path = musicseedDbPath.trim();
     if (spotifyId.trim()) vals.spotify_client_id = spotifyId.trim();
     if (spotifySecret.trim()) vals.spotify_client_secret = spotifySecret.trim();
@@ -101,6 +104,20 @@ export function SetupForm({
               value={plexDbPath}
               onChange={(e) => setPlexDbPath(e.target.value)}
               placeholder="…/com.plexapp.plugins.library.db"
+            />
+          </label>
+        )}
+        {(!visible || visible.has("plexDbUrl")) && (
+          <label className="grid gap-1 text-sm">
+            Plex database snapshot URL{" "}
+            <span className="text-[var(--muted)]">
+              (remote Plex — serves both .db files)
+            </span>
+            <input
+              type="text"
+              value={plexDbUrl}
+              onChange={(e) => setPlexDbUrl(e.target.value)}
+              placeholder="http://nas.local:9000/plex-dbs"
             />
           </label>
         )}
