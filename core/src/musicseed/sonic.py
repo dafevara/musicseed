@@ -100,8 +100,18 @@ class SonicVectors:
             return None
         return self._matrix[index]
 
-    def nearest(self, query: np.ndarray, limit: int) -> list[int]:
-        """Return the Plex ids most cosine-similar to ``query``, best first."""
+    def nearest(
+        self, query: np.ndarray, limit: int, *, allowed: set[int] | None = None
+    ) -> list[int]:
+        """Return the Plex ids most cosine-similar to ``query``, best first.
+
+        Args:
+            query: the seed embedding (L2-normalized here).
+            limit: maximum number of neighbors to return.
+            allowed: optional set of Plex ids to restrict the search to. Ids
+                without a stored vector are ignored. When ``None``, every
+                stored vector is a candidate.
+        """
         if limit <= 0 or len(self) == 0:
             return []
 
@@ -110,11 +120,26 @@ class SonicVectors:
         if norm == 0:
             return []
 
-        similarities = self._normalized @ (vector / norm)
+        if allowed is None:
+            matrix = self._normalized
+            plex_ids = self._plex_ids
+        else:
+            indices = [
+                self._index_by_plex_id[plex_id]
+                for plex_id in allowed
+                if plex_id in self._index_by_plex_id
+            ]
+            if not indices:
+                return []
+            idx = np.asarray(indices, dtype=np.int64)
+            matrix = self._normalized[idx]
+            plex_ids = self._plex_ids[idx]
+
+        similarities = matrix @ (vector / norm)
         limit = min(limit, similarities.shape[0])
         top = np.argpartition(-similarities, limit - 1)[:limit]
         top = top[np.argsort(-similarities[top])]
-        return [int(plex_id) for plex_id in self._plex_ids[top]]
+        return [int(plex_id) for plex_id in plex_ids[top]]
 
 
 def load_sonic_vectors(
