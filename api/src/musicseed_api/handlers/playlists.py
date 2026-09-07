@@ -84,7 +84,7 @@ def preview_populate(
             {
                 "track_id": r.track.id,
                 "title": r.track.title,
-                "artist": r.track.artist.name if r.track.artist else None,
+                "artist": r.track.artist,
                 "score": r.score.model_dump() if hasattr(r.score, "model_dump") else r.score,
             }
             for r in result.recommendations

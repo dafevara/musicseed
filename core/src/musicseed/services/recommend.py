@@ -4,29 +4,30 @@ from pydantic import BaseModel
 
 from musicseed.clients.plex import Playlist, PlexClient
 from musicseed.context import MusicSeedContext, get_context
-from musicseed.db.models import Track
 from musicseed.exceptions import ConfigurationError, NotFoundError
-from musicseed.recommender.playlist import Recommendation, recommend_tracks
+from musicseed.recommender.playlist import recommend_tracks
 from musicseed.recommender.scoring import SonicCoverage, Weights
+from musicseed.services.schemas import (
+    ServiceRecommendation,
+    ServiceTrack,
+    to_service_recommendation,
+    to_service_track,
+)
 
 
 class RecommendationResult(BaseModel):
     """Result of a recommendation request."""
 
-    model_config = {"arbitrary_types_allowed": True}
-
-    seed_tracks: list[Track]
-    recommendations: list[Recommendation]
+    seed_tracks: list[ServiceTrack]
+    recommendations: list[ServiceRecommendation]
     sonic_coverage: SonicCoverage
 
 
 class PlaylistCreateResult(BaseModel):
     """Result of a playlist creation request."""
 
-    model_config = {"arbitrary_types_allowed": True}
-
-    seed_tracks: list[Track]
-    recommendations: list[Recommendation]
+    seed_tracks: list[ServiceTrack]
+    recommendations: list[ServiceRecommendation]
     playlist: Playlist
 
 
@@ -79,11 +80,13 @@ def get_recommendations(
                 min_score=min_score,
                 vectors=ctx.sonic_vectors,
             )
-        return RecommendationResult(
-            seed_tracks=seed_tracks,
-            recommendations=recommendations,
-            sonic_coverage=sonic_coverage,
-        )
+            return RecommendationResult(
+                seed_tracks=[to_service_track(t) for t in seed_tracks],
+                recommendations=[
+                    to_service_recommendation(r) for r in recommendations
+                ],
+                sonic_coverage=sonic_coverage,
+            )
     except ValueError as exc:
         raise NotFoundError(str(exc)) from exc
 

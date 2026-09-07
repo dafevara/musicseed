@@ -78,7 +78,7 @@ def recommend(
             {
                 "track_id": r.track.id,
                 "title": r.track.title,
-                "artist": r.track.artist.name if r.track.artist else None,
+                "artist": r.track.artist,
                 "score": r.score,
             }
             for r in result.recommendations

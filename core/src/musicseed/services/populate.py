@@ -9,18 +9,17 @@ from musicseed.exceptions import ConfigurationError, NotFoundError
 from musicseed.recommender.playlist import Recommendation
 from musicseed.recommender.populate import PopulateMethod, populate_playlist_recommendations
 from musicseed.recommender.scoring import Weights
+from musicseed.services.schemas import ServiceRecommendation, to_service_recommendation
 
 
 class PopulateResult(BaseModel):
     """Result of a populate preview request."""
 
-    model_config = {"arbitrary_types_allowed": True}
-
     playlist_id: str
     playlist_name: str
     playlist_track_count: int
     matched_track_count: int
-    recommendations: list[Recommendation]
+    recommendations: list[ServiceRecommendation]
 
 
 class PopulateApplyResult(PopulateResult):
@@ -167,7 +166,9 @@ def get_populate_recommendations(
             playlist_name=playlist.title,
             playlist_track_count=plex_track_count,
             matched_track_count=len(local_ids),
-            recommendations=recommendations,
+            recommendations=[
+                to_service_recommendation(r) for r in recommendations
+            ],
         )
 
 
@@ -252,6 +253,8 @@ def populate_playlist(
             playlist_name=playlist.title,
             playlist_track_count=plex_track_count,
             matched_track_count=len(local_ids),
-            recommendations=recommendations,
+            recommendations=[
+                to_service_recommendation(r) for r in recommendations
+            ],
             added_count=len(plex_ids),
         )

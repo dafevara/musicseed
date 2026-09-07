@@ -55,15 +55,14 @@ def popularity_cell(track) -> str:
     """Format a track's popularity for a table cell ("" when unknown).
 
     Args:
-        track: a Track ORM object.
+        track: a ``ServiceTrack`` (or any object with a ``popularity``
+            attribute on the 0-100 scale).
 
     Returns:
-        The popularity value (0-100 scale) rounded to an integer string, or
-        an empty string when the track has no popularity data.
+        The popularity value rounded to an integer string, or an empty
+        string when the track has no popularity data.
     """
-    from musicseed.recommender.scoring import track_popularity_value
-
-    value = track_popularity_value(track)
+    value = track.popularity
     return f"{value:.0f}" if value is not None else ""
 
 
@@ -71,7 +70,7 @@ def print_seed_table(seed_tracks: list) -> None:
     """Render the resolved seed tracks as a Rich table.
 
     Args:
-        seed_tracks: Track ORM objects with artist eagerly loaded.
+        seed_tracks: ``ServiceTrack`` objects.
     """
     table = Table(title="Resolved Seeds")
     table.add_column("ID", justify="right", style="cyan")
@@ -82,7 +81,7 @@ def print_seed_table(seed_tracks: list) -> None:
     for track in seed_tracks:
         table.add_row(
             str(track.id),
-            track.artist.name if track.artist else "",
+            track.artist or "",
             track.title,
             str(track.year or ""),
             popularity_cell(track),
@@ -94,8 +93,8 @@ def print_recommendations_table(recommendations: list, *, explain: bool) -> None
     """Render recommendations as a Rich table.
 
     Args:
-        recommendations: ``Recommendation`` objects (track, score breakdown,
-            candidate sources).
+        recommendations: ``ServiceRecommendation`` objects (track, score
+            breakdown, candidate sources).
         explain: also show the per-signal component scores and the candidate
             sources that produced each recommendation.
     """
@@ -115,7 +114,7 @@ def print_recommendations_table(recommendations: list, *, explain: bool) -> None
         row = [
             str(position),
             f"{score.total:.3f}",
-            track.artist.name if track.artist else "",
+            track.artist or "",
             track.title,
             str(track.year or ""),
             popularity_cell(track),
