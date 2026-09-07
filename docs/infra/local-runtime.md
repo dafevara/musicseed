@@ -65,7 +65,8 @@ to retrieve one from app.plex.tv.
 ## Remote Plex DB Access
 
 By default MusicSeed reads Plex's two SQLite files (library metadata + blobs/sonic vectors)
-from the local filesystem. For a remote Plex server (e.g. a NAS on the LAN), set
+from the local filesystem — the blobs file only at import time, when its vectors are copied into
+the local `track_vectors` store. For a remote Plex server (e.g. a NAS on the LAN), set
 `plex.db_ssh_target` to an scp-style target for the directory that holds them:
 
 ```yaml

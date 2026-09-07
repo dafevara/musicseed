@@ -116,9 +116,10 @@ Symptom: recommendations feel random, or the dashboard shows low sonic coverage.
 
 Checks and recovery:
 
-- **Sonic vectors are read from Plex at query time.** MusicSeed stores nothing; Plex must have
-  analyzed the library. If `recommend` fails with "sonic ... unavailable", the Plex blobs database
-  path isn't resolvable — fix it in Settings.
+- **Sonic vectors are imported from Plex into the local store.** MusicSeed copies vectors into its
+  `track_vectors` table (`musicseed-cli import-plex-sonic`) and reads them from there; the blobs
+  database is only needed at import time. If `import-plex-sonic` fails with "sonic ... unavailable",
+  the Plex blobs database path isn't resolvable — fix it in Settings.
 - **Check coverage:** `musicseed-cli sonic-probe` reports analyzed vs. unanalyzed tracks and the
   albums still pending.
 - **Trigger analysis:** `musicseed-cli sonic-refresh` runs Plex's MusicAnalysis Butler task. It

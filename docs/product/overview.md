@@ -29,8 +29,8 @@ Good recommendations should be:
 - Reuse MusicBrainz IDs already present in Plex when available.
 - Prefer ListenBrainz popularity because it works from MBIDs and avoids search ambiguity.
 - Use Spotify as an optional fallback when credentials are configured.
-- Use Plex's sonic analysis vectors for sonic similarity (read at query time; MusicSeed generates
-  no embeddings of its own).
+- Use Plex's sonic analysis vectors for sonic similarity (imported from the blobs database into the
+  local store; MusicSeed generates no embeddings of its own).
 - Rank candidates from multiple signals instead of trusting one source.
 - Preview recommendations with `recommend`, or create a Plex playlist interactively with `playlist`.
 

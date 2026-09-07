@@ -48,17 +48,17 @@ popularity is a 0-100 provider value. Scoring converts the best available value 
 ## Sonic Vectors
 
 Sonic similarity uses Plex's own sonic analysis vectors. Plex stores one 50-dimensional vector per
-analyzed track in `com.plexapp.plugins.library.blobs.db`; MusicSeed reads them straight from that
-database at query time (`core/src/musicseed/sonic.py`) into an in-memory, L2-normalized matrix
-keyed by `plex_id`. Nearest-neighbor search is a single numpy matmul — trivially fast at
-personal-library scale — so there is no vector index and no stored copy that could drift out of
-date. MusicSeed does not generate its own embeddings (the Essentia pipeline was removed) and never
-reads audio files.
+analyzed track in `com.plexapp.plugins.library.blobs.db`; MusicSeed copies them into its own
+`track_vectors` table (`musicseed-cli import-plex-sonic`, or `POST /sonic/import` from the API),
+then rebuilds an in-memory, L2-normalized matrix keyed by `plex_id` from that local store
+(`core/src/musicseed/context.py`). Nearest-neighbor search is a single numpy matmul — trivially
+fast at personal-library scale — so no vector index is needed. MusicSeed does not generate its own
+embeddings (the Essentia pipeline was removed) and never reads audio files.
 
 Coverage is Plex's responsibility. A track Plex hasn't analyzed simply has no vector and receives
-a neutral 0.5 sonic score. If the Plex blobs database itself is unavailable, `recommend` fails
-with `NotFoundError` rather than degrading silently. Check coverage with `sonic-probe`; trigger
-analysis with `sonic-refresh`.
+a neutral 0.5 sonic score. After vectors are imported, the recommender reads them from the local
+`track_vectors` store and no longer needs the blobs database at query time. Check coverage with
+`sonic-probe`; trigger analysis with `sonic-refresh`, then re-run `import-plex-sonic`.
 
 Use sonic similarity as one signal among several. A recommendation should still produce reasonable
 results for tracks without vectors by falling back to tags, era, popularity, and novelty.

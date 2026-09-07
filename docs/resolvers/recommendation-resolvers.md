@@ -4,11 +4,11 @@ This document explains how seed input becomes a ranked recommendation list.
 
 ## Entry Points
 
-- CLI command: `musicseed recommend` in `cli/src/musicseed_cli/commands/recommend.py`.
+- CLI command: `musicseed-cli recommend` in `cli/src/musicseed_cli/commands/recommend.py`.
 - Orchestration: `core/src/musicseed/recommender/playlist.py`.
 - Candidate generation: `core/src/musicseed/recommender/candidates.py`.
 - Scoring: `core/src/musicseed/recommender/scoring.py`.
-- Sonic vectors (read from Plex at query time): `core/src/musicseed/sonic.py`.
+- Sonic vectors (read from the local `track_vectors` store): `core/src/musicseed/sonic.py`.
 
 ## Seed Resolution
 

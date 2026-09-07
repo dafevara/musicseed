@@ -1,10 +1,12 @@
-"""Plex sonic analysis vectors, read directly from Plex at query time.
+"""Plex sonic analysis vectors, imported from Plex and stored locally.
 
 Plex stores a sonic-analysis vector per analyzed track in
-``com.plexapp.plugins.library.blobs.db``. MusicSeed reads those vectors straight
-from that database instead of copying them into its own schema — the whole
-library is a few megabytes in memory, so there is nothing to gain from storing a
-second copy that can drift out of date.
+``com.plexapp.plugins.library.blobs.db``. ``load_sonic_vectors`` reads those
+vectors straight from that database once — it is the import reader used by
+``services.sonic_vectors.import_plex_sonic`` — and ``sonic_vectors_from_mapping``
+rebuilds the in-memory L2-normalized matrix from the locally persisted
+``track_vectors`` table. Recommendations read the local store, so the blobs
+database is only needed when importing (or re-importing) vectors.
 
 Both Plex databases are opened read-only and are in WAL mode, so loading vectors
 neither blocks nor is blocked by a running Plex Media Server.
