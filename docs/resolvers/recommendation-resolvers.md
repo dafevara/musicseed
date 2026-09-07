@@ -61,6 +61,12 @@ and artist diversity constraints to shape the final result.
 - `era`: proximity within a 50-year window.
 - `novelty`: inverse function of play count.
 
+Signals with missing data degrade to the neutral `0.5` rather than zero (see
+`docs/domain/music-recommendation.md`). The per-track `ScoreBreakdown.availability` map records
+whether each component was `observed`, `neutral_missing`, or `not_applicable`, so a genuine
+mid-range score is distinguishable from a missing-data fallback. The CLI `--explain` output
+(`missing: …`, `n/a: …`) and the web score tooltip surface these flags.
+
 Default weights live in `Weights` and mirror `RecommendationWeights` in config:
 
 ```text

@@ -6,6 +6,19 @@ from rich.table import Table
 from musicseed_cli.console import console
 
 
+def _availability_note(score) -> str:
+    """Summarize missing/not-applicable signals for an explain row."""
+    availability = getattr(score, "availability", None) or {}
+    missing = sorted(k for k, v in availability.items() if v == "neutral_missing")
+    skipped = sorted(k for k, v in availability.items() if v == "not_applicable")
+    parts = []
+    if missing:
+        parts.append("missing: " + ", ".join(missing))
+    if skipped:
+        parts.append("n/a: " + ", ".join(skipped))
+    return "; ".join(parts)
+
+
 def build_weights(
     *,
     sonic: float,
@@ -108,14 +121,15 @@ def print_recommendations_table(recommendations: list, *, explain: bool) -> None
             popularity_cell(track),
         ]
         if explain:
-            row.extend([
-                (
-                    f"sonic={score.sonic:.2f} pop={score.popularity:.2f} "
-                    f"style={score.style:.2f} genre={score.genre:.2f} "
-                    f"era={score.era:.2f} novelty={score.novelty:.2f}"
-                ),
-                ",".join(recommendation.sources),
-            ])
+            components = (
+                f"sonic={score.sonic:.2f} pop={score.popularity:.2f} "
+                f"style={score.style:.2f} genre={score.genre:.2f} "
+                f"era={score.era:.2f} novelty={score.novelty:.2f}"
+            )
+            note = _availability_note(score)
+            if note:
+                components = f"{components}\n[dim]{note}[/dim]"
+            row.extend([components, ",".join(recommendation.sources)])
         table.add_row(*row)
     console.print()
     console.print(table)

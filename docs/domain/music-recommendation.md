@@ -31,6 +31,12 @@ Missing signals should degrade gracefully. A track without a popularity value or
 should not crash the recommendation flow; it should receive neutral or lower component scores
 depending on the scoring function.
 
+The per-track `ScoreBreakdown.availability` map makes that degradation visible instead of silent:
+each signal is marked `observed` (a real comparison), `neutral_missing` (fell back to the neutral
+`0.5` for lack of data — no sonic vector, unknown popularity or year), or `not_applicable`
+(skipped, e.g. the seed has no styles or genres). The CLI `--explain` output lists these
+(`missing: …`, `n/a: …`) and the web score tooltip names the missing signals.
+
 ## Popularity
 
 Popularity is a supporting signal, not the main product. It should help distinguish candidates

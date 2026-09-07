@@ -176,6 +176,7 @@ export interface ScoreBreakdown {
   genre: number;
   era: number;
   novelty: number;
+  availability?: Record<string, "observed" | "neutral_missing" | "not_applicable">;
 }
 
 export interface RecommendationItem {

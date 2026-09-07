@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterable, Literal, Sequence
 
 import numpy as np
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from musicseed.db.models import Track
 from musicseed.sonic import SonicVectors
@@ -60,8 +60,24 @@ class SeedProfile(BaseModel):
     popularity: float | None
 
 
+SignalStatus = Literal["observed", "neutral_missing", "not_applicable"]
+"""Availability of one scoring signal.
+
+``observed`` means the component reflects real data; ``neutral_missing`` means
+it fell back to the neutral ``0.5`` because required data was absent (no sonic
+vector, unknown popularity or year); ``not_applicable`` means the signal was
+skipped because the seed profile has no basis for it (empty seed styles or
+genres).
+"""
+
+
 class ScoreBreakdown(BaseModel):
-    """Component-level score details for explainable CLI output."""
+    """Component-level score details for explainable CLI output.
+
+    ``availability`` maps each signal name to how confident that component is:
+    ``observed`` (a real comparison), ``neutral_missing`` (the neutral 0.5
+    because data was absent), or ``not_applicable`` (skipped for this seed).
+    """
 
     model_config = {"frozen": True}
 
@@ -72,6 +88,7 @@ class ScoreBreakdown(BaseModel):
     genre: float
     era: float
     novelty: float
+    availability: dict[str, SignalStatus] = Field(default_factory=dict)
 
 
 class SonicCoverage(BaseModel):
@@ -290,9 +307,12 @@ def calculate_score(
     candidate_genres = {genre.name for genre in candidate.genres}
     play_count = candidate.stats.play_count if candidate.stats else 0
 
+    candidate_vector = vectors.get(candidate.plex_id)
+    candidate_popularity = track_popularity_value(candidate)
+
     # cosine_similarity returns the 0.5 neutral when either side has no vector.
-    sonic = cosine_similarity(vectors.get(candidate.plex_id), seed.embedding)
-    popularity = popularity_proximity(seed.popularity, track_popularity_value(candidate))
+    sonic = cosine_similarity(candidate_vector, seed.embedding)
+    popularity = popularity_proximity(seed.popularity, candidate_popularity)
     style = jaccard(seed.styles, candidate_styles) if seed.styles else 0.5
     genre = jaccard(seed.genres, candidate_genres) if seed.genres else 0.5
     era = era_proximity(seed.year, candidate.year)
@@ -318,6 +338,27 @@ def calculate_score(
         + novelty * weights.novelty
     ) / total_weight
 
+    availability: dict[str, SignalStatus] = {
+        "sonic": (
+            "observed"
+            if candidate_vector is not None and seed.embedding is not None
+            else "neutral_missing"
+        ),
+        "popularity": (
+            "observed"
+            if seed.popularity is not None and candidate_popularity is not None
+            else "neutral_missing"
+        ),
+        "style": "observed" if seed.styles else "not_applicable",
+        "genre": "observed" if seed.genres else "not_applicable",
+        "era": (
+            "observed"
+            if seed.year is not None and candidate.year is not None
+            else "neutral_missing"
+        ),
+        "novelty": "observed",
+    }
+
     return ScoreBreakdown(
         total=total,
         sonic=sonic,
@@ -326,4 +367,5 @@ def calculate_score(
         genre=genre,
         era=era,
         novelty=novelty,
+        availability=availability,
     )
