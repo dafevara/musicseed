@@ -127,10 +127,14 @@ Service entry points:
   (used only by `import_plex_sonic`); `sonic_vectors_from_mapping` rebuilds the in-memory
   L2-normalized `SonicVectors` matrix (keyed by `plex_id`) from the local `track_vectors` table.
   `get_sonic_vectors()` / `reset_sonic_vectors()` are thin wrappers over the default context.
-- `recommender/`: `scoring.py` (`Weights`, `ScoreBreakdown`, `SeedProfile`, `calculate_score`),
-  `candidates.py` (`build_candidate_pool`), `playlist.py` (`Recommendation`, `recommend_tracks`,
-  `resolve_seed_tracks` — raises `ValueError` on unresolved seeds), `populate.py`
-  (`PopulateMethod = "average" | "frequency"`, `populate_playlist_recommendations`).
+- `recommender/`: `scoring.py` (`Weights`, `ScoreBreakdown`, `SeedProfile`, shared `score_signals`
+  and ORM adapter `calculate_score`); `retrieval.py` (`score_eligible_tracks`, `ConstrainedTopK`)
+  streams eligible scalar facts and retains exact constrained top-k scores. `playlist.py`
+  (`Recommendation`, `recommend_tracks`, `recommend_from_profile`, `resolve_seed_tracks`) loads
+  ORM graphs only for seeds/selected tracks; ID lookup lists are bounded. `populate.py`
+  (`PopulateMethod = "average" | "frequency"`, `populate_playlist_recommendations`) reuses this
+  pipeline. `candidates.py` / `build_candidate_pool` is an offline historical reference, not a
+  production fallback. See `docs/resolvers/retrieval-decision.md` for measurements and limits.
 - `clients/plex_api.py`: thin synchronous Plex HTTP client (httpx). Raises `PlexAPIError`;
   `check_connection()` is the non-raising probe used by discovery/setup flows.
 
@@ -147,6 +151,11 @@ Service entry points:
 - **Approved selections are not new recommendation requests.** CLI/API confirmation paths pass
   the displayed IDs to exact-selection writes. Missing/unmapped IDs reject the whole write;
   empty selections never trigger regeneration.
+- **Retrieval is exact and deterministic.** Score all year-eligible non-seeds; no source budgets.
+  Retain artist-constrained top-k using score, frequency vote count where relevant, then local ID.
+  Normal/average sources say `eligible`; sonic coverage covers all eligible candidates before
+  score/artist constraints. Frequency excludes the whole playlist before voting and scans once
+  per distinct seed, so prefer average for large playlists. Component math is shared and unchanged.
 - **Recommendation signals are exactly six**: sonic, popularity, style, genre, era, novelty. There
   is no "mood" signal (it was removed). `Weights`/`ScoreBreakdown` are frozen Pydantic models.
 - **`rich` is a real core dependency** — the import/enrich pipelines render progress with it.
@@ -158,7 +167,7 @@ Service entry points:
 
 `rich`, `sqlalchemy>=2.0`, `pyyaml`, `httpx`, `numpy`, `pydantic>=2.0`; dev group: `pytest`.
 After changing deps: `uv lock && uv sync`
-in `core/`, then re-lock dependent apps (`cd ../cli && uv lock`, same for `web/`).
+in `core/`, then re-lock dependent Python apps (`cd ../cli && uv lock`, same for `api/`).
 
 The database is a single SQLite file (`database.path` in config, default
 `~/.local/share/musicseed/musicseed.db`). Postgres/pgvector were removed (see

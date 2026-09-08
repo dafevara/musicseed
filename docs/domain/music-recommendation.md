@@ -67,9 +67,11 @@ Sonic similarity uses Plex's own sonic analysis vectors. Plex stores one 50-dime
 analyzed track in `com.plexapp.plugins.library.blobs.db`; MusicSeed copies them into its own
 `track_vectors` table (`musicseed-cli import-plex-sonic`, or `POST /sonic/import` from the API),
 then rebuilds an in-memory, L2-normalized matrix keyed by `plex_id` from that local store
-(`core/src/musicseed/context.py`). Nearest-neighbor search is a single numpy matmul — trivially
-fast at personal-library scale — so no vector index is needed. MusicSeed does not generate its own
-embeddings (the Essentia pipeline was removed) and never reads audio files.
+(`core/src/musicseed/context.py`). Production scoring looks up these local vectors while streaming
+all eligible scalar metadata; the older nearest-neighbor helper is retained for offline bounded
+comparisons. No vector index is needed for the measured implementation; see the
+[retrieval benchmark and limits](../resolvers/retrieval-decision.md), rather than assuming every
+query is instantaneous. MusicSeed does not generate its own embeddings and never reads audio files.
 
 Coverage is Plex's responsibility. A track Plex hasn't analyzed simply has no vector and receives
 a neutral 0.5 sonic score. After vectors are imported, the recommender reads them from the local
@@ -101,7 +103,7 @@ When changing recommendation logic, inspect:
 
 - Does `--explain` still make sense to a human?
 - Are seed tracks excluded from candidates?
-- Does the candidate pool include more tracks than the requested playlist length?
+- Are all eligible non-seed tracks scored before the artist/limit constraints?
 - Are missing metadata values handled without exceptions?
 - Does artist diversity still apply after scoring?
 - Do weights normalize correctly when users adjust them?

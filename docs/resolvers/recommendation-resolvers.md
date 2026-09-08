@@ -6,7 +6,8 @@ This document explains how seed input becomes a ranked recommendation list.
 
 - CLI command: `musicseed-cli recommend` in `cli/src/musicseed_cli/commands/recommend.py`.
 - Orchestration: `core/src/musicseed/recommender/playlist.py`.
-- Candidate generation: `core/src/musicseed/recommender/candidates.py`.
+- Eligible scoring/selection: `core/src/musicseed/recommender/retrieval.py`.
+- Historical bounded reference (offline comparisons only): `core/src/musicseed/recommender/candidates.py`.
 - Scoring: `core/src/musicseed/recommender/scoring.py`.
 - Sonic vectors (read from the local `track_vectors` store): `core/src/musicseed/sonic.py`.
 
@@ -35,20 +36,17 @@ Resolved seed tracks are combined into a `SeedProfile`:
 Multiple seeds should represent a shared target vibe. If a change makes multi-seed behavior less
 predictable, update this doc and the `--explain` output.
 
-## Candidate Pool
+## Eligible Library
 
-`build_candidate_pool()` gathers overlapping candidate IDs from available signals:
+`score_eligible_tracks()` scores every eligible non-seed track using scalar SQL batches rather
+than a bounded source shortlist. Years are filtered before scoring; all seed/excluded IDs are
+removed before tags, scoring and selection budgets. Only seeds and selected tracks load ORM
+relationships. `recommend_from_profile()` is shared by normal and playlist recommendation flows.
 
-- Sonic neighbors: top-N cosine-nearest Plex sonic vectors, computed in memory with one numpy
-  matmul over the vector matrix and mapped from `plex_id` back to tracks.
-- Tracks sharing seed genres.
-- Tracks sharing seed styles.
-- Tracks near the seed era.
-- Tracks near seed popularity.
-- Low-play-count tracks for novelty.
-
-The candidate pool is intentionally larger than the requested playlist length, allowing scoring
-and artist diversity constraints to shape the final result.
+The historical `build_candidate_pool()` remains an offline diagnostic reference, not a production
+fallback. Its source limits can miss a perfect style match or consume a budget with seeds.
+See [the measured retrieval decision](retrieval-decision.md) for benchmarks, memory bounds,
+frequency-mode limits and explicit schema/enrichment decisions.
 
 For deterministic offline comparisons, known retrieval gaps, and an owner listening protocol,
 see [recommendation evaluation](recommendation-evaluation.md). Synthetic results do not establish
@@ -56,7 +54,8 @@ musical preference.
 
 ## Scoring
 
-`calculate_score()` computes component scores and a weighted total:
+`score_signals()` computes component scores and a weighted total; `calculate_score()` is the
+ORM adapter to the same function:
 
 - `sonic`: cosine similarity normalized to 0-1.
 - `popularity`: proximity to seed popularity.
@@ -112,13 +111,15 @@ that intentionally do not implement a preview workflow.
 
 After scoring:
 
-1. Seed tracks are excluded.
-2. Candidates are sorted by total score descending.
-3. `min_score` acts as an early-exit gate: the first candidate whose `score.total` falls below
-   the threshold stops selection — because the list is sorted descending, everything after it
-   would also fail the threshold.
-4. `max_tracks_per_artist` is applied as a diversity constraint within the passing candidates.
-5. The top `limit` selected recommendations are returned.
+1. Seed tracks and out-of-window years have already been excluded.
+2. `min_score` rejects individual low-score rows; it does not stop the ID-ordered scalar scan.
+3. `ConstrainedTopK` retains the exact top `limit` under `max_tracks_per_artist`, replacing the
+   relevant worst selection when a better candidate arrives. This is equivalent to globally
+   sorting then applying the artist cap, but retains only O(limit) scores.
+4. Results are returned by total score descending, then local ID ascending. Frequency adds vote
+   count descending before the ID tiebreaker; it excludes the entire playlist before each
+   per-seed budget and counts distinct seeds only.
+5. Only the selected tracks are materialized for DTO projection inside the service session.
 
 `min_score` defaults to `None` (no cutoff). When supplied via `--min-score`, it must be in
 `[0.0, 1.0]`. The result may contain fewer than `limit` tracks when the threshold is active.
@@ -130,7 +131,8 @@ of scoring.
 
 `--explain` should expose enough detail to answer:
 
-- Which sources produced this candidate?
+- Which retrieval path produced this candidate? Normal/average sources now say `eligible`;
+  frequency sources are voting seed IDs, not invented signal observations.
 - Which score components were strong or weak?
 - Did a selection constraint affect the final playlist?
 
@@ -145,7 +147,9 @@ When adding a signal, update:
 
 - Run `python3 -m compileall -q src/musicseed`.
 - Run `uv run ruff check src` if dependencies are available.
-- Use a dry run: `musicseed-cli recommend --seed-id 123 --limit 20 --dry-run --explain`.
+- Use the read-only preview: `musicseed-cli recommend --seed-id 123 --limit 20 --explain`.
+  `recommend` never writes playlists and has no `--dry-run` flag.
 - Confirm tracks without sonic vectors, missing popularity, and missing tags do not crash scoring.
-- Confirm a missing Plex blobs database fails `recommend` with a clear `NotFoundError`.
+- Confirm recommendations still work without Plex source databases/network after local vector import.
+  Missing local vectors use neutral sonic scores; source databases are import-time dependencies.
 - Confirm ambiguous seed text still fails clearly.

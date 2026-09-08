@@ -19,8 +19,8 @@ def populate(
         str,
         typer.Option(
             "--method",
-            help="Recommendation strategy: 'average' (mean of playlist) or "
-            "'frequency' (vote count across per-track seeds)",
+            help="Strategy: 'average' (one library scan) or 'frequency' (one scan per "
+            "distinct seed; mean scores with vote-count ties). Prefer average for large playlists.",
         ),
     ] = "average",
     limit: Annotated[
@@ -30,7 +30,7 @@ def populate(
     per_seed_limit: Annotated[
         int,
         typer.Option(
-            "--per-seed-limit", help="Candidates gathered per track (frequency method only)"
+            "--per-seed-limit", help="Recommendations per seed (frequency method only)"
         ),
     ] = 30,
     explain: Annotated[

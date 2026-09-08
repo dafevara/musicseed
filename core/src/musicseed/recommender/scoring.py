@@ -204,13 +204,18 @@ def average_or_none(values: Iterable[float | int | None]) -> float | None:
     return sum(concrete) / len(concrete)
 
 
+def popularity_value(normalized: float | None, spotify: int | None) -> float | None:
+    """Project the existing normalized-first/provider-fallback policy to 0-100."""
+    if normalized is not None:
+        return max(0.0, min(100.0, normalized * 100))
+    if spotify is not None:
+        return float(spotify)
+    return None
+
+
 def track_popularity_value(track: Track) -> float | None:
     """Return the best available popularity value on a 0-100 scale."""
-    if track.popularity_score is not None:
-        return max(0.0, min(100.0, track.popularity_score * 100))
-    if track.spotify_popularity is not None:
-        return float(track.spotify_popularity)
-    return None
+    return popularity_value(track.popularity_score, track.spotify_popularity)
 
 
 def build_seed_profile(seed_tracks: Sequence[Track], vectors: SonicVectors) -> SeedProfile:
@@ -329,19 +334,40 @@ def calculate_score(
     Returns:
         The total score plus every component score for explainability.
     """
-    candidate_styles = {style.name for style in candidate.styles}
-    candidate_genres = {genre.name for genre in candidate.genres}
-    play_count = candidate.stats.play_count if candidate.stats else 0
+    return score_signals(
+        candidate_styles={style.name for style in candidate.styles},
+        candidate_genres={genre.name for genre in candidate.genres},
+        play_count=candidate.stats.play_count if candidate.stats else 0,
+        candidate_vector=vectors.get(candidate.plex_id),
+        candidate_popularity=track_popularity_value(candidate),
+        candidate_year=candidate.year,
+        seed=seed,
+        weights=weights,
+    )
 
-    candidate_vector = vectors.get(candidate.plex_id)
-    candidate_popularity = track_popularity_value(candidate)
 
+def score_signals(
+    *,
+    candidate_styles: set[str],
+    candidate_genres: set[str],
+    play_count: int | None,
+    candidate_vector: np.ndarray | None,
+    candidate_popularity: float | None,
+    candidate_year: int | None,
+    seed: SeedProfile,
+    weights: Weights,
+) -> ScoreBreakdown:
+    """Score scalar facts without an ORM graph; shared with ``calculate_score``.
+
+    Component formulas, availability and normalization are identical for the
+    streaming and ORM adapters. No scoring policy is changed by retrieval.
+    """
     # cosine_similarity returns the 0.5 neutral when either side has no vector.
     sonic = cosine_similarity(candidate_vector, seed.embedding)
     popularity = popularity_proximity(seed.popularity, candidate_popularity)
     style = jaccard(seed.styles, candidate_styles) if seed.styles else 0.5
     genre = jaccard(seed.genres, candidate_genres) if seed.genres else 0.5
-    era = era_proximity(seed.year, candidate.year)
+    era = era_proximity(seed.year, candidate_year)
     novelty = novelty_score(play_count)
 
     total_weight = (
@@ -381,7 +407,7 @@ def calculate_score(
                  if seed.genres else "not_applicable",
         "era": (
             "observed"
-            if seed.year is not None and candidate.year is not None
+            if seed.year is not None and candidate_year is not None
             else "neutral_missing"
         ),
         "novelty": "observed",

@@ -8,9 +8,21 @@ from typing import Literal
 from sqlalchemy.orm import Session
 
 from musicseed.db.models import Track
-from musicseed.recommender.playlist import Recommendation, recommend_tracks
-from musicseed.recommender.scoring import SIGNALS, ScoreBreakdown, SignalStatus, Weights
-from musicseed.sonic import SonicVectors
+from musicseed.recommender.playlist import (
+    Recommendation,
+    recommend_from_profile,
+    recommend_tracks,
+    resolve_seed_tracks,
+)
+from musicseed.recommender.retrieval import ConstrainedTopK, ScoredTrack
+from musicseed.recommender.scoring import (
+    SIGNALS,
+    ScoreBreakdown,
+    SignalStatus,
+    Weights,
+    build_seed_profile,
+)
+from musicseed.sonic import SonicVectors, get_sonic_vectors
 
 PopulateMethod = Literal["average", "frequency"]
 """Playlist populate strategies: ``"average"`` scores against the playlist's
@@ -98,8 +110,11 @@ def populate_frequency(
 ) -> list[Recommendation]:
     """Recommend tracks voted for by multiple individual playlist tracks.
 
-    Each playlist track is used as its own single-track seed to gather
-    candidates. A candidate's score is the average of its per-seed scores
+    Each distinct playlist track is used as its own single-track seed to score
+    all eligible candidates. The entire playlist is excluded before per-seed
+    vote budgets, and one vector-cache snapshot is reused for the request.
+    This costs one scalar scan per seed; prefer average mode for large playlists.
+    A candidate's score is the average of its per-seed scores
     across every seed that recommended it (its "votes"); results are ranked
     by that average score, with vote count as a tiebreaker, so --limit cuts
     at the highest-scoring candidates. This avoids a literal set-intersection
@@ -124,49 +139,45 @@ def populate_frequency(
         Aggregated recommendations, best first; each recommendation's
         ``sources`` lists the seed track ids that voted for it.
     """
+    if per_seed_limit <= 0:
+        raise ValueError("per_seed_limit must be greater than zero")
+    selected = ConstrainedTopK(limit, max_tracks_per_artist)
+    if not playlist_track_ids:
+        return []
+    weights = weights or Weights()
+    if vectors is None:
+        vectors = get_sonic_vectors()
     playlist_ids = set(playlist_track_ids)
+    seeds = resolve_seed_tracks(session, seed_ids=playlist_track_ids)
     votes: dict[int, list[tuple[int, ScoreBreakdown, Track]]] = defaultdict(list)
 
-    for seed_id in playlist_track_ids:
-        _, recs, _ = recommend_tracks(
+    for seed_track in seeds:
+        recs, _ = recommend_from_profile(
             session,
-            seed_ids=[seed_id],
+            build_seed_profile([seed_track], vectors),
+            vectors,
             limit=per_seed_limit,
             weights=weights,
             year_min=year_min,
             year_max=year_max,
             max_tracks_per_artist=max_tracks_per_artist,
-            vectors=vectors,
+            exclude_ids=playlist_ids,
         )
         for rec in recs:
-            if rec.track.id not in playlist_ids:
-                votes[rec.track.id].append((seed_id, rec.score, rec.track))
+            votes[rec.track.id].append((seed_track.id, rec.score, rec.track))
 
-    aggregated = [
+    for track_id, entries in votes.items():
+        score = _average_score([score for _, score, _ in entries])
+        if min_score is None or score.total >= min_score:
+            selected.add(ScoredTrack(track_id, entries[0][2].artist_id, score, len(entries)))
+    return [
         Recommendation(
-            track=entries[0][2],
-            score=_average_score([score for _, score, _ in entries]),
-            sources=[str(seed_id) for seed_id, _, _ in entries],
+            track=votes[r.id][0][2],
+            score=r.score,
+            sources=[str(seed_id) for seed_id, _, _ in votes[r.id]],
         )
-        for entries in votes.values()
+        for r in selected.results()
     ]
-    aggregated.sort(key=lambda r: (r.score.total, len(r.sources)), reverse=True)
-
-    selected: list[Recommendation] = []
-    artist_counts: dict[int | None, int] = defaultdict(int)
-
-    for recommendation in aggregated:
-        if min_score is not None and recommendation.score.total < min_score:
-            continue
-        artist_id = recommendation.track.artist_id
-        if artist_counts[artist_id] >= max_tracks_per_artist:
-            continue
-        selected.append(recommendation)
-        artist_counts[artist_id] += 1
-        if len(selected) >= limit:
-            break
-
-    return selected
 
 
 def populate_playlist_recommendations(

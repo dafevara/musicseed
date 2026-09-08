@@ -56,8 +56,9 @@ def create_engine_for_url(url: str) -> Engine:
 def create_session_factory(engine: Engine) -> sessionmaker:
     """Create a session factory bound to ``engine``.
 
-    Uses ``expire_on_commit=False`` so ORM objects loaded in one session stay
-    usable after the session closes — required by the service result models.
+    Uses ``expire_on_commit=False`` for internal multi-step workflows. Public
+    services still project scalar DTOs inside their session; this setting does
+    not make unloaded ORM relationships safe to access after session closure.
     """
     return sessionmaker(bind=engine, expire_on_commit=False)
 

@@ -51,20 +51,26 @@ def test_every_strategy_satisfies_independently_checked_selection_invariants(rep
             assert metrics.year_violation_count == metrics.artist_cap_excess == 0
 
 
-def test_report_exposes_omitted_style_match_and_large_seed_budget_starvation(report):
+def test_report_exposes_bounded_reference_gaps_while_production_matches_oracle(report):
     cases = {case.name: case for case in report.cases}
     style = cases["perfect_style"]
     assert style.bounded_missing_oracle_ids == [63]
     assert style.bounded_oracle_top_k_recall == 0
-    assert style.strategies["current"].mean_native_score == 0.5
+    assert style.strategies["current"].mean_native_score == 1
     assert style.strategies["exhaustive_oracle"].selected_ids == [63]
     assert style.strategies["exhaustive_oracle"].mean_native_score == 1
     large = cases["large_seed_set"]
     assert large.eligible_count == 10
     assert large.bounded_candidate_count == 0
-    assert large.strategies["current"].returned == 0
+    assert large.strategies["current"].returned == 5
     assert large.strategies["exhaustive_oracle"].returned == 5
     assert large.observations
+    for case in report.cases:
+        current = case.strategies["current"]
+        oracle = case.strategies["exhaustive_oracle"]
+        assert current.selected_ids == oracle.selected_ids
+        assert current.mean_native_score == oracle.mean_native_score
+        assert current.availability_counts == oracle.availability_counts
 
 
 def test_legitimate_underfill_and_unknown_evidence_are_not_hidden(report):

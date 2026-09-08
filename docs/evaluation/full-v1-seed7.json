@@ -1,0 +1,1484 @@
+{
+  "fixture_version": 1,
+  "seed": 7,
+  "listening_preference": "unmeasured",
+  "baseline_weights": {
+    "sonic": 0.8,
+    "popularity": 0.0,
+    "style": 0.0,
+    "genre": 0.0,
+    "era": 0.0,
+    "novelty": 0.2
+  },
+  "cases": [
+    {
+      "name": "dense",
+      "description": "Complete synthetic metadata and clustered vectors.",
+      "fixture_sha256": "55676ae1891bac12f71582a907d469d9b538b6c278ec26238a0208006cbd8a7d",
+      "request": {
+        "seed_ids": [
+          1,
+          7
+        ],
+        "limit": 10,
+        "artist_max": 2,
+        "year_min": null,
+        "year_max": null,
+        "min_score": null,
+        "weights": {
+          "sonic": 0.3,
+          "popularity": 0.15,
+          "style": 0.1,
+          "genre": 0.15,
+          "era": 0.05,
+          "novelty": 0.1
+        },
+        "mode": "recommend",
+        "per_seed_limit": 12
+      },
+      "mode": "recommend",
+      "requested": 10,
+      "eligible_count": 118,
+      "bounded_candidate_count": 108,
+      "bounded_oracle_top_k_recall": 1.0,
+      "bounded_missing_oracle_ids": [],
+      "strategies": {
+        "current": {
+          "selected_ids": [
+            103,
+            19,
+            109,
+            13,
+            25,
+            115,
+            55,
+            49,
+            4,
+            34
+          ],
+          "returned": 10,
+          "fill_rate": 1.0,
+          "oracle_top_k_overlap": 1.0,
+          "mean_native_score": 0.836676453544,
+          "unique_artists": 6,
+          "duplicate_count": 0,
+          "seed_overlap_count": 0,
+          "year_violation_count": 0,
+          "artist_cap_excess": 0,
+          "threshold_violation_count": 0,
+          "nonfinite_score_count": 0,
+          "availability_counts": {
+            "sonic": {
+              "observed": 10
+            },
+            "popularity": {
+              "observed": 10
+            },
+            "style": {
+              "observed": 10
+            },
+            "genre": {
+              "observed": 10
+            },
+            "era": {
+              "observed": 10
+            },
+            "novelty": {
+              "observed": 10
+            }
+          }
+        },
+        "sonic_novelty_baseline": {
+          "selected_ids": [
+            85,
+            103,
+            19,
+            37,
+            55,
+            73,
+            91,
+            25,
+            102,
+            34
+          ],
+          "returned": 10,
+          "fill_rate": 1.0,
+          "oracle_top_k_overlap": 0.5,
+          "mean_native_score": 0.855774317044,
+          "unique_artists": 6,
+          "duplicate_count": 0,
+          "seed_overlap_count": 0,
+          "year_violation_count": 0,
+          "artist_cap_excess": 0,
+          "threshold_violation_count": 0,
+          "nonfinite_score_count": 0,
+          "availability_counts": {
+            "sonic": {
+              "observed": 10
+            },
+            "popularity": {
+              "observed": 10
+            },
+            "style": {
+              "observed": 10
+            },
+            "genre": {
+              "observed": 10
+            },
+            "era": {
+              "observed": 10
+            },
+            "novelty": {
+              "observed": 10
+            }
+          }
+        },
+        "exhaustive_oracle": {
+          "selected_ids": [
+            103,
+            19,
+            109,
+            13,
+            25,
+            115,
+            55,
+            49,
+            4,
+            34
+          ],
+          "returned": 10,
+          "fill_rate": 1.0,
+          "oracle_top_k_overlap": 1.0,
+          "mean_native_score": 0.836676453544,
+          "unique_artists": 6,
+          "duplicate_count": 0,
+          "seed_overlap_count": 0,
+          "year_violation_count": 0,
+          "artist_cap_excess": 0,
+          "threshold_violation_count": 0,
+          "nonfinite_score_count": 0,
+          "availability_counts": {
+            "sonic": {
+              "observed": 10
+            },
+            "popularity": {
+              "observed": 10
+            },
+            "style": {
+              "observed": 10
+            },
+            "genre": {
+              "observed": 10
+            },
+            "era": {
+              "observed": 10
+            },
+            "novelty": {
+              "observed": 10
+            }
+          }
+        }
+      },
+      "observations": [],
+      "invariants_ok": true
+    },
+    {
+      "name": "sparse",
+      "description": "Unknown tags/year/popularity and missing/zero vectors.",
+      "fixture_sha256": "a54883bf0ca93fcc39dfb287d4a0c109b42beebb1ca19acad83d997e0d2d002c",
+      "request": {
+        "seed_ids": [
+          1,
+          2
+        ],
+        "limit": 10,
+        "artist_max": 2,
+        "year_min": null,
+        "year_max": null,
+        "min_score": null,
+        "weights": {
+          "sonic": 0.3,
+          "popularity": 0.15,
+          "style": 0.1,
+          "genre": 0.15,
+          "era": 0.05,
+          "novelty": 0.1
+        },
+        "mode": "recommend",
+        "per_seed_limit": 12
+      },
+      "mode": "recommend",
+      "requested": 10,
+      "eligible_count": 78,
+      "bounded_candidate_count": 48,
+      "bounded_oracle_top_k_recall": 1.0,
+      "bounded_missing_oracle_ids": [],
+      "strategies": {
+        "current": {
+          "selected_ids": [
+            3,
+            5,
+            6,
+            7,
+            9,
+            10,
+            11,
+            13,
+            14,
+            15
+          ],
+          "returned": 10,
+          "fill_rate": 1.0,
+          "oracle_top_k_overlap": 1.0,
+          "mean_native_score": 0.558823529412,
+          "unique_artists": 10,
+          "duplicate_count": 0,
+          "seed_overlap_count": 0,
+          "year_violation_count": 0,
+          "artist_cap_excess": 0,
+          "threshold_violation_count": 0,
+          "nonfinite_score_count": 0,
+          "availability_counts": {
+            "sonic": {
+              "neutral_missing": 10
+            },
+            "popularity": {
+              "neutral_missing": 10
+            },
+            "style": {
+              "not_applicable": 10
+            },
+            "genre": {
+              "not_applicable": 10
+            },
+            "era": {
+              "neutral_missing": 10
+            },
+            "novelty": {
+              "observed": 10
+            }
+          }
+        },
+        "sonic_novelty_baseline": {
+          "selected_ids": [
+            3,
+            5,
+            6,
+            7,
+            9,
+            10,
+            11,
+            13,
+            14,
+            15
+          ],
+          "returned": 10,
+          "fill_rate": 1.0,
+          "oracle_top_k_overlap": 1.0,
+          "mean_native_score": 0.6,
+          "unique_artists": 10,
+          "duplicate_count": 0,
+          "seed_overlap_count": 0,
+          "year_violation_count": 0,
+          "artist_cap_excess": 0,
+          "threshold_violation_count": 0,
+          "nonfinite_score_count": 0,
+          "availability_counts": {
+            "sonic": {
+              "neutral_missing": 10
+            },
+            "popularity": {
+              "neutral_missing": 10
+            },
+            "style": {
+              "not_applicable": 10
+            },
+            "genre": {
+              "not_applicable": 10
+            },
+            "era": {
+              "neutral_missing": 10
+            },
+            "novelty": {
+              "observed": 10
+            }
+          }
+        },
+        "exhaustive_oracle": {
+          "selected_ids": [
+            3,
+            5,
+            6,
+            7,
+            9,
+            10,
+            11,
+            13,
+            14,
+            15
+          ],
+          "returned": 10,
+          "fill_rate": 1.0,
+          "oracle_top_k_overlap": 1.0,
+          "mean_native_score": 0.558823529412,
+          "unique_artists": 10,
+          "duplicate_count": 0,
+          "seed_overlap_count": 0,
+          "year_violation_count": 0,
+          "artist_cap_excess": 0,
+          "threshold_violation_count": 0,
+          "nonfinite_score_count": 0,
+          "availability_counts": {
+            "sonic": {
+              "neutral_missing": 10
+            },
+            "popularity": {
+              "neutral_missing": 10
+            },
+            "style": {
+              "not_applicable": 10
+            },
+            "genre": {
+              "not_applicable": 10
+            },
+            "era": {
+              "neutral_missing": 10
+            },
+            "novelty": {
+              "observed": 10
+            }
+          }
+        }
+      },
+      "observations": [],
+      "invariants_ok": true
+    },
+    {
+      "name": "narrow_era",
+      "description": "Global sonic neighbors lie outside the year window.",
+      "fixture_sha256": "8c0032c39826dfebfc3975b5e926564bd1d8a0ac194be490768666c3d4d946a7",
+      "request": {
+        "seed_ids": [
+          1
+        ],
+        "limit": 5,
+        "artist_max": 2,
+        "year_min": 2000,
+        "year_max": 2002,
+        "min_score": null,
+        "weights": {
+          "sonic": 0.3,
+          "popularity": 0.15,
+          "style": 0.1,
+          "genre": 0.15,
+          "era": 0.05,
+          "novelty": 0.1
+        },
+        "mode": "recommend",
+        "per_seed_limit": 12
+      },
+      "mode": "recommend",
+      "requested": 5,
+      "eligible_count": 12,
+      "bounded_candidate_count": 12,
+      "bounded_oracle_top_k_recall": 1.0,
+      "bounded_missing_oracle_ids": [],
+      "strategies": {
+        "current": {
+          "selected_ids": [
+            72,
+            73,
+            74,
+            75,
+            76
+          ],
+          "returned": 5,
+          "fill_rate": 1.0,
+          "oracle_top_k_overlap": 1.0,
+          "mean_native_score": 0.705384426139,
+          "unique_artists": 5,
+          "duplicate_count": 0,
+          "seed_overlap_count": 0,
+          "year_violation_count": 0,
+          "artist_cap_excess": 0,
+          "threshold_violation_count": 0,
+          "nonfinite_score_count": 0,
+          "availability_counts": {
+            "sonic": {
+              "observed": 5
+            },
+            "popularity": {
+              "neutral_missing": 5
+            },
+            "style": {
+              "not_applicable": 5
+            },
+            "genre": {
+              "not_applicable": 5
+            },
+            "era": {
+              "observed": 5
+            },
+            "novelty": {
+              "observed": 5
+            }
+          }
+        },
+        "sonic_novelty_baseline": {
+          "selected_ids": [
+            72,
+            73,
+            74,
+            75,
+            76
+          ],
+          "returned": 5,
+          "fill_rate": 1.0,
+          "oracle_top_k_overlap": 1.0,
+          "mean_native_score": 0.921538032581,
+          "unique_artists": 5,
+          "duplicate_count": 0,
+          "seed_overlap_count": 0,
+          "year_violation_count": 0,
+          "artist_cap_excess": 0,
+          "threshold_violation_count": 0,
+          "nonfinite_score_count": 0,
+          "availability_counts": {
+            "sonic": {
+              "observed": 5
+            },
+            "popularity": {
+              "neutral_missing": 5
+            },
+            "style": {
+              "not_applicable": 5
+            },
+            "genre": {
+              "not_applicable": 5
+            },
+            "era": {
+              "observed": 5
+            },
+            "novelty": {
+              "observed": 5
+            }
+          }
+        },
+        "exhaustive_oracle": {
+          "selected_ids": [
+            72,
+            73,
+            74,
+            75,
+            76
+          ],
+          "returned": 5,
+          "fill_rate": 1.0,
+          "oracle_top_k_overlap": 1.0,
+          "mean_native_score": 0.705384426139,
+          "unique_artists": 5,
+          "duplicate_count": 0,
+          "seed_overlap_count": 0,
+          "year_violation_count": 0,
+          "artist_cap_excess": 0,
+          "threshold_violation_count": 0,
+          "nonfinite_score_count": 0,
+          "availability_counts": {
+            "sonic": {
+              "observed": 5
+            },
+            "popularity": {
+              "neutral_missing": 5
+            },
+            "style": {
+              "not_applicable": 5
+            },
+            "genre": {
+              "not_applicable": 5
+            },
+            "era": {
+              "observed": 5
+            },
+            "novelty": {
+              "observed": 5
+            }
+          }
+        }
+      },
+      "observations": [],
+      "invariants_ok": true
+    },
+    {
+      "name": "large_seed_set",
+      "description": "Seeds exhaust a post-exclusion source budget.",
+      "fixture_sha256": "71aa7fb02976cabe67d975592dde2177db7589b8be8b16dd4acd493b6e70c6f6",
+      "request": {
+        "seed_ids": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          60,
+          61,
+          62,
+          63,
+          64,
+          65,
+          66,
+          67,
+          68,
+          69,
+          70
+        ],
+        "limit": 5,
+        "artist_max": 2,
+        "year_min": null,
+        "year_max": null,
+        "min_score": null,
+        "weights": {
+          "sonic": 0.3,
+          "popularity": 0.15,
+          "style": 0.1,
+          "genre": 0.15,
+          "era": 0.05,
+          "novelty": 0.1
+        },
+        "mode": "recommend",
+        "per_seed_limit": 12
+      },
+      "mode": "recommend",
+      "requested": 5,
+      "eligible_count": 10,
+      "bounded_candidate_count": 0,
+      "bounded_oracle_top_k_recall": 0.0,
+      "bounded_missing_oracle_ids": [
+        71,
+        72,
+        73,
+        74,
+        75
+      ],
+      "strategies": {
+        "current": {
+          "selected_ids": [
+            71,
+            72,
+            73,
+            74,
+            75
+          ],
+          "returned": 5,
+          "fill_rate": 1.0,
+          "oracle_top_k_overlap": 1.0,
+          "mean_native_score": 0.558823529412,
+          "unique_artists": 5,
+          "duplicate_count": 0,
+          "seed_overlap_count": 0,
+          "year_violation_count": 0,
+          "artist_cap_excess": 0,
+          "threshold_violation_count": 0,
+          "nonfinite_score_count": 0,
+          "availability_counts": {
+            "sonic": {
+              "neutral_missing": 5
+            },
+            "popularity": {
+              "neutral_missing": 5
+            },
+            "style": {
+              "not_applicable": 5
+            },
+            "genre": {
+              "not_applicable": 5
+            },
+            "era": {
+              "neutral_missing": 5
+            },
+            "novelty": {
+              "observed": 5
+            }
+          }
+        },
+        "sonic_novelty_baseline": {
+          "selected_ids": [
+            71,
+            72,
+            73,
+            74,
+            75
+          ],
+          "returned": 5,
+          "fill_rate": 1.0,
+          "oracle_top_k_overlap": 1.0,
+          "mean_native_score": 0.6,
+          "unique_artists": 5,
+          "duplicate_count": 0,
+          "seed_overlap_count": 0,
+          "year_violation_count": 0,
+          "artist_cap_excess": 0,
+          "threshold_violation_count": 0,
+          "nonfinite_score_count": 0,
+          "availability_counts": {
+            "sonic": {
+              "neutral_missing": 5
+            },
+            "popularity": {
+              "neutral_missing": 5
+            },
+            "style": {
+              "not_applicable": 5
+            },
+            "genre": {
+              "not_applicable": 5
+            },
+            "era": {
+              "neutral_missing": 5
+            },
+            "novelty": {
+              "observed": 5
+            }
+          }
+        },
+        "exhaustive_oracle": {
+          "selected_ids": [
+            71,
+            72,
+            73,
+            74,
+            75
+          ],
+          "returned": 5,
+          "fill_rate": 1.0,
+          "oracle_top_k_overlap": 1.0,
+          "mean_native_score": 0.558823529412,
+          "unique_artists": 5,
+          "duplicate_count": 0,
+          "seed_overlap_count": 0,
+          "year_violation_count": 0,
+          "artist_cap_excess": 0,
+          "threshold_violation_count": 0,
+          "nonfinite_score_count": 0,
+          "availability_counts": {
+            "sonic": {
+              "neutral_missing": 5
+            },
+            "popularity": {
+              "neutral_missing": 5
+            },
+            "style": {
+              "not_applicable": 5
+            },
+            "genre": {
+              "not_applicable": 5
+            },
+            "era": {
+              "neutral_missing": 5
+            },
+            "novelty": {
+              "observed": 5
+            }
+          }
+        }
+      },
+      "observations": [
+        "bounded retrieval omits current-score oracle selections"
+      ],
+      "invariants_ok": true
+    },
+    {
+      "name": "perfect_style",
+      "description": "Perfect style match appears after unordered limits.",
+      "fixture_sha256": "809ddbb571cd98ece49c9492e7ea420c5bbe9ee8d7e35c1cd9a3dc5b5d585e22",
+      "request": {
+        "seed_ids": [
+          1
+        ],
+        "limit": 1,
+        "artist_max": 2,
+        "year_min": null,
+        "year_max": null,
+        "min_score": null,
+        "weights": {
+          "sonic": 0.0,
+          "popularity": 0.0,
+          "style": 1.0,
+          "genre": 0.0,
+          "era": 0.0,
+          "novelty": 0.0
+        },
+        "mode": "recommend",
+        "per_seed_limit": 12
+      },
+      "mode": "recommend",
+      "requested": 1,
+      "eligible_count": 62,
+      "bounded_candidate_count": 49,
+      "bounded_oracle_top_k_recall": 0.0,
+      "bounded_missing_oracle_ids": [
+        63
+      ],
+      "strategies": {
+        "current": {
+          "selected_ids": [
+            63
+          ],
+          "returned": 1,
+          "fill_rate": 1.0,
+          "oracle_top_k_overlap": 1.0,
+          "mean_native_score": 1.0,
+          "unique_artists": 1,
+          "duplicate_count": 0,
+          "seed_overlap_count": 0,
+          "year_violation_count": 0,
+          "artist_cap_excess": 0,
+          "threshold_violation_count": 0,
+          "nonfinite_score_count": 0,
+          "availability_counts": {
+            "sonic": {
+              "neutral_missing": 1
+            },
+            "popularity": {
+              "neutral_missing": 1
+            },
+            "style": {
+              "observed": 1
+            },
+            "genre": {
+              "not_applicable": 1
+            },
+            "era": {
+              "neutral_missing": 1
+            },
+            "novelty": {
+              "observed": 1
+            }
+          }
+        },
+        "sonic_novelty_baseline": {
+          "selected_ids": [
+            2
+          ],
+          "returned": 1,
+          "fill_rate": 1.0,
+          "oracle_top_k_overlap": 0.0,
+          "mean_native_score": 0.6,
+          "unique_artists": 1,
+          "duplicate_count": 0,
+          "seed_overlap_count": 0,
+          "year_violation_count": 0,
+          "artist_cap_excess": 0,
+          "threshold_violation_count": 0,
+          "nonfinite_score_count": 0,
+          "availability_counts": {
+            "sonic": {
+              "neutral_missing": 1
+            },
+            "popularity": {
+              "neutral_missing": 1
+            },
+            "style": {
+              "observed": 1
+            },
+            "genre": {
+              "not_applicable": 1
+            },
+            "era": {
+              "neutral_missing": 1
+            },
+            "novelty": {
+              "observed": 1
+            }
+          }
+        },
+        "exhaustive_oracle": {
+          "selected_ids": [
+            63
+          ],
+          "returned": 1,
+          "fill_rate": 1.0,
+          "oracle_top_k_overlap": 1.0,
+          "mean_native_score": 1.0,
+          "unique_artists": 1,
+          "duplicate_count": 0,
+          "seed_overlap_count": 0,
+          "year_violation_count": 0,
+          "artist_cap_excess": 0,
+          "threshold_violation_count": 0,
+          "nonfinite_score_count": 0,
+          "availability_counts": {
+            "sonic": {
+              "neutral_missing": 1
+            },
+            "popularity": {
+              "neutral_missing": 1
+            },
+            "style": {
+              "observed": 1
+            },
+            "genre": {
+              "not_applicable": 1
+            },
+            "era": {
+              "neutral_missing": 1
+            },
+            "novelty": {
+              "observed": 1
+            }
+          }
+        }
+      },
+      "observations": [
+        "bounded retrieval omits current-score oracle selections"
+      ],
+      "invariants_ok": true
+    },
+    {
+      "name": "artist_capacity",
+      "description": "Artist cap legitimately prevents full output.",
+      "fixture_sha256": "6f4d098c1f83cf854d5270b0bacadfd3935141789e8acdabb8fa34e98404384c",
+      "request": {
+        "seed_ids": [
+          1
+        ],
+        "limit": 8,
+        "artist_max": 2,
+        "year_min": null,
+        "year_max": null,
+        "min_score": null,
+        "weights": {
+          "sonic": 0.3,
+          "popularity": 0.15,
+          "style": 0.1,
+          "genre": 0.15,
+          "era": 0.05,
+          "novelty": 0.1
+        },
+        "mode": "recommend",
+        "per_seed_limit": 12
+      },
+      "mode": "recommend",
+      "requested": 8,
+      "eligible_count": 19,
+      "bounded_candidate_count": 19,
+      "bounded_oracle_top_k_recall": 1.0,
+      "bounded_missing_oracle_ids": [],
+      "strategies": {
+        "current": {
+          "selected_ids": [
+            2,
+            3
+          ],
+          "returned": 2,
+          "fill_rate": 0.25,
+          "oracle_top_k_overlap": 1.0,
+          "mean_native_score": 0.735294117647,
+          "unique_artists": 1,
+          "duplicate_count": 0,
+          "seed_overlap_count": 0,
+          "year_violation_count": 0,
+          "artist_cap_excess": 0,
+          "threshold_violation_count": 0,
+          "nonfinite_score_count": 0,
+          "availability_counts": {
+            "sonic": {
+              "observed": 2
+            },
+            "popularity": {
+              "neutral_missing": 2
+            },
+            "style": {
+              "not_applicable": 2
+            },
+            "genre": {
+              "not_applicable": 2
+            },
+            "era": {
+              "neutral_missing": 2
+            },
+            "novelty": {
+              "observed": 2
+            }
+          }
+        },
+        "sonic_novelty_baseline": {
+          "selected_ids": [
+            2,
+            3
+          ],
+          "returned": 2,
+          "fill_rate": 0.25,
+          "oracle_top_k_overlap": 1.0,
+          "mean_native_score": 1.0,
+          "unique_artists": 1,
+          "duplicate_count": 0,
+          "seed_overlap_count": 0,
+          "year_violation_count": 0,
+          "artist_cap_excess": 0,
+          "threshold_violation_count": 0,
+          "nonfinite_score_count": 0,
+          "availability_counts": {
+            "sonic": {
+              "observed": 2
+            },
+            "popularity": {
+              "neutral_missing": 2
+            },
+            "style": {
+              "not_applicable": 2
+            },
+            "genre": {
+              "not_applicable": 2
+            },
+            "era": {
+              "neutral_missing": 2
+            },
+            "novelty": {
+              "observed": 2
+            }
+          }
+        },
+        "exhaustive_oracle": {
+          "selected_ids": [
+            2,
+            3
+          ],
+          "returned": 2,
+          "fill_rate": 0.25,
+          "oracle_top_k_overlap": 1.0,
+          "mean_native_score": 0.735294117647,
+          "unique_artists": 1,
+          "duplicate_count": 0,
+          "seed_overlap_count": 0,
+          "year_violation_count": 0,
+          "artist_cap_excess": 0,
+          "threshold_violation_count": 0,
+          "nonfinite_score_count": 0,
+          "availability_counts": {
+            "sonic": {
+              "observed": 2
+            },
+            "popularity": {
+              "neutral_missing": 2
+            },
+            "style": {
+              "not_applicable": 2
+            },
+            "genre": {
+              "not_applicable": 2
+            },
+            "era": {
+              "neutral_missing": 2
+            },
+            "novelty": {
+              "observed": 2
+            }
+          }
+        }
+      },
+      "observations": [
+        "oracle also underfills: eligibility, threshold or artist capacity"
+      ],
+      "invariants_ok": true
+    },
+    {
+      "name": "empty_window",
+      "description": "No eligible release years; empty output is valid.",
+      "fixture_sha256": "6e240658758360db420f690030472d64e31efd56205c1bf898af96d9a00f4cae",
+      "request": {
+        "seed_ids": [
+          1
+        ],
+        "limit": 10,
+        "artist_max": 2,
+        "year_min": 2100,
+        "year_max": 2101,
+        "min_score": null,
+        "weights": {
+          "sonic": 0.3,
+          "popularity": 0.15,
+          "style": 0.1,
+          "genre": 0.15,
+          "era": 0.05,
+          "novelty": 0.1
+        },
+        "mode": "recommend",
+        "per_seed_limit": 12
+      },
+      "mode": "recommend",
+      "requested": 10,
+      "eligible_count": 0,
+      "bounded_candidate_count": 0,
+      "bounded_oracle_top_k_recall": null,
+      "bounded_missing_oracle_ids": [],
+      "strategies": {
+        "current": {
+          "selected_ids": [],
+          "returned": 0,
+          "fill_rate": 0.0,
+          "oracle_top_k_overlap": null,
+          "mean_native_score": null,
+          "unique_artists": 0,
+          "duplicate_count": 0,
+          "seed_overlap_count": 0,
+          "year_violation_count": 0,
+          "artist_cap_excess": 0,
+          "threshold_violation_count": 0,
+          "nonfinite_score_count": 0,
+          "availability_counts": {
+            "sonic": {},
+            "popularity": {},
+            "style": {},
+            "genre": {},
+            "era": {},
+            "novelty": {}
+          }
+        },
+        "sonic_novelty_baseline": {
+          "selected_ids": [],
+          "returned": 0,
+          "fill_rate": 0.0,
+          "oracle_top_k_overlap": null,
+          "mean_native_score": null,
+          "unique_artists": 0,
+          "duplicate_count": 0,
+          "seed_overlap_count": 0,
+          "year_violation_count": 0,
+          "artist_cap_excess": 0,
+          "threshold_violation_count": 0,
+          "nonfinite_score_count": 0,
+          "availability_counts": {
+            "sonic": {},
+            "popularity": {},
+            "style": {},
+            "genre": {},
+            "era": {},
+            "novelty": {}
+          }
+        },
+        "exhaustive_oracle": {
+          "selected_ids": [],
+          "returned": 0,
+          "fill_rate": 0.0,
+          "oracle_top_k_overlap": null,
+          "mean_native_score": null,
+          "unique_artists": 0,
+          "duplicate_count": 0,
+          "seed_overlap_count": 0,
+          "year_violation_count": 0,
+          "artist_cap_excess": 0,
+          "threshold_violation_count": 0,
+          "nonfinite_score_count": 0,
+          "availability_counts": {
+            "sonic": {},
+            "popularity": {},
+            "style": {},
+            "genre": {},
+            "era": {},
+            "novelty": {}
+          }
+        }
+      },
+      "observations": [
+        "oracle also underfills: eligibility, threshold or artist capacity"
+      ],
+      "invariants_ok": true
+    },
+    {
+      "name": "populate_average",
+      "description": "Aggregate playlist profile with a score floor.",
+      "fixture_sha256": "d82dbf818137a528f4336ec6ece87e59e7c4c4f5a7a8ce0e2803a4d6b7f696a4",
+      "request": {
+        "seed_ids": [
+          1,
+          7,
+          13
+        ],
+        "limit": 10,
+        "artist_max": 2,
+        "year_min": null,
+        "year_max": null,
+        "min_score": 0.55,
+        "weights": {
+          "sonic": 0.3,
+          "popularity": 0.15,
+          "style": 0.1,
+          "genre": 0.15,
+          "era": 0.05,
+          "novelty": 0.1
+        },
+        "mode": "average",
+        "per_seed_limit": 12
+      },
+      "mode": "average",
+      "requested": 10,
+      "eligible_count": 117,
+      "bounded_candidate_count": 107,
+      "bounded_oracle_top_k_recall": 1.0,
+      "bounded_missing_oracle_ids": [],
+      "strategies": {
+        "current": {
+          "selected_ids": [
+            103,
+            19,
+            109,
+            25,
+            115,
+            37,
+            55,
+            49,
+            4,
+            34
+          ],
+          "returned": 10,
+          "fill_rate": 1.0,
+          "oracle_top_k_overlap": 1.0,
+          "mean_native_score": 0.840630774136,
+          "unique_artists": 6,
+          "duplicate_count": 0,
+          "seed_overlap_count": 0,
+          "year_violation_count": 0,
+          "artist_cap_excess": 0,
+          "threshold_violation_count": 0,
+          "nonfinite_score_count": 0,
+          "availability_counts": {
+            "sonic": {
+              "observed": 10
+            },
+            "popularity": {
+              "observed": 10
+            },
+            "style": {
+              "observed": 10
+            },
+            "genre": {
+              "observed": 10
+            },
+            "era": {
+              "observed": 10
+            },
+            "novelty": {
+              "observed": 10
+            }
+          }
+        },
+        "sonic_novelty_baseline": {
+          "selected_ids": [
+            85,
+            103,
+            19,
+            37,
+            55,
+            73,
+            91,
+            25,
+            34,
+            102
+          ],
+          "returned": 10,
+          "fill_rate": 1.0,
+          "oracle_top_k_overlap": 0.6,
+          "mean_native_score": 0.856736397094,
+          "unique_artists": 6,
+          "duplicate_count": 0,
+          "seed_overlap_count": 0,
+          "year_violation_count": 0,
+          "artist_cap_excess": 0,
+          "threshold_violation_count": 0,
+          "nonfinite_score_count": 0,
+          "availability_counts": {
+            "sonic": {
+              "observed": 10
+            },
+            "popularity": {
+              "observed": 10
+            },
+            "style": {
+              "observed": 10
+            },
+            "genre": {
+              "observed": 10
+            },
+            "era": {
+              "observed": 10
+            },
+            "novelty": {
+              "observed": 10
+            }
+          }
+        },
+        "exhaustive_oracle": {
+          "selected_ids": [
+            103,
+            19,
+            109,
+            25,
+            115,
+            37,
+            55,
+            49,
+            4,
+            34
+          ],
+          "returned": 10,
+          "fill_rate": 1.0,
+          "oracle_top_k_overlap": 1.0,
+          "mean_native_score": 0.840630774136,
+          "unique_artists": 6,
+          "duplicate_count": 0,
+          "seed_overlap_count": 0,
+          "year_violation_count": 0,
+          "artist_cap_excess": 0,
+          "threshold_violation_count": 0,
+          "nonfinite_score_count": 0,
+          "availability_counts": {
+            "sonic": {
+              "observed": 10
+            },
+            "popularity": {
+              "observed": 10
+            },
+            "style": {
+              "observed": 10
+            },
+            "genre": {
+              "observed": 10
+            },
+            "era": {
+              "observed": 10
+            },
+            "novelty": {
+              "observed": 10
+            }
+          }
+        }
+      },
+      "observations": [],
+      "invariants_ok": true
+    },
+    {
+      "name": "populate_frequency",
+      "description": "Per-seed votes with partial evidence.",
+      "fixture_sha256": "d8770101f47fd74982d82943d71e95ccac78aa9068ebe1e8eeb390f07f5ce08c",
+      "request": {
+        "seed_ids": [
+          1,
+          2,
+          4
+        ],
+        "limit": 8,
+        "artist_max": 2,
+        "year_min": null,
+        "year_max": null,
+        "min_score": null,
+        "weights": {
+          "sonic": 0.3,
+          "popularity": 0.15,
+          "style": 0.1,
+          "genre": 0.15,
+          "era": 0.05,
+          "novelty": 0.1
+        },
+        "mode": "frequency",
+        "per_seed_limit": 12
+      },
+      "mode": "frequency",
+      "requested": 8,
+      "eligible_count": 77,
+      "bounded_candidate_count": 66,
+      "bounded_oracle_top_k_recall": 1.0,
+      "bounded_missing_oracle_ids": [],
+      "strategies": {
+        "current": {
+          "selected_ids": [
+            19,
+            22,
+            23,
+            25,
+            26,
+            5,
+            7,
+            10
+          ],
+          "returned": 8,
+          "fill_rate": 1.0,
+          "oracle_top_k_overlap": 1.0,
+          "mean_native_score": 0.689228566232,
+          "unique_artists": 6,
+          "duplicate_count": 0,
+          "seed_overlap_count": 0,
+          "year_violation_count": 0,
+          "artist_cap_excess": 0,
+          "threshold_violation_count": 0,
+          "nonfinite_score_count": 0,
+          "availability_counts": {
+            "sonic": {
+              "mixed": 3,
+              "observed": 5
+            },
+            "popularity": {
+              "neutral_missing": 8
+            },
+            "style": {
+              "not_applicable": 8
+            },
+            "genre": {
+              "not_applicable": 8
+            },
+            "era": {
+              "neutral_missing": 8
+            },
+            "novelty": {
+              "observed": 8
+            }
+          }
+        },
+        "sonic_novelty_baseline": {
+          "selected_ids": [
+            19,
+            22,
+            23,
+            25,
+            26,
+            5,
+            7,
+            10
+          ],
+          "returned": 8,
+          "fill_rate": 1.0,
+          "oracle_top_k_overlap": 1.0,
+          "mean_native_score": 0.895584750126,
+          "unique_artists": 6,
+          "duplicate_count": 0,
+          "seed_overlap_count": 0,
+          "year_violation_count": 0,
+          "artist_cap_excess": 0,
+          "threshold_violation_count": 0,
+          "nonfinite_score_count": 0,
+          "availability_counts": {
+            "sonic": {
+              "mixed": 3,
+              "observed": 5
+            },
+            "popularity": {
+              "neutral_missing": 8
+            },
+            "style": {
+              "not_applicable": 8
+            },
+            "genre": {
+              "not_applicable": 8
+            },
+            "era": {
+              "neutral_missing": 8
+            },
+            "novelty": {
+              "observed": 8
+            }
+          }
+        },
+        "exhaustive_oracle": {
+          "selected_ids": [
+            19,
+            22,
+            23,
+            25,
+            26,
+            5,
+            7,
+            10
+          ],
+          "returned": 8,
+          "fill_rate": 1.0,
+          "oracle_top_k_overlap": 1.0,
+          "mean_native_score": 0.689228566232,
+          "unique_artists": 6,
+          "duplicate_count": 0,
+          "seed_overlap_count": 0,
+          "year_violation_count": 0,
+          "artist_cap_excess": 0,
+          "threshold_violation_count": 0,
+          "nonfinite_score_count": 0,
+          "availability_counts": {
+            "sonic": {
+              "mixed": 3,
+              "observed": 5
+            },
+            "popularity": {
+              "neutral_missing": 8
+            },
+            "style": {
+              "not_applicable": 8
+            },
+            "genre": {
+              "not_applicable": 8
+            },
+            "era": {
+              "neutral_missing": 8
+            },
+            "novelty": {
+              "observed": 8
+            }
+          }
+        }
+      },
+      "observations": [],
+      "invariants_ok": true
+    }
+  ],
+  "invariants_ok": true
+}

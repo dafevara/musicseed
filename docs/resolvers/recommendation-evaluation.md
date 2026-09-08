@@ -19,7 +19,8 @@ Default output is JSON on stdout. `--output` replaces only the explicitly named 
 The command exits nonzero for a safety-invariant violation (duplicates, seed/year/artist/threshold
 violations, non-finite scores, or exceeding the requested count). Ranking differences, low recall,
 and legitimate underfill are reported, **not hidden by turning them into passing quality scores**.
-They do not make the command fail: MUS-95 establishes a diagnostic before MUS-96 changes retrieval.
+They do not make the command fail. MUS-95 established the historical baseline; MUS-96 now uses
+full eligible scoring, while retaining the old bounded retriever as a diagnostic reference.
 
 Reports record fixture version, RNG seed, per-case request controls and a SHA-256 fingerprint of
 all synthetic facts/parameters. They omit timestamps, elapsed times, temporary paths, and private
@@ -73,7 +74,10 @@ confused with retrieval starvation.
 
 The [MUS-95 bounded baseline report](../evaluation/bounded-v1-seed7.json) captures fixture version 1,
 seed 7, before retrieval simplification. Its known style/large-seed gaps are deliberately visible;
-passing safety invariants must not be interpreted as proving complete retrieval.
+passing safety invariants must not be interpreted as proving complete retrieval. Compare it with
+the [full-scoring report](../evaluation/full-v1-seed7.json), whose production results match the
+current-score oracle in these fixtures. See the [retrieval decision](retrieval-decision.md) for
+performance methodology, measured trade-offs and remaining limits.
 
 ## Owner listening review (not yet performed)
 

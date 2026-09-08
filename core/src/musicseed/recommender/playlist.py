@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
 from typing import Sequence
 
 from pydantic import BaseModel
@@ -10,14 +9,13 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
 from musicseed.db.models import Artist, Track
-from musicseed.recommender.candidates import build_candidate_pool
+from musicseed.recommender.retrieval import FEATURE_BATCH_SIZE, score_eligible_tracks
 from musicseed.recommender.scoring import (
     ScoreBreakdown,
+    SeedProfile,
     SonicCoverage,
     Weights,
     build_seed_profile,
-    calculate_score,
-    has_usable_vector,
 )
 from musicseed.sonic import SonicVectors, get_sonic_vectors
 
@@ -112,18 +110,22 @@ def resolve_seed_tracks(
     seeds: list[Track] = []
     seen: set[int] = set()
 
-    for track_id in seed_ids or []:
-        track = (
-            session.query(Track)
+    requested = list(dict.fromkeys(seed_ids or []))
+    by_id: dict[int, Track] = {}
+    for start in range(0, len(requested), FEATURE_BATCH_SIZE):
+        by_id.update(
+            (track.id, track)
+            for track in session.query(Track)
             .options(*_track_load_options())
-            .filter(Track.id == track_id)
-            .one_or_none()
+            .filter(Track.id.in_(requested[start : start + FEATURE_BATCH_SIZE]))
+            .all()
         )
+    for track_id in requested:
+        track = by_id.get(track_id)
         if track is None:
             raise ValueError(f"No seed track found with id={track_id}")
-        if track.id not in seen:
-            seeds.append(track)
-            seen.add(track.id)
+        seeds.append(track)
+        seen.add(track.id)
 
     for seed_text in seed_texts or []:
         track = _resolve_seed_text(session, seed_text)
@@ -135,6 +137,47 @@ def resolve_seed_tracks(
         raise ValueError("At least one seed track is required")
 
     return seeds
+
+
+def recommend_from_profile(
+    session: Session,
+    seed_profile: SeedProfile,
+    vectors: SonicVectors,
+    *,
+    limit: int,
+    weights: Weights,
+    year_min: int | None = None,
+    year_max: int | None = None,
+    max_tracks_per_artist: int = 3,
+    min_score: float | None = None,
+    exclude_ids: set[int] | None = None,
+) -> tuple[list[Recommendation], SonicCoverage]:
+    """Score eligible scalar facts and materialize only the selected ORM tracks."""
+    selected, coverage = score_eligible_tracks(
+        session,
+        seed_profile,
+        vectors,
+        limit=limit,
+        weights=weights,
+        year_min=year_min,
+        year_max=year_max,
+        max_tracks_per_artist=max_tracks_per_artist,
+        min_score=min_score,
+        exclude_ids=exclude_ids,
+    )
+    ids = [record.id for record in selected]
+    tracks: dict[int, Track] = {}
+    for start in range(0, len(ids), FEATURE_BATCH_SIZE):
+        tracks.update(
+            (track.id, track)
+            for track in session.query(Track)
+            .options(*_track_load_options())
+            .filter(Track.id.in_(ids[start : start + FEATURE_BATCH_SIZE]))
+            .all()
+        )
+    return [
+        Recommendation(track=tracks[r.id], score=r.score, sources=["eligible"]) for r in selected
+    ], coverage
 
 
 def recommend_tracks(
@@ -150,14 +193,13 @@ def recommend_tracks(
     min_score: float | None = None,
     vectors: SonicVectors | None = None,
 ) -> tuple[list[Track], list[Recommendation], SonicCoverage]:
-    """Generate recommendations using multi-source candidates and constrained selection.
+    """Score every eligible non-seed track and return the exact constrained top-k.
 
-    Pipeline: resolve the seeds, aggregate them into a ``SeedProfile``, build
-    a multi-source candidate pool, score every candidate against the profile,
-    then select greedily in descending total score. Selection enforces the
-    artist diversity constraint — at most ``max_tracks_per_artist`` tracks
-    per artist — and stops at ``limit`` tracks or at the first candidate
-    below ``min_score``. Seed tracks are never recommended.
+    Resolve and aggregate seeds, filter years, stream scalar scoring facts,
+    and retain the best ``limit`` under the artist cap and score threshold.
+    This is equivalent to globally sorting by score then local ID, but loads
+    ORM graphs only for seeds and selected tracks. No source budget can omit
+    an eligible candidate. Average-populate uses this same pipeline.
 
     Args:
         session: open database session.
@@ -190,55 +232,15 @@ def recommend_tracks(
         vectors = get_sonic_vectors()
     seed_tracks = resolve_seed_tracks(session, seed_texts=seed_texts, seed_ids=seed_ids)
     seed_profile = build_seed_profile(seed_tracks, vectors)
-    candidate_pool = build_candidate_pool(
+    selected, coverage = recommend_from_profile(
         session,
         seed_profile,
         vectors,
         limit=limit,
+        weights=weights,
         year_min=year_min,
         year_max=year_max,
+        max_tracks_per_artist=max_tracks_per_artist,
+        min_score=min_score,
     )
-
-    if not candidate_pool.track_ids:
-        return seed_tracks, [], SonicCoverage(candidates=0, with_vector=0)
-
-    candidates = (
-        session.query(Track)
-        .options(*_track_load_options())
-        .filter(Track.id.in_(candidate_pool.track_ids))
-        .all()
-    )
-
-    with_vector = sum(
-        1
-        for track in candidates
-        if has_usable_vector(vectors.get(track.plex_id))
-    )
-    coverage = SonicCoverage(candidates=len(candidates), with_vector=with_vector)
-
-    scored = [
-        Recommendation(
-            track=track,
-            score=calculate_score(track, seed_profile, weights, vectors),
-            sources=candidate_pool.sources_for(track.id),
-        )
-        for track in candidates
-        if track.id not in seed_profile.track_ids
-    ]
-    scored.sort(key=lambda recommendation: recommendation.score.total, reverse=True)
-
-    selected: list[Recommendation] = []
-    artist_counts: dict[int | None, int] = defaultdict(int)
-
-    for recommendation in scored:
-        if min_score is not None and recommendation.score.total < min_score:
-            break  # sorted descending — everything after this is also below threshold
-        artist_id = recommendation.track.artist_id
-        if artist_counts[artist_id] >= max_tracks_per_artist:
-            continue
-        selected.append(recommendation)
-        artist_counts[artist_id] += 1
-        if len(selected) >= limit:
-            break
-
     return seed_tracks, selected, coverage

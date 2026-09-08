@@ -1,4 +1,9 @@
-"""Candidate generation for multi-signal recommendations."""
+"""Historical bounded-retrieval reference for offline evaluation and benchmarks.
+
+Production uses ``retrieval.score_eligible_tracks``. The original source
+budgets (including their known omissions) stay here as an explicit comparator,
+not a fallback or alternate user-facing retrieval mode.
+"""
 
 from __future__ import annotations
 
@@ -75,7 +80,7 @@ def build_candidate_pool(
     year_min: int | None = None,
     year_max: int | None = None,
 ) -> CandidatePool:
-    """Build a candidate pool from all available recommendation signals.
+    """Build the historical bounded pool for diagnostics, not production selection.
 
     Each signal contributes its own bounded query (capped at
     ``max(limit * 4, 50)`` ids) so the pool is a generous superset that the

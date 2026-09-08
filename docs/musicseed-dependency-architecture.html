@@ -389,13 +389,13 @@ so publishing MusicSeed as open source means a new user needs as little as possi
   <line x1="660" y1="55" x2="710" y2="55" stroke="#5fd0a5" stroke-width="1.5" marker-end="url(#a3)"/>
   <rect x="715" y="28" rx="8" width="150" height="54" fill="#1d212b" stroke="#6ea8fe"/>
   <text x="790" y="50" text-anchor="middle" class="box-label">SonicVectors</text>
-  <text x="790" y="66" text-anchor="middle" class="box-sub">in RAM · ~12 MB</text>
+  <text x="790" y="66" text-anchor="middle" class="box-sub">raw + normalized · RAM</text>
   <line x1="865" y1="55" x2="915" y2="55" stroke="#5fd0a5" stroke-width="1.5" marker-end="url(#a3)"/>
   <rect x="920" y="28" rx="8" width="80" height="54" fill="#1d212b" stroke="#6ea8fe"/>
-  <text x="960" y="50" text-anchor="middle" class="box-label">nearest()</text>
-  <text x="960" y="66" text-anchor="middle" class="box-sub">matmul</text>
+  <text x="960" y="50" text-anchor="middle" class="box-label">get()</text>
+  <text x="960" y="66" text-anchor="middle" class="box-sub">scoring</text>
 </svg>
-<figcaption>Vectors are copied into the local <code>track_vectors</code> table at import time, then loaded into an in-memory matrix for recommendations. Brute-force cosine search is single-digit milliseconds — no ANN index, no pgvector column, no padding hacks.</figcaption>
+<figcaption>Vectors are copied into the local <code>track_vectors</code> table at import time, then cached in raw/normalized matrices. Recommendations score every eligible track using local vector lookups. Cache memory scales with vector count; query latency is measured, not assumed instantaneous. See <code>docs/resolvers/retrieval-decision.md</code> for benchmarks and limits. No ANN index or pgvector column is needed.</figcaption>
 </figure>
 
 <h3>3.4 Recommend — six signals, explainable</h3>
@@ -411,12 +411,12 @@ so publishing MusicSeed as open source means a new user needs as little as possi
   <text x="295" y="86" text-anchor="middle" class="box-sub">resolve_seed_tracks</text>
   <line x1="375" y1="75" x2="425" y2="75" stroke="#6ea8fe" stroke-width="1.5" marker-end="url(#a4)"/>
   <rect x="430" y="48" rx="8" width="185" height="54" fill="#1d212b" stroke="#6ea8fe"/>
-  <text x="522" y="66" text-anchor="middle" class="box-label">build_candidate_pool</text>
-  <text x="522" y="82" text-anchor="middle" class="box-sub">sonic (numpy) + 5 SQL sources</text>
+  <text x="522" y="66" text-anchor="middle" class="box-label">score_eligible_tracks</text>
+  <text x="522" y="82" text-anchor="middle" class="box-sub">year/seed filters · scalar SQL</text>
   <line x1="615" y1="75" x2="665" y2="75" stroke="#6ea8fe" stroke-width="1.5" marker-end="url(#a4)"/>
   <rect x="670" y="48" rx="8" width="160" height="54" fill="#1d212b" stroke="#6ea8fe"/>
-  <text x="750" y="66" text-anchor="middle" class="box-label">calculate_score</text>
-  <text x="750" y="82" text-anchor="middle" class="box-sub">ScoreBreakdown · 6 weights</text>
+  <text x="750" y="66" text-anchor="middle" class="box-label">ConstrainedTopK</text>
+  <text x="750" y="82" text-anchor="middle" class="box-sub">shared score_signals · artist cap</text>
   <line x1="830" y1="75" x2="880" y2="75" stroke="#6ea8fe" stroke-width="1.5" marker-end="url(#a4)"/>
   <rect x="885" y="48" rx="8" width="115" height="54" fill="#1d212b" stroke="#b48ead"/>
   <text x="942" y="66" text-anchor="middle" class="box-label">playlist</text>
@@ -424,7 +424,7 @@ so publishing MusicSeed as open source means a new user needs as little as possi
   <rect x="430" y="118" rx="6" width="570" height="26" fill="#171a21" stroke="#2b3140"/>
   <text x="715" y="135" text-anchor="middle" class="box-sub">signals: sonic · popularity · style · genre · era · novelty — every score is explainable via --explain</text>
 </svg>
-<figcaption><code>musicseed-cli recommend</code> previews; <code>playlist</code> / <code>populate</code> ask for confirmation, then write to Plex over the HTTP API — the only workflow that mutates anything outside musicseed.db.</figcaption>
+<figcaption><code>musicseed-cli recommend</code> previews; <code>playlist</code> / <code>populate</code> confirm and apply the exact approved IDs over Plex HTTP, without recomputing. Full retrieval hydrates only seeds and selected tracks. <code>sonic-refresh</code> is a separate, explicitly confirmed remote-analysis mutation.</figcaption>
 </figure>
 
 <!-- ============================ NEW USER PATH ============================ -->
