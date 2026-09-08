@@ -1,7 +1,7 @@
 """Scoring availability tests — distinguish real scores from neutral fallbacks (MUS-79)."""
 
 import numpy as np
-from musicseed.db.models import Track
+from musicseed.db.models import Genre, Style, Track
 from musicseed.recommender.scoring import (
     ScoreBreakdown,
     SeedProfile,
@@ -49,7 +49,10 @@ def test_missing_data_marks_neutral_and_not_applicable():
 
 
 def test_present_data_marks_all_signals_observed():
-    candidate = Track(title="candidate", plex_id=1, year=2000, spotify_popularity=50)
+    candidate = Track(
+        title="candidate", plex_id=1, year=2000, spotify_popularity=50,
+        styles=[Style(name="rock")], genres=[Genre(name="rock")],
+    )
     seed = SeedProfile(
         track_ids=set(),
         embedding=_embedding(1.0),

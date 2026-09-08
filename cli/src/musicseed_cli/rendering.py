@@ -1,21 +1,23 @@
 """Shared rendering helpers for recommendation output."""
 
-from musicseed.recommender.scoring import Weights
+from musicseed.recommender.scoring import SIGNALS, Weights
 from rich.table import Table
 
 from musicseed_cli.console import console
 
 
 def _availability_note(score) -> str:
-    """Summarize missing/not-applicable signals for an explain row."""
+    """Summarize missing, mixed, and unknown evidence without implying neutrality."""
     availability = getattr(score, "availability", None) or {}
-    missing = sorted(k for k, v in availability.items() if v == "neutral_missing")
-    skipped = sorted(k for k, v in availability.items() if v == "not_applicable")
+    labels = {
+        "neutral_missing": "neutral (missing)", "missing": "missing (score policy)",
+        "not_applicable": "n/a", "mixed": "mixed evidence", "unknown": "unknown evidence",
+    }
     parts = []
-    if missing:
-        parts.append("missing: " + ", ".join(missing))
-    if skipped:
-        parts.append("n/a: " + ", ".join(skipped))
+    for status, label in labels.items():
+        signals = sorted(k for k in SIGNALS if availability.get(k, "unknown") == status)
+        if signals:
+            parts.append(label + ": " + ", ".join(signals))
     return "; ".join(parts)
 
 

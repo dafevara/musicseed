@@ -1,27 +1,7 @@
 "use client";
 
 import type { RecommendationItem } from "@/lib/types";
-
-function breakdownTitle(score: RecommendationItem["score"]): string {
-  const lines = [
-    `sonic ${(score.sonic * 100).toFixed(0)}%`,
-    `popularity ${(score.popularity * 100).toFixed(0)}%`,
-    `style ${(score.style * 100).toFixed(0)}%`,
-    `genre ${(score.genre * 100).toFixed(0)}%`,
-    `era ${(score.era * 100).toFixed(0)}%`,
-    `novelty ${(score.novelty * 100).toFixed(0)}%`,
-  ];
-  const availability = score.availability ?? {};
-  const missing = Object.keys(availability)
-    .filter((k) => availability[k] === "neutral_missing")
-    .sort();
-  const skipped = Object.keys(availability)
-    .filter((k) => availability[k] === "not_applicable")
-    .sort();
-  if (missing.length) lines.push(`missing: ${missing.join(", ")}`);
-  if (skipped.length) lines.push(`not applicable: ${skipped.join(", ")}`);
-  return lines.join("\n");
-}
+import { breakdownTitle } from "@/lib/score-explanation";
 
 export function RecommendResults({
   items,

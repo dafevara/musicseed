@@ -29,7 +29,7 @@ def playlist(
     ] = None,
     limit: Annotated[
         int,
-        typer.Option("--limit", "-n", help="Number of tracks in the playlist"),
+        typer.Option("--limit", "-n", help="Maximum recommendations to add after the seed tracks"),
     ] = 50,
     explain: Annotated[
         bool,
@@ -62,6 +62,7 @@ def playlist(
     followed by the approved recommendations.
     """
     from musicseed.services import recommend as recommend_service
+    from musicseed.services.playlist_tracks import create_playlist_from_tracks
 
     if not seed and not seed_id:
         console.print("[red]Error: At least one --seed or --seed-id is required[/red]")
@@ -132,18 +133,12 @@ def playlist(
         raise typer.Exit(0)
 
     try:
-        plex_result = recommend_service.create_playlist(
+        plex_result = create_playlist_from_tracks(
             name,
-            seed_texts=seed,
-            seed_ids=seed_id,
-            limit=limit,
-            weights=weights,
-            year_min=year_min,
-            year_max=year_max,
-            max_tracks_per_artist=artist_max,
-            min_score=min_score,
+            [track.id for track in rec_result.seed_tracks]
+            + [rec.track.id for rec in rec_result.recommendations],
         )
-        total = len(plex_result.seed_tracks) + len(plex_result.recommendations)
+        total = len(plex_result.tracks)
         console.print(
             f"\n[green]✓ Playlist '{plex_result.playlist.title}' created in Plex "
             f"({total} tracks).[/green]\n"

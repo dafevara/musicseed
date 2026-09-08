@@ -58,7 +58,9 @@ Service entry points:
   wizard consumes it.
 - `services/enrichment.py`: `enrich_tracks` (**calls `asyncio.run()` internally — never call it
   from inside a running event loop; offload to a thread**).
-- `services/recommend.py`: `get_recommendations`, `create_playlist`.
+- `services/recommend.py`: `get_recommendations`, `create_playlist` (generate-and-write).
+- `services/playlist_tracks.py`: `create_playlist_from_tracks` writes approved IDs in order
+  without recommending again; validates the entire selection before any Plex write.
 - `services/populate.py`: `list_plex_playlists`, `get_populate_recommendations`,
   `populate_playlist` — keyed by Plex playlist `rating_key`, not title.
 - `services/plex_analysis.py`: `get_sonic_status`, `probe_sonic_trigger`,
@@ -130,12 +132,17 @@ Service entry points:
 
 ## Particularities to respect
 
-- **Result models embed raw ORM objects.** `Recommendation`, `RecommendationResult`, etc. use
-  `model_config = {"arbitrary_types_allowed": True}` and hold live SQLAlchemy `Track` objects, so
-  they are **not directly JSON-serializable**. The API surface (`api/routes/`) must project
-  `Track` into DTOs — see `routes/recommend.py` for the pattern. Sessions use
-  `expire_on_commit=False` and eager `selectinload`, so returned `Track`s stay usable after
-  the session closes — preserve both if you touch loading.
+- **Service results are JSON-safe DTOs.** `ServiceTrack` contains scalar artist/album/year,
+  popularity (0–100), and local/Plex IDs. `ServiceRecommendation` adds the score and copied
+  candidate sources. Map ORM objects **inside** the producing session, using `services/schemas.py`;
+  results must serialize after session closure and engine disposal. Only internal recommender
+  `Recommendation` objects embed ORM tracks; never return them directly from services.
+- **Explanations must survive aggregation.** Availability distinguishes observed, neutral-missing,
+  missing candidate tags (historical zero score), not-applicable, mixed votes, and legacy unknown
+  evidence. Frequency-populate averages numeric scores unchanged and aggregates these statuses.
+- **Approved selections are not new recommendation requests.** CLI/API confirmation paths pass
+  the displayed IDs to exact-selection writes. Missing/unmapped IDs reject the whole write;
+  empty selections never trigger regeneration.
 - **Recommendation signals are exactly six**: sonic, popularity, style, genre, era, novelty. There
   is no "mood" signal (it was removed). `Weights`/`ScoreBreakdown` are frozen Pydantic models.
 - **`rich` is a real core dependency** — the import/enrich pipelines render progress with it.

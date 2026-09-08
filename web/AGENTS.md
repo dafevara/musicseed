@@ -59,9 +59,11 @@ API shapes are typed in `src/lib/types.ts`.
 - **No business logic.** Pages parse input, call the API, and render. Recommendation weights,
   scoring, and playlist/populate logic all live in core behind the API. Keep it that way.
 - **Mutations require a preview + confirmation.** Playlist create and populate show a preview of
-  the exact changes and require an explicit confirm before the mutating POST. Sonic refresh
-  explains its whole-backlog impact and requires a separate confirmation. Cancel leaves Plex
-  untouched.
+  the exact changes and require an explicit confirm before the mutating POST. Send approved
+  `track_ids`; creation also sends the preview's resolved `seed_track_ids`, not a fresh scoring
+  request. Invalidate previews when seeds change and ignore outdated preview responses. Sonic
+  refresh explains its whole-backlog impact and requires a separate confirmation. Cancel leaves
+  Plex untouched.
 - **Secrets never render.** The Plex token and Spotify secret travel in POST bodies only; the UI
   shows configured/not-set, never the value.
 - **Polling is back-off aware.** The dashboard only polls `/dashboard` while jobs are active and

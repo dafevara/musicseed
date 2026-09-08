@@ -1,9 +1,10 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
+import { playlistCreateBody } from "@/lib/playlist-preview";
 import { useSetupGate } from "@/lib/use-setup-gate";
 import type { RecommendationItem, PopulatePreview, RecommendResponse, TypeaheadTrack } from "@/lib/types";
 import { Typeahead } from "@/components/typeahead";
@@ -36,8 +37,8 @@ function PlaylistsPageInner() {
   const [newName, setNewName] = useState("");
   const [seeds, setSeeds] = useState<TypeaheadTrack[]>([]);
   const [seedIds, setSeedIds] = useState<number[]>([]);
-  const [createPreview, setCreatePreview] = useState<RecommendationItem[] | null>(null);
-  const [createWeights, setCreateWeights] = useState<Record<string, number>>();
+  const [createPreview, setCreatePreview] = useState<RecommendResponse | null>(null);
+  const createRequest = useRef(0);
   const [previewing, setPreviewing] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createResult, setCreateResult] = useState<string | null>(null);
@@ -62,13 +63,21 @@ function PlaylistsPageInner() {
       .finally(() => setLoading(false));
   }, []);
 
+  function invalidateCreatePreview() {
+    createRequest.current += 1;
+    setCreatePreview(null);
+    setPreviewing(false);
+  }
+
   function addSeed(track: TypeaheadTrack) {
     if (seedIds.includes(track.id)) return;
+    invalidateCreatePreview();
     setSeeds((prev) => [...prev, track]);
     setSeedIds((prev) => [...prev, track.id]);
   }
 
   function removeSeed(id: number) {
+    invalidateCreatePreview();
     setSeeds((prev) => prev.filter((s) => s.id !== id));
     setSeedIds((prev) => prev.filter((i) => i !== id));
   }
@@ -78,11 +87,12 @@ function PlaylistsPageInner() {
     setNewName("");
     setSeeds([]);
     setSeedIds([]);
-    setCreatePreview(null);
+    invalidateCreatePreview();
   }
 
   async function handlePreviewCreate() {
     if (!newName.trim() || seedIds.length === 0) return;
+    const request = ++createRequest.current;
     setPreviewing(true);
     setCreateResult(null);
     try {
@@ -90,18 +100,18 @@ function PlaylistsPageInner() {
         seed_ids: seedIds.join(","),
         limit: 50,
       });
-      setCreatePreview(data.recommendations);
-      setCreateWeights(data.weights);
+      if (request === createRequest.current) setCreatePreview(data);
     } catch (e) {
+      if (request !== createRequest.current) return;
       setCreatePreview(null);
       setCreateResult(`Error: ${String(e).replace("Error: ", "")}`);
     } finally {
-      setPreviewing(false);
+      if (request === createRequest.current) setPreviewing(false);
     }
   }
 
   async function handleConfirmCreate() {
-    if (!newName.trim() || seedIds.length === 0) return;
+    if (!newName.trim() || !createPreview?.recommendations.length) return;
     setCreating(true);
     setCreateResult(null);
     try {
@@ -110,11 +120,7 @@ function PlaylistsPageInner() {
         track_count: number;
         seed_count: number;
         recommendation_count: number;
-      }>("/playlists/create", {
-        name: newName.trim(),
-        seed_ids: seedIds.join(","),
-        limit: 50,
-      });
+      }>("/playlists/create", playlistCreateBody(newName, createPreview));
       setCreateResult(
         `Created "${result.name}" with ${result.track_count} tracks ` +
         `(${result.seed_count} seeds + ${result.recommendation_count} recommendations).`
@@ -165,8 +171,6 @@ function PlaylistsPageInner() {
         added_count: number;
         playlist_track_count: number;
       }>(`/playlists/${encodeURIComponent(playlistId)}/populate`, {
-        limit: 40,
-        method: "average",
         track_ids: trackIds.join(","),
       });
       setPopulateResult(
@@ -259,21 +263,21 @@ function PlaylistsPageInner() {
             {createPreview && (
               <div className="mt-3 p-3 border border-[var(--border)] rounded-lg bg-[var(--bg)]">
                 <p className="text-sm mb-1">
-                  {createPreview.length} recommended tracks will be added to &ldquo;{newName.trim()}&rdquo;
-                  alongside your {seedIds.length} seed{seedIds.length !== 1 ? "s" : ""}.
+                  {createPreview.recommendations.length} recommended tracks will be added to &ldquo;{newName.trim()}&rdquo;
+                  alongside your {createPreview.seed_track_ids.length} seed tracks.
                 </p>
-                <RecommendResults items={createPreview} weights={createWeights} />
+                <RecommendResults items={createPreview.recommendations} weights={createPreview.weights} />
                 <div className="flex gap-2 mt-3">
                   <button
                     className="btn btn-primary"
                     onClick={handleConfirmCreate}
-                    disabled={creating}
+                    disabled={creating || !createPreview.recommendations.length}
                   >
                     {creating ? "Creating…" : "Confirm & create"}
                   </button>
                   <button
                     className="btn btn-secondary"
-                    onClick={() => setCreatePreview(null)}
+                    onClick={invalidateCreatePreview}
                     disabled={creating}
                   >
                     Back

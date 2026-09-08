@@ -160,15 +160,7 @@ def populate(
 
     try:
         result = populate_service.populate_playlist(
-            playlist_id,
-            method=method,
-            limit=limit,
-            per_seed_limit=per_seed_limit,
-            weights=weights,
-            year_min=year_min,
-            year_max=year_max,
-            max_tracks_per_artist=artist_max,
-            min_score=min_score,
+            playlist_id, track_ids=[rec.track.id for rec in preview.recommendations],
         )
         console.print(
             f"\n[green]✓ Added {result.added_count} tracks to playlist "

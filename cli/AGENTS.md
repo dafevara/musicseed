@@ -51,9 +51,9 @@ Imports from core are unchanged from the pre-monorepo layout (`from musicseed.co
 | `sonic-refresh` (`--days N`, confirms before triggering the Butler task) | `services.plex_analysis.refresh_sonic_analysis` |
 | `enrich` (`--source spotify|listenbrainz`) | `services.enrichment.enrich_tracks` |
 | `recommend` | `services.recommend.get_recommendations` |
-| `playlist` | `get_recommendations` → confirm → `services.recommend.create_playlist` |
+| `playlist` | `get_recommendations` → confirm → `services.playlist_tracks.create_playlist_from_tracks` (approved IDs) |
 | `playlists` | `services.populate.list_plex_playlists` |
-| `populate` | `services.populate.get_populate_recommendations` → confirm → `populate_playlist` |
+| `populate` | `services.populate.get_populate_recommendations` → confirm → `populate_playlist(track_ids=approved_ids)` |
 
 ## Particularities to respect
 
@@ -64,7 +64,9 @@ Imports from core are unchanged from the pre-monorepo layout (`from musicseed.co
   translate to `console.print(...)` + `raise typer.Exit(1)`; unexpected errors are logged via
   `get_logger("cli")` to `logs/latest.log` before exiting. Follow this pattern for new commands.
 - **Confirm before Plex writes.** `playlist` and `populate` generate a preview, show it, then use
-  `typer.confirm(...)` before the mutating call. `populate --dry-run` skips the write entirely.
+  `typer.confirm(...)` before the mutating call. Pass the displayed IDs, including resolved seeds
+  for new playlists; do not recompute recommendations after approval. `populate --dry-run` skips
+  the write entirely. Service DTOs are JSON-safe and already detached from ORM sessions.
   Preserve this human-in-the-loop step for anything that mutates Plex.
 - **Config is YAML** (this app's mechanism), loaded by core from `~/.config/musicseed/config.yaml`,
   `~/.musicseed.yaml`, or a **cwd-relative `./config.yaml`** — which, when running from `cli/`,

@@ -180,13 +180,19 @@ export interface ScoreBreakdown {
   genre: number;
   era: number;
   novelty: number;
-  availability?: Record<string, "observed" | "neutral_missing" | "not_applicable">;
+  availability?: Record<string,
+    "observed" | "neutral_missing" | "not_applicable" | "missing" | "mixed" | "unknown">;
 }
 
 export interface RecommendationItem {
   track_id: number;
   title: string;
   artist: string | null;
+  album?: string | null;
+  year?: number | null;
+  popularity?: number | null;
+  plex_id?: number | null;
+  sources?: string[];
   score: ScoreBreakdown;
 }
 

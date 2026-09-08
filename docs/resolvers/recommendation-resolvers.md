@@ -61,11 +61,13 @@ and artist diversity constraints to shape the final result.
 - `era`: proximity within a 50-year window.
 - `novelty`: inverse function of play count.
 
-Signals with missing data degrade to the neutral `0.5` rather than zero (see
-`docs/domain/music-recommendation.md`). The per-track `ScoreBreakdown.availability` map records
-whether each component was `observed`, `neutral_missing`, or `not_applicable`, so a genuine
-mid-range score is distinguishable from a missing-data fallback. The CLI `--explain` output
-(`missing: …`, `n/a: …`) and the web score tooltip surface these flags.
+Missing sonic/popularity/year uses neutral `0.5`. Missing seed tags also use `0.5`; missing
+candidate tags with a tagged seed retain the historical **zero** score, labelled `missing` rather
+than observed. `ScoreBreakdown.availability` distinguishes `observed`, `neutral_missing`,
+`not_applicable`, `missing`, `mixed`, and legacy `unknown` evidence. Frequency-populate preserves
+uniform statuses and marks differing vote statuses `mixed`, without changing numeric averaging.
+CLI `--explain` and web tooltips surface all these states; see
+[the domain guide](../domain/music-recommendation.md) for the invalid-vector bug-fix boundary.
 
 Default weights live in `Weights` and mirror `RecommendationWeights` in config:
 
@@ -84,6 +86,23 @@ to the remaining signals proportionally — no manual rebalancing needed.
 Mood was removed from scoring because it introduced noise for this library. Plex mood tags are
 still stored and visible in `status`, but excluded from `Weights`, `ScoreBreakdown`, `SeedProfile`,
 and `build_candidate_pool()`.
+
+## Service and approval boundaries
+
+Recommendation/populate services map ORM tracks to JSON-safe DTOs while sessions are open.
+Artist, album, year, popularity, local/Plex IDs, scores, sources and normal recommendation coverage
+remain serializable after session closure and engine disposal. Only internal recommendation
+objects carry ORM tracks.
+
+A preview followed by confirmation is **not** a second recommendation request. CLI/web creation
+writes the preview's seed IDs plus its approved recommendation IDs in order; populate writes the
+approved IDs (including any user pruning). Empty or malformed API selections fail. Stale local
+IDs or tracks without a Plex mapping reject the whole write before any Plex mutation, rather than
+silently writing a subset. Duplicate IDs are collapsed in first-occurrence order.
+
+The API's create and populate write routes now require `track_ids`; seed-only/selection-free
+clients must preview first. Core retains explicit generate-and-write entry points for callers
+that intentionally do not implement a preview workflow.
 
 ## Selection
 

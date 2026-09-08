@@ -17,6 +17,7 @@ from musicseed.recommender.scoring import (
     Weights,
     build_seed_profile,
     calculate_score,
+    has_usable_vector,
 )
 from musicseed.sonic import SonicVectors, get_sonic_vectors
 
@@ -211,7 +212,7 @@ def recommend_tracks(
     with_vector = sum(
         1
         for track in candidates
-        if track.plex_id is not None and vectors.get(track.plex_id) is not None
+        if has_usable_vector(vectors.get(track.plex_id))
     )
     coverage = SonicCoverage(candidates=len(candidates), with_vector=with_vector)
 

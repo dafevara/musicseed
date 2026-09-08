@@ -9,6 +9,7 @@ from musicseed.exceptions import ConfigurationError, NotFoundError
 from musicseed.recommender.playlist import Recommendation
 from musicseed.recommender.populate import PopulateMethod, populate_playlist_recommendations
 from musicseed.recommender.scoring import Weights
+from musicseed.services.playlist_tracks import resolve_track_selection
 from musicseed.services.schemas import ServiceRecommendation, to_service_recommendation
 
 
@@ -54,23 +55,8 @@ def list_plex_playlists(context: MusicSeedContext | None = None) -> list[Playlis
 
 
 def _plex_ids_for_track_ids(session, track_ids: list[int]) -> list[int]:
-    """Map local track ids to Plex rating keys, preserving input order."""
-    if not track_ids:
-        return []
-    rows = (
-        session.query(Track.id, Track.plex_id)
-        .filter(Track.id.in_(track_ids), Track.plex_id.is_not(None))
-        .all()
-    )
-    by_id = {track_id: plex_id for track_id, plex_id in rows}
-    seen: set[int] = set()
-    plex_ids: list[int] = []
-    for track_id in track_ids:
-        plex_id = by_id.get(track_id)
-        if plex_id is not None and plex_id not in seen:
-            seen.add(plex_id)
-            plex_ids.append(plex_id)
-    return plex_ids
+    """Map all approved IDs in order; stale/unmapped IDs reject the whole write."""
+    return [track.plex_id for track in resolve_track_selection(session, track_ids)]
 
 
 def _resolve_playlist_local_tracks(

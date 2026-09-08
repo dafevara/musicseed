@@ -60,23 +60,29 @@ class SeedProfile(BaseModel):
     popularity: float | None
 
 
-SignalStatus = Literal["observed", "neutral_missing", "not_applicable"]
+SIGNALS = ("sonic", "popularity", "style", "genre", "era", "novelty")
+SignalStatus = Literal[
+    "observed", "neutral_missing", "not_applicable", "missing", "mixed", "unknown"
+]
 """Availability of one scoring signal.
 
 ``observed`` means the component reflects real data; ``neutral_missing`` means
 it fell back to the neutral ``0.5`` because required data was absent (no sonic
-vector, unknown popularity or year); ``not_applicable`` means the signal was
-skipped because the seed profile has no basis for it (empty seed styles or
-genres).
+vector, unknown popularity or year); ``not_applicable`` means the seed profile
+has no tag basis (empty seed styles or genres), retaining the weighted 0.5.
+ ``missing`` labels absent candidate tags whose historical score is
+zero (not a neutral fallback). ``mixed`` aggregates different evidence states;
+``unknown`` means an older score supplied no availability metadata.
 """
 
 
 class ScoreBreakdown(BaseModel):
-    """Component-level score details for explainable CLI output.
+    """Component-level score details for explainable service and surface output.
 
-    ``availability`` maps each signal name to how confident that component is:
-    ``observed`` (a real comparison), ``neutral_missing`` (the neutral 0.5
-    because data was absent), or ``not_applicable`` (skipped for this seed).
+    ``availability`` describes each component's evidence, not a confidence probability:
+    ``observed`` (a real comparison), ``neutral_missing`` (neutral fallback),
+    ``not_applicable`` (no seed basis), ``missing`` (absent candidate tags),
+    ``mixed`` (different per-seed evidence states), or ``unknown`` (legacy score).
     """
 
     model_config = {"frozen": True}
@@ -92,11 +98,11 @@ class ScoreBreakdown(BaseModel):
 
 
 class SonicCoverage(BaseModel):
-    """How many scored candidates actually had a Plex sonic vector.
+    """How many scored candidates have a usable (finite, nonzero) sonic vector.
 
-    A candidate without a vector scores a neutral ``0.5`` on the sonic
-    dimension, indistinguishable from a genuine mid-similarity match. Surfacing
-    this count lets a caller tell a flattened dimension from real coverage.
+    This is candidate-side availability; a missing/unusable seed profile can
+    still make sonic comparisons neutral. Per-track availability explains that
+    distinction. Stored zero vectors do not count as usable coverage.
     """
 
     model_config = {"frozen": True}
@@ -108,10 +114,30 @@ class SonicCoverage(BaseModel):
 def _as_vector(value: object) -> np.ndarray | None:
     if value is None:
         return None
-    vector = np.asarray(value, dtype=float)
-    if vector.size == 0:
+    try:
+        vector = np.asarray(value, dtype=float)
+    except (ValueError, TypeError):
         return None
-    return vector
+    if vector.ndim != 1 or vector.size == 0 or not np.isfinite(vector).all():
+        return None
+    with np.errstate(over="ignore", invalid="ignore"):
+        norm = float(np.linalg.norm(vector))
+    return vector if np.isfinite(norm) and norm > 0 else None
+
+
+def has_usable_vector(value: object) -> bool:
+    """Whether a vector can supply finite, nonzero sonic evidence."""
+    return _as_vector(value) is not None
+
+
+def sonic_comparable(left: object, right: object) -> bool:
+    """Both sides must be usable and have matching dimensions."""
+    a, b = _as_vector(left), _as_vector(right)
+    if a is None or b is None or a.shape != b.shape:
+        return False
+    with np.errstate(over="ignore", invalid="ignore"):
+        denominator = float(np.linalg.norm(a) * np.linalg.norm(b))
+    return np.isfinite(denominator) and denominator > 0
 
 
 def cosine_similarity(
@@ -126,15 +152,16 @@ def cosine_similarity(
 
     Returns:
         The normalized similarity, or the neutral ``0.5`` when either vector
-        is missing or has zero norm.
+        is missing, zero-norm, non-finite, or dimensionally incompatible.
     """
     left = _as_vector(a)
     right = _as_vector(b)
-    if left is None or right is None:
+    if left is None or right is None or left.shape != right.shape:
         return 0.5
 
-    denom = float(np.linalg.norm(left) * np.linalg.norm(right))
-    if denom == 0:
+    with np.errstate(over="ignore", invalid="ignore"):
+        denom = float(np.linalg.norm(left) * np.linalg.norm(right))
+    if not np.isfinite(denom) or denom == 0:
         return 0.5
 
     raw = float(np.dot(left, right) / denom)
@@ -151,7 +178,8 @@ def jaccard(left: set[str], right: set[str]) -> float:
     Returns:
         ``|left ∩ right| / |left ∪ right|``. Returns the neutral ``0.5``
         when both sets are empty (no information either way) and ``0.0``
-        when exactly one side is empty (known mismatch).
+        when exactly one side is empty (historical missing-candidate policy,
+        not proof of an observed mismatch).
     """
     if not left and not right:
         return 0.5
@@ -287,12 +315,10 @@ def calculate_score(
 ) -> ScoreBreakdown:
     """Score one candidate against a seed profile on all six signals.
 
-    Each signal produces a component in [0, 1]; signals with missing data
-    (no sonic vector, unknown popularity/year, empty tag sets on both sides)
-    contribute the neutral ``0.5`` rather than zero, so missing data neither
-    rewards nor punishes a candidate. The total is the weighted mean of the
-    components — weights are normalized by their sum, so absolute weight
-    values only control relative importance.
+    Components lie in [0, 1]. Missing sonic/popularity/year uses neutral 0.5.
+    Absent seed tags also use 0.5; absent candidate tags with a tagged seed keep
+    the historical score of zero, explicitly labelled missing rather than an
+    observed mismatch. The total is the weighted mean of the components.
 
     Args:
         candidate: the track to score.
@@ -341,7 +367,7 @@ def calculate_score(
     availability: dict[str, SignalStatus] = {
         "sonic": (
             "observed"
-            if candidate_vector is not None and seed.embedding is not None
+            if sonic_comparable(candidate_vector, seed.embedding)
             else "neutral_missing"
         ),
         "popularity": (
@@ -349,8 +375,10 @@ def calculate_score(
             if seed.popularity is not None and candidate_popularity is not None
             else "neutral_missing"
         ),
-        "style": "observed" if seed.styles else "not_applicable",
-        "genre": "observed" if seed.genres else "not_applicable",
+        "style": ("observed" if candidate_styles else "missing")
+                 if seed.styles else "not_applicable",
+        "genre": ("observed" if candidate_genres else "missing")
+                 if seed.genres else "not_applicable",
         "era": (
             "observed"
             if seed.year is not None and candidate.year is not None

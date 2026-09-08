@@ -96,10 +96,16 @@ JSON. Handlers are the reusable part — routes are the HTTP-specific projection
 - **Handlers never import FastAPI.** Keep them framework-free. Routes handle HTTP concerns
   (Form parsing, Query params, status codes). If a handler starts accepting `Request` or
   returning `Response`, the boundary has been crossed.
-- **Core result models embed live ORM objects** and are not JSON-serializable (see
-  `core/AGENTS.md`). Handlers return the raw Pydantic models as-is. JSON routes must project
-  `Track` objects into plain dicts/DTOs (see `routes/recommend.py` for the pattern). Projection
-  happens only in routes — never in handlers.
+- **Core service results are JSON-safe.** Services project ORM tracks into `ServiceTrack` and
+  `ServiceRecommendation` while sessions are open. Handlers/routes may reshape these scalar DTOs
+  for the wire contract, but must not access ORM relationships. Recommendation responses preserve
+  artist/album/year/popularity, local/Plex IDs, sources, and signal availability.
+- **Playlist writes require approved IDs.** `POST /playlists/create` requires `name`, `seed_ids`,
+  and `track_ids` (the approved recommendations). `POST /playlists/{playlist_id}/populate` requires
+  `track_ids`. Scoring weights/filters belong to preview requests, not write bodies.
+  Empty/malformed/stale selections fail rather than recomputing or writing a subset.
+  Clients using the old seed-only create or selection-free populate request must preview first.
+  Core still offers explicit generate-and-write functions for non-preview programmatic callers.
 - **`enrich_tracks` calls `asyncio.run()` internally.** All routes that trigger enrichment
   are synchronous for this reason. Never call `enrich_tracks` from an `async def` route; if
   you need async, offload to a thread (`fastapi.concurrency.run_in_threadpool`).
@@ -124,8 +130,8 @@ JSON. Handlers are the reusable part — routes are the HTTP-specific projection
 
 `fastapi`, `uvicorn`, `python-multipart`, `musicseed-core` (editable path); dev group:
 `pytest`, `httpx`. After changing core, run `uv lock` in `api/` so its lockfile re-resolves
-against the updated core. Surfaces that depend on api (`web/`) must also re-lock:
-`cd ../web && uv lock`.
+against the updated core. The web app uses npm, not uv; API-only changes do not require a web lock
+update.
 
 ## Run / verify (from `api/`)
 

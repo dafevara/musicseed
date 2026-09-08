@@ -31,11 +31,21 @@ Missing signals should degrade gracefully. A track without a popularity value or
 should not crash the recommendation flow; it should receive neutral or lower component scores
 depending on the scoring function.
 
-The per-track `ScoreBreakdown.availability` map makes that degradation visible instead of silent:
-each signal is marked `observed` (a real comparison), `neutral_missing` (fell back to the neutral
-`0.5` for lack of data — no sonic vector, unknown popularity or year), or `not_applicable`
-(skipped, e.g. the seed has no styles or genres). The CLI `--explain` output lists these
-(`missing: …`, `n/a: …`) and the web score tooltip names the missing signals.
+The per-track `ScoreBreakdown.availability` map distinguishes:
+
+- `observed`: a real comparison (including genuine mid-range scores).
+- `neutral_missing`: neutral `0.5` for missing/unusable sonic vectors or unknown popularity/year.
+- `not_applicable`: the seed has no style/genre basis (score `0.5`).
+- `missing`: the seed has tags but the candidate does not. **The historical Jaccard score remains
+  zero**, but this is missing metadata, not evidence of a measured mismatch.
+- `mixed`: frequency-populate votes used different availability states. Numeric scores remain
+  the mean over the seeds that voted for the candidate, not all playlist seeds.
+- `unknown`: a legacy score did not supply evidence metadata. No observed evidence is invented.
+
+CLI `--explain` and web tooltips expose these distinctions. Zero-norm vectors were already neutral;
+MUS-94 additionally treats non-finite or incompatible vectors as neutral rather than producing a
+perfect NaN-derived similarity or an exception. This is an explicit invalid-input bug fix; valid
+finite-input scoring, weights, and tag-missing numeric policy are unchanged.
 
 ## Popularity
 

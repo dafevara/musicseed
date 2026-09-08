@@ -79,6 +79,11 @@ def recommend(
                 "track_id": r.track.id,
                 "title": r.track.title,
                 "artist": r.track.artist,
+                "album": r.track.album,
+                "year": r.track.year,
+                "popularity": r.track.popularity,
+                "plex_id": r.track.plex_id,
+                "sources": r.sources,
                 "score": r.score,
             }
             for r in result.recommendations

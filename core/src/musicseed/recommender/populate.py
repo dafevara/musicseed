@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from musicseed.db.models import Track
 from musicseed.recommender.playlist import Recommendation, recommend_tracks
-from musicseed.recommender.scoring import ScoreBreakdown, Weights
+from musicseed.recommender.scoring import SIGNALS, ScoreBreakdown, SignalStatus, Weights
 from musicseed.sonic import SonicVectors
 
 PopulateMethod = Literal["average", "frequency"]
@@ -18,7 +18,13 @@ mean profile; ``"frequency"`` aggregates per-track votes."""
 
 
 def _average_score(scores: list[ScoreBreakdown]) -> ScoreBreakdown:
+    if not scores:
+        raise ValueError("Cannot average an empty set of scores")
     count = len(scores)
+    availability: dict[str, SignalStatus] = {}
+    for signal in SIGNALS:
+        statuses = {score.availability.get(signal, "unknown") for score in scores}
+        availability[signal] = next(iter(statuses)) if len(statuses) == 1 else "mixed"
     return ScoreBreakdown(
         total=sum(s.total for s in scores) / count,
         sonic=sum(s.sonic for s in scores) / count,
@@ -27,6 +33,7 @@ def _average_score(scores: list[ScoreBreakdown]) -> ScoreBreakdown:
         genre=sum(s.genre for s in scores) / count,
         era=sum(s.era for s in scores) / count,
         novelty=sum(s.novelty for s in scores) / count,
+        availability=availability,
     )
 
 

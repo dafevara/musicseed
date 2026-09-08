@@ -15,6 +15,8 @@ from fastapi.testclient import TestClient
 from musicseed.recommender.scoring import ScoreBreakdown, SonicCoverage, Weights
 from musicseed.services.library import EnrichmentCoverage, LibraryStatus
 from musicseed.services.plex_discovery import DiscoveredPlexServer
+from musicseed.services.recommend import RecommendationResult
+from musicseed.services.schemas import ServiceRecommendation, ServiceTrack
 from musicseed_api.app import create_app
 from pydantic import BaseModel
 
@@ -75,24 +77,19 @@ def test_recommend_typeahead_route(monkeypatch):
 
 
 def test_recommend_route(monkeypatch):
-    class FakeTrack:
-        id = 1
-        title = "t"
-        artist = None
-
-    class FakeRec:
-        track = FakeTrack()
-        score = ScoreBreakdown(
+    track = ServiceTrack(
+        id=1, title="t", artist="Fixture artist", album="Fixture album",
+        year=1999, popularity=55, plex_id=101,
+    )
+    result = RecommendationResult(
+        seed_tracks=[track],
+        recommendations=[ServiceRecommendation(track=track, score=ScoreBreakdown(
             total=0.5, sonic=0.5, popularity=0.5,
             style=0.5, genre=0.5, era=0.5, novelty=0.5,
-        )
-
-    class FakeResult:
-        seed_tracks = [FakeTrack()]
-        recommendations = [FakeRec()]
-        sonic_coverage = SonicCoverage(candidates=1, with_vector=0)
-
-    monkeypatch.setattr(recommend_routes, "run_recommendations", lambda **kw: FakeResult())
+        ), sources=["style"])],
+        sonic_coverage=SonicCoverage(candidates=1, with_vector=0),
+    )
+    monkeypatch.setattr(recommend_routes, "run_recommendations", lambda **kw: result)
     resp = TestClient(create_app()).post("/recommend", data={"seed_ids": "1"})
     assert resp.status_code == 200
     body = resp.json()
