@@ -2,51 +2,17 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
 from typing import Literal
 
 from sqlalchemy.orm import Session
 
-from musicseed.db.models import Track
-from musicseed.recommender.playlist import (
-    Recommendation,
-    recommend_from_profile,
-    recommend_tracks,
-    resolve_seed_tracks,
-)
-from musicseed.recommender.retrieval import ConstrainedTopK, ScoredTrack
-from musicseed.recommender.scoring import (
-    SIGNALS,
-    ScoreBreakdown,
-    SignalStatus,
-    Weights,
-    build_seed_profile,
-)
-from musicseed.sonic import SonicVectors, get_sonic_vectors
+from musicseed.recommender.playlist import Recommendation, recommend_tracks
+from musicseed.recommender.scoring import Weights
+from musicseed.sonic import SonicVectors
 
 PopulateMethod = Literal["average", "frequency"]
 """Playlist populate strategies: ``"average"`` scores against the playlist's
 mean profile; ``"frequency"`` aggregates per-track votes."""
-
-
-def _average_score(scores: list[ScoreBreakdown]) -> ScoreBreakdown:
-    if not scores:
-        raise ValueError("Cannot average an empty set of scores")
-    count = len(scores)
-    availability: dict[str, SignalStatus] = {}
-    for signal in SIGNALS:
-        statuses = {score.availability.get(signal, "unknown") for score in scores}
-        availability[signal] = next(iter(statuses)) if len(statuses) == 1 else "mixed"
-    return ScoreBreakdown(
-        total=sum(s.total for s in scores) / count,
-        sonic=sum(s.sonic for s in scores) / count,
-        popularity=sum(s.popularity for s in scores) / count,
-        style=sum(s.style for s in scores) / count,
-        genre=sum(s.genre for s in scores) / count,
-        era=sum(s.era for s in scores) / count,
-        novelty=sum(s.novelty for s in scores) / count,
-        availability=availability,
-    )
 
 
 def populate_average(
@@ -141,43 +107,22 @@ def populate_frequency(
     """
     if per_seed_limit <= 0:
         raise ValueError("per_seed_limit must be greater than zero")
-    selected = ConstrainedTopK(limit, max_tracks_per_artist)
     if not playlist_track_ids:
         return []
-    weights = weights or Weights()
-    if vectors is None:
-        vectors = get_sonic_vectors()
-    playlist_ids = set(playlist_track_ids)
-    seeds = resolve_seed_tracks(session, seed_ids=playlist_track_ids)
-    votes: dict[int, list[tuple[int, ScoreBreakdown, Track]]] = defaultdict(list)
-
-    for seed_track in seeds:
-        recs, _ = recommend_from_profile(
-            session,
-            build_seed_profile([seed_track], vectors),
-            vectors,
-            limit=per_seed_limit,
-            weights=weights,
-            year_min=year_min,
-            year_max=year_max,
-            max_tracks_per_artist=max_tracks_per_artist,
-            exclude_ids=playlist_ids,
-        )
-        for rec in recs:
-            votes[rec.track.id].append((seed_track.id, rec.score, rec.track))
-
-    for track_id, entries in votes.items():
-        score = _average_score([score for _, score, _ in entries])
-        if min_score is None or score.total >= min_score:
-            selected.add(ScoredTrack(track_id, entries[0][2].artist_id, score, len(entries)))
-    return [
-        Recommendation(
-            track=votes[r.id][0][2],
-            score=r.score,
-            sources=[str(seed_id) for seed_id, _, _ in votes[r.id]],
-        )
-        for r in selected.results()
-    ]
+    _, recommendations, _ = recommend_tracks(
+        session,
+        seed_ids=playlist_track_ids,
+        limit=limit,
+        method="frequency",
+        per_seed_limit=per_seed_limit,
+        weights=weights,
+        year_min=year_min,
+        year_max=year_max,
+        max_tracks_per_artist=max_tracks_per_artist,
+        min_score=min_score,
+        vectors=vectors,
+    )
+    return recommendations
 
 
 def populate_playlist_recommendations(

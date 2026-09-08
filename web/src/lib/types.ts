@@ -198,12 +198,21 @@ export interface RecommendationItem {
 
 export interface RecommendResponse {
   seed_track_ids: number[];
+  method?: RecommendMethod;
   recommendations: RecommendationItem[];
   sonic_coverage?: { candidates: number; with_vector: number };
   weights?: Record<string, number>;
 }
 
+export interface PlexPlaylist {
+  name: string;
+  rating_key: string;
+  track_count: number;
+}
+
 export type PopulateMethod = "average" | "frequency";
+
+export type RecommendMethod = "average" | "frequency";
 
 export interface PopulatePreview {
   playlist_id: string;

@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from musicseed.clients.plex import Playlist, PlexClient
 from musicseed.context import MusicSeedContext, get_context
 from musicseed.exceptions import ConfigurationError, NotFoundError
-from musicseed.recommender.playlist import recommend_tracks
+from musicseed.recommender.playlist import RecommendMethod, recommend_tracks
 from musicseed.recommender.scoring import SonicCoverage, Weights
 from musicseed.services.schemas import (
     ServiceRecommendation,
@@ -36,6 +36,8 @@ def get_recommendations(
     seed_texts: list[str] | None = None,
     seed_ids: list[int] | None = None,
     limit: int = 50,
+    method: RecommendMethod = "average",
+    per_seed_limit: int = 30,
     weights: Weights | None = None,
     year_min: int | None = None,
     year_max: int | None = None,
@@ -50,6 +52,9 @@ def get_recommendations(
             strings; at least one text or id seed is required.
         seed_ids: seed tracks by local database id.
         limit: maximum number of recommendations to return.
+        method: ``"average"`` (score against the seeds' combined profile) or
+            ``"frequency"`` (per-seed votes ranked by average score).
+        per_seed_limit: candidates gathered per seed ("frequency" method only).
         weights: signal weights; defaults to ``Weights()`` (the "balanced"
             preset).
         year_min: only recommend tracks released in this year or later.
@@ -73,6 +78,8 @@ def get_recommendations(
                 seed_texts=seed_texts,
                 seed_ids=seed_ids,
                 limit=limit,
+                method=method,
+                per_seed_limit=per_seed_limit,
                 weights=weights,
                 year_min=year_min,
                 year_max=year_max,

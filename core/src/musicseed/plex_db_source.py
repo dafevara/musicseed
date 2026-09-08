@@ -143,9 +143,14 @@ def _validate_sqlite(path: Path, *, full: bool) -> int:
                 try:
                     check = conn.execute("PRAGMA quick_check").fetchall()
                 except sqlite3.OperationalError as exc:
-                    # Plex can use collations absent from stock SQLite. Never register
-                    # a fake comparator: it would claim index validation we cannot do.
-                    if not str(exc).startswith("no such collation sequence:"):
+                    # Plex databases declare custom collations ("icu_root") and FTS
+                    # tokenizers ("collating") that stock SQLite cannot resolve, so
+                    # quick_check cannot run on them. Never register fake comparators
+                    # or tokenizers: that would claim validation we cannot perform.
+                    if not str(exc).startswith((
+                        "no such collation sequence:",
+                        "unknown tokenizer:",
+                    )):
                         raise
                 else:
                     if check != [("ok",)]:

@@ -36,6 +36,22 @@ Resolved seed tracks are combined into a `SeedProfile`:
 Multiple seeds should represent a shared target vibe. If a change makes multi-seed behavior less
 predictable, update this doc and the `--explain` output.
 
+## Seed Aggregation Method
+
+`recommend_tracks()` takes a `method` (`"average"` or `"frequency"`) shared by the recommend
+flow and playlist populate. Average is the default.
+
+- **Average** scores every eligible track against the seeds' combined `SeedProfile` in one
+  library scan. Fast and stable, but a single strong seed can dominate the profile.
+- **Frequency** scores each seed as its own single-track profile (one scan per seed), then ranks
+  each candidate by the average of its per-seed scores, with vote count as a tiebreaker. The
+  whole seed set is excluded before per-seed vote budgets (`per_seed_limit`, default 30), and
+  the result's `sources` lists the voting seed IDs. Prefer average for large seed sets; this
+  costs one scalar scan per seed.
+
+Both methods share the same candidate eligibility, year filters, artist cap, and `min_score`
+cutoff; `min_score` applies after per-seed votes are averaged in frequency mode.
+
 ## Eligible Library
 
 `score_eligible_tracks()` scores every eligible non-seed track using scalar SQL batches rather

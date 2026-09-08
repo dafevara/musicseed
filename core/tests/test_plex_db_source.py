@@ -263,6 +263,27 @@ def test_probe_expands_tilde(monkeypatch):
     assert pds.ssh_file_exists("u@h:/d", "file.db") == (False, None)
 
 
+def test_plex_custom_fts_tokenizer_is_tolerated(remote, tmp_path):
+    path = tmp_path / "fts.db"
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE TABLE metadata(value INTEGER)")
+        db.execute("INSERT INTO metadata VALUES (1)")
+        # Plex declares fts4 tables with a custom "collating" tokenizer registered
+        # by its own SQLite runtime; inject the schema row without creating the vtab.
+        db.execute("PRAGMA writable_schema=ON")
+        db.execute(
+            "INSERT INTO sqlite_schema(type, name, tbl_name, rootpage, sql) "
+            "VALUES('table', 'fts4_fixture', 'fts4_fixture', 0, "
+            "\"CREATE VIRTUAL TABLE fts4_fixture USING fts4("
+            "content='metadata', tokenize=collating "
+            "'root@colStrength=primary;colAlternate=shifted')\")"
+        )
+    remote.archive = _archive({pds.PLEX_LIBRARY_DB_NAME: path.read_bytes()})
+    result = pds.resolve_plex_dbs(_config(tmp_path), refresh=True)
+    with sqlite3.connect(result.library_db) as db:
+        assert db.execute("SELECT value FROM metadata").fetchone() == (1,)
+
+
 def test_valid_plex_custom_collation_is_not_replaced_or_rejected(remote, tmp_path):
     path = tmp_path / "custom.db"
     with sqlite3.connect(path) as db:

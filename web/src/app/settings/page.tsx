@@ -22,6 +22,7 @@ export default function SettingsPage() {
   const [listenbrainzToken, setListenbrainzToken] = useState("");
   const [sonicJobId, setSonicJobId] = useState<number | null>(null);
   const [sonicJobKind, setSonicJobKind] = useState<string | null>(null);
+  const [sonicError, setSonicError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -65,12 +66,13 @@ export default function SettingsPage() {
 
   async function handleSonicImport() {
     setError(null);
+    setSonicError(null);
     try {
       const { job_id } = await api.post<{ job_id: number }>("/sonic/import");
       setSonicJobId(job_id);
       setSonicJobKind("sonic_import");
     } catch (e) {
-      setError(String(e).replace("Error: ", ""));
+      setSonicError(String(e).replace("Error: ", ""));
     }
   }
 
@@ -113,6 +115,7 @@ export default function SettingsPage() {
           <JobProgress
             jobId={sonicJobId}
             kind={sonicJobKind}
+            onError={(message) => setSonicError(message)}
             onDone={() => {
               setSonicJobId(null);
               setSonicJobKind(null);
@@ -123,6 +126,11 @@ export default function SettingsPage() {
           <button type="button" className="btn btn-primary" onClick={handleSonicImport}>
             Import from Plex
           </button>
+        )}
+        {sonicError && sonicJobId === null && (
+          <div className="flash flash-error">
+            <p className="m-0">{sonicError}</p>
+          </div>
         )}
       </section>
 

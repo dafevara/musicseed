@@ -23,8 +23,13 @@ from musicseed.context import MusicSeedContext
 from musicseed.db.models import Artist, Genre, Style, Track, TrackStats
 from musicseed.db.session import init_db
 from musicseed.recommender.candidates import build_candidate_pool
-from musicseed.recommender.playlist import Recommendation, _track_load_options, recommend_tracks
-from musicseed.recommender.populate import _average_score, populate_playlist_recommendations
+from musicseed.recommender.playlist import (
+    Recommendation,
+    _average_score,
+    _track_load_options,
+    recommend_tracks,
+)
+from musicseed.recommender.populate import populate_playlist_recommendations
 from musicseed.recommender.scoring import SIGNALS, Weights, build_seed_profile, calculate_score
 from musicseed.sonic import SonicVectors
 

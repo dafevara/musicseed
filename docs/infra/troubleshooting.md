@@ -130,6 +130,13 @@ Checks and recovery:
   `track_vectors` table (`musicseed-cli import-plex-sonic`) and reads them from there; the blobs
   database is only needed at import time. If `import-plex-sonic` fails with "sonic ... unavailable",
   the Plex blobs database path isn't resolvable — fix it in Settings.
+- **Import fails with "Snapshot … is unreadable: unknown tokenizer: collating" (or "no such
+  collation sequence").** Plex's library database declares FTS tables with custom tokenizers
+  (`tokenize=collating`) and indexes with custom collations (`icu_root`) that only Plex's own
+  SQLite runtime can resolve, so stock SQLite cannot run whole-database integrity checks on a
+  snapshot. MusicSeed tolerates this (the file is still validated for completeness and the
+  vectors themselves read fine), so the import should proceed; if an older version surfaced
+  this error, upgrade and re-run the import.
 - **Canceled vector import:** committed batches (500 vectors by default) remain available.
   Rerun `musicseed-cli import-plex-sonic` to refresh/finish; existing IDs are updated rather than
   duplicated. Progress/cancellation happen between commits, not during snapshot transfer or

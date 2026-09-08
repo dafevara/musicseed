@@ -55,7 +55,9 @@ Good recommendations should be:
 
 The web UI is the default onboarding path (`./scripts/install.sh` then `musicseed`). The first-run wizard discovers the Plex
 server on the local network (GDM + SSDP), initializes the database, and optionally runs
-enrichment; a persistent settings view holds credentials (Plex token, ListenBrainz token, Spotify keys). The CLI
+enrichment; a persistent settings view holds credentials (Plex token, ListenBrainz token, Spotify keys). The
+Recommend page walks seed selection → method and weights → filters → reviewed results, and can
+save the selection to Plex either as a new playlist or appended to an existing one. The CLI
 flows below remain the power-user path:
 
 1. Initialize the local database (`init-db` creates the SQLite file) and optimize the schema.

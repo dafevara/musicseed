@@ -89,16 +89,29 @@ def test_recommend_route(monkeypatch):
         ), sources=["style"])],
         sonic_coverage=SonicCoverage(candidates=1, with_vector=0),
     )
-    monkeypatch.setattr(recommend_routes, "run_recommendations", lambda **kw: result)
-    resp = TestClient(create_app()).post("/recommend", data={"seed_ids": "1"})
+    calls = {}
+    monkeypatch.setattr(
+        recommend_routes,
+        "run_recommendations",
+        lambda **kw: calls.update(kw) or result,
+    )
+    resp = TestClient(create_app()).post(
+        "/recommend", data={"seed_ids": "1", "method": "frequency", "per_seed_limit": "7"}
+    )
     assert resp.status_code == 200
     body = resp.json()
     assert body["seed_track_ids"] == [1]
     assert body["recommendations"][0]["track_id"] == 1
     assert body["sonic_coverage"]["with_vector"] == 0
+    assert body["method"] == "frequency"
+    assert calls["method"] == "frequency" and calls["per_seed_limit"] == 7
     # The response carries the effective weights so the UI can render
     # weighted contributions.
     assert body["weights"]["sonic"] == 0.30
+    invalid = TestClient(create_app()).post(
+        "/recommend", data={"seed_ids": "1", "method": "median"}
+    )
+    assert invalid.status_code == 422
 
 
 def test_sonic_status_route(monkeypatch):

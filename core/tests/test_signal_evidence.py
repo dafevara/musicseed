@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 from musicseed.db.models import Track
-from musicseed.recommender.populate import _average_score
+from musicseed.recommender.playlist import _average_score
 from musicseed.recommender.scoring import (
     SIGNALS,
     ScoreBreakdown,

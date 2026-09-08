@@ -71,6 +71,17 @@ def test_recommend_and_populate_api_preserve_real_dto_fields_and_evidence(workfl
     assert responses[-1].json()["recommendations"][0]["score"]["availability"]["sonic"] == "mixed"
 
 
+def test_recommend_method_parameter_roundtrip(workflow):
+    client, _ctx, _plex = workflow
+    for method in ("average", "frequency"):
+        response = client.post("/recommend", data={"seed_ids": "1,2", "method": method})
+        assert response.status_code == 200, response.text
+        assert response.json()["method"] == method
+        assert response.json()["recommendations"][0]["track_id"] == 3
+    bad = client.post("/recommend", data={"seed_ids": "1", "method": "median"})
+    assert bad.status_code == 422
+
+
 def test_create_and_populate_use_approved_ids_without_another_recommendation(workflow, monkeypatch):
     client, _ctx, plex = workflow
     assert client.post("/recommend", data={"seed_ids": "1,2"}).status_code == 200

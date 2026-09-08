@@ -205,6 +205,56 @@ def test_frequency_excludes_whole_large_playlist_before_votes_and_deduplicates_s
         context.engine.dispose()
 
 
+def test_recommend_frequency_matches_populate_and_exhaustive(tmp_path):
+    context = _context(tmp_path)
+    case = next(c for c in evaluation_cases() if c.name == "large_seed_set")
+    case = case.model_copy(update={"mode": "frequency"})
+    try:
+        vectors = _load_fixture(context, case)
+        with context.session() as session:
+            tracks = session.query(Track).options(*_track_load_options()).order_by(Track.id).all()
+            expected = _exhaustive(tracks, vectors, case, case.weights)
+            seeds, actual, coverage = recommend_tracks(
+                session,
+                seed_ids=[*reversed(case.seed_ids), 1],
+                method="frequency",
+                limit=5,
+                per_seed_limit=case.per_seed_limit,
+                vectors=vectors,
+            )
+            assert [t.id for t in seeds] == [*reversed(case.seed_ids)]
+            assert [r.track.id for r in actual] == [r.track.id for r in expected]
+            assert all(r.sources == [str(i) for i in reversed(case.seed_ids)] for r in actual)
+            assert coverage.candidates >= len(actual)
+            populate = populate_playlist_recommendations(
+                session,
+                [*reversed(case.seed_ids), 1],
+                method="frequency",
+                limit=5,
+                per_seed_limit=case.per_seed_limit,
+                vectors=vectors,
+            )
+            assert [r.track.id for r in populate] == [r.track.id for r in actual]
+    finally:
+        context.engine.dispose()
+
+
+def test_unknown_recommendation_method_and_per_seed_limit_fail(tmp_path):
+    context = _context(tmp_path)
+    case = next(c for c in evaluation_cases() if c.name == "perfect_style")
+    try:
+        _load_fixture(context, case)
+        with context.session() as session:
+            with pytest.raises(ValueError, match="Unknown recommendation method"):
+                recommend_tracks(session, seed_ids=case.seed_ids, method="median")
+            with pytest.raises(ValueError, match="per_seed_limit"):
+                recommend_tracks(
+                    session, seed_ids=case.seed_ids, method="frequency", per_seed_limit=0
+                )
+    finally:
+        context.engine.dispose()
+
+
 def test_artist_dominated_prefix_does_not_starve_other_eligible_artists(tmp_path):
     context = _context(tmp_path)
     case = EvaluationCase(
