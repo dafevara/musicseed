@@ -58,6 +58,10 @@ Service entry points:
   wizard consumes it.
 - `services/enrichment.py`: `enrich_tracks` (**calls `asyncio.run()` internally — never call it
   from inside a running event loop; offload to a thread**).
+- `services/evaluation.py`: `evaluate_recommendations` — deterministic synthetic fixtures,
+  production/baseline/exhaustive comparisons, and JSON-safe metrics. Disposable databases only;
+  no owner context or network. Run `scripts/evaluate_recommendations.py` from the core environment;
+  see `docs/resolvers/recommendation-evaluation.md`. Safety passes are not listening-quality proof.
 - `services/recommend.py`: `get_recommendations`, `create_playlist` (generate-and-write).
 - `services/playlist_tracks.py`: `create_playlist_from_tracks` writes approved IDs in order
   without recommending again; validates the entire selection before any Plex write.

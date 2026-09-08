@@ -50,6 +50,10 @@ predictable, update this doc and the `--explain` output.
 The candidate pool is intentionally larger than the requested playlist length, allowing scoring
 and artist diversity constraints to shape the final result.
 
+For deterministic offline comparisons, known retrieval gaps, and an owner listening protocol,
+see [recommendation evaluation](recommendation-evaluation.md). Synthetic results do not establish
+musical preference.
+
 ## Scoring
 
 `calculate_score()` computes component scores and a weighted total:
