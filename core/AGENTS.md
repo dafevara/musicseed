@@ -24,7 +24,7 @@ only layer app surfaces should call. Each service function:
 - resolves its runtime context — an optional ``context: MusicSeedContext`` kwarg defaulting
   to the default context — and opens/closes a DB session via ``context.session()``. The
   legacy ``get_session()`` / ``get_config()`` / ``get_sonic_vectors()`` conveniences remain
-  as thin wrappers over the default context during migration,
+  as thin wrappers over the operation-bound context (or process default),
 - accepts plain kwargs (plus a `recommender.scoring.Weights` object where relevant),
 - returns a **Pydantic result model**, and
 - raises typed exceptions (`NotFoundError`, `ConfigurationError`, `clients.plex_api.PlexAPIError`)
@@ -45,8 +45,10 @@ Service entry points:
   `enrichers` (Spotify credential and ListenBrainz token presence), `sonic_vectors` (count of
   locally imported vectors), `missing_inputs` (machine-readable keys like `plex_token`,
   `enrichment_credentials`, `plex_unreachable`, `db_location`), and a derived `first_run`
-  status (`no_config` / `db_missing` / `library_empty`; no persisted flag). The Plex blobs DB
-  is reported but does not block `ready`. The setup wizard / dashboard consume this.
+  status (`no_config` / `db_missing` / `library_empty` / `import_incomplete`). Coverage uses
+  read-only queries and the same effective overrides, never migrations. Prefer `can_import`,
+  `can_recommend`, and `can_write_playlists` over the legacy all-checks `ready` summary.
+  Missing blobs do not block metadata import or local recommendations.
 - `services/plex_discovery.py`: `discover_plex_servers` — passive, read-only Plex discovery.
   Local network via GDM multicast (`239.0.0.250:32414`) + SSDP fallback
   (`239.255.255.250:1900`, stdlib `socket` only), plus — when a Plex token is supplied —
@@ -66,7 +68,15 @@ Service entry points:
   analysis). The Butler task always processes Plex's whole pending backlog; date windows only
   scope watching/reporting.
 - `services/sonic_vectors.py`: `import_plex_sonic` — reads the Plex blobs DB once and upserts
-  vectors into the local `track_vectors` table (idempotent); scoring then reads the local store.
+  vectors into the local `track_vectors` table in committed batches of 500 (idempotent).
+  Progress/cancellation run between transactions; each batch increments a persisted generation.
+- `services/jobs.py`: one persisted writer claim per SQLite database, shared by API workers and
+  synchronous import/enrichment services. Worker config is deep-copied and bound through
+  `use_context` so work, callbacks, cancellation and job writes cannot switch databases.
+  `pending`, `running`, and `cancel_requested` all reserve the writer. Dead-owner rows become
+  `interrupted`; terminal results from targets are deferred until the target returns.
+- `services/import_state.py`: source/library-specific completion and phase checkpoints,
+  independent of deletable job history. Matching aggregate counts alone do not verify an import.
 
 ## Code Map
 
@@ -80,15 +90,17 @@ Service entry points:
 - `context.py`: `MusicSeedContext` bundles a resolved `Config` with a lazily-created SQLite
   engine/session factory and a lazily-loaded `SonicVectors` cache backed by the local
   `track_vectors` table. `get_context()`/`set_context()`/`reset_context()` manage the
-  process-default context; services take an optional ``context`` kwarg and fall back to the
-  default.
+  process-default context. `use_context` binds legacy helpers within one operation. Services
+  take an optional ``context`` kwarg. Cached vectors check `runtime_state.sonic_generation`
+  before reuse, so imports by another context/process invalidate the cache without a restart.
 - `exceptions.py`: `MusicSeedError` (base), `ConfigurationError`, `NotFoundError`.
 - `logging_config.py`: `setup_logging`/`get_logger`. Default log dir is
   `~/.local/share/musicseed/logs/` (or `$XDG_DATA_HOME/musicseed/logs`). Pass `log_dir` to
   override.
 - `db/models.py`: SQLAlchemy 2.0 ORM (Artist, Album, Track, tag tables, play history, stats,
   playlists, jobs). `TrackVector` persists Plex sonic vectors locally (MUS-83), keyed by
-  `plex_id`.
+  `plex_id`. `ImportState` stores source-specific import provenance; `RuntimeState` stores
+  the vector-cache generation. These are additive tables, not a new migration framework.
 - `db/session.py`: pure `create_engine_for_url` (SQLite, sets `journal_mode=WAL` +
   `foreign_keys=ON` on connect) and `create_session_factory` (`expire_on_commit=False`);
   `get_engine`/`get_session_factory`/`get_session` are thin wrappers over the default context.

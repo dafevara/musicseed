@@ -45,7 +45,7 @@ JSON. Handlers are the reusable part — routes are the HTTP-specific projection
 |---|---|
 | `handlers/discovery.run_discovery` | `services.discovery.discover` (with key filtering) |
 | `handlers/discovery.run_plex_discovery` | `services.plex_discovery.discover_plex_servers` |
-| `handlers/discovery.save_config_overrides` | `config.get_config` → `save_config` → `context.set_context` (persist only — no DB init) |
+| `handlers/discovery.save_config_overrides` | active-job guard → deep-copy config → `save_config` → replace config/context (no DB init) |
 | `handlers/discovery.apply_config_and_init_db` | `save_config_overrides` → `services.library.initialize_database` |
 | `handlers/library.get_library_status` | `services.library.get_status` |
 | `handlers/library.run_import_job` | `services.jobs.update_progress` → `services.library.import_library` |
@@ -109,7 +109,9 @@ JSON. Handlers are the reusable part — routes are the HTTP-specific projection
 - **Job runnables** (`run_import_job`, `run_enrich_job`) accept `job_id` as the first
   positional arg (the `JobManager` convention). They call `update_progress` at checkpoints
   so the UI can render progress. They are synchronous, blocking functions — the manager
-  runs them in daemon threads.
+  runs them in daemon threads with a captured context. Do not replace config inside a worker.
+  One persisted writer claim is shared by API and CLI imports/enrichment, including pending and
+  cancel-requested jobs. Terminal target results are published only after the target returns.
 - **Route prefixes are applied by the consumer.** API routes have no URL prefix. `create_ui_app()`
   mounts them at `/api`; `next dev` still rewrites `/api/*` to the unprefixed server. Do not add
   a prefix to route modules.

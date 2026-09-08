@@ -7,9 +7,10 @@ callable from the CLI, a JSON route, or the web rendering layer.
 
 from __future__ import annotations
 
-from musicseed.config import Config, get_config, save_config
+from musicseed.config import Config, get_config, save_config, set_config
 from musicseed.context import MusicSeedContext, set_context
 from musicseed.services.discovery import DiscoveryResult, Reason, discover, read_plex_token
+from musicseed.services.jobs import configuration_change
 from musicseed.services.library import initialize_database
 from musicseed.services.plex_discovery import DiscoveredPlexServer, discover_plex_servers
 
@@ -26,12 +27,8 @@ _SECRET_FIELDS = frozenset({
 
 
 def wizard_ready(result: DiscoveryResult) -> bool:
-    """True when every prerequisite for database creation is met."""
-    return (
-        result.musicseed_db.reason not in DB_BLOCKERS
-        and result.plex_library_db.ok
-        and result.plex_server.ok
-    )
+    """Local metadata import needs source access, not a live Plex HTTP server."""
+    return result.can_import
 
 
 def run_discovery(**overrides: str) -> DiscoveryResult:
@@ -57,7 +54,10 @@ def extract_overrides(**raw: str) -> tuple[dict[str, str], dict[str, str]]:
     Blank values are dropped. ``sticky_form_values`` excludes secret fields
     so tokens are never echoed back to the caller.
     """
-    stripped = {k: v.strip() for k, v in raw.items() if v.strip()}
+    stripped = {
+        k: (v if k in _SECRET_FIELDS else v.strip())
+        for k, v in raw.items() if (v if k in _SECRET_FIELDS else v.strip())
+    }
     form = {k: v for k, v in stripped.items() if k not in _SECRET_FIELDS}
     return stripped, form
 
@@ -102,6 +102,10 @@ def _apply_config_overrides(
         changed = True
     if plex_db_path:
         cfg.plex.db_path = plex_db_path
+        if not plex_db_ssh:
+            # Same precedence as read-only discovery: an explicit local path
+            # replaces the remote source, rather than silently retaining SSH.
+            cfg.plex.db_ssh_target = ""
         changed = True
     if plex_db_ssh:
         cfg.plex.db_ssh_target = plex_db_ssh
@@ -140,29 +144,29 @@ def save_config_overrides(
     True when anything changed. Blank fields leave the existing config
     untouched.
     """
-    cfg = get_config()
-    if not plex_token.strip() and not cfg.plex.token:
-        plex_token = read_plex_token() or ""
-    changed = _apply_config_overrides(
-        cfg,
-        musicseed_db_path=musicseed_db_path,
-        spotify_client_id=spotify_client_id,
-        spotify_client_secret=spotify_client_secret,
-        listenbrainz_token=listenbrainz_token,
-        plex_url=plex_url,
-        plex_token=plex_token,
-        plex_library=plex_library,
-        plex_db_path=plex_db_path,
-        plex_db_ssh=plex_db_ssh,
-        plex_db_ssh_password=plex_db_ssh_password,
-        plex_db_ssh_port=plex_db_ssh_port,
-    )
-    if changed:
-        save_config(cfg)
-        # Install a fresh runtime context so the new config's database engine
-        # and sonic-vector cache take effect without resetting hidden globals.
-        set_context(MusicSeedContext(cfg))
-    return changed
+    with configuration_change():
+        cfg = get_config().model_copy(deep=True)
+        if not plex_token.strip() and not cfg.plex.token:
+            plex_token = read_plex_token() or ""
+        changed = _apply_config_overrides(
+            cfg,
+            musicseed_db_path=musicseed_db_path,
+            spotify_client_id=spotify_client_id,
+            spotify_client_secret=spotify_client_secret,
+            listenbrainz_token=listenbrainz_token,
+            plex_url=plex_url,
+            plex_token=plex_token,
+            plex_library=plex_library,
+            plex_db_path=plex_db_path,
+            plex_db_ssh=plex_db_ssh,
+            plex_db_ssh_password=plex_db_ssh_password,
+            plex_db_ssh_port=plex_db_ssh_port,
+        )
+        if changed:
+            save_config(cfg)
+            set_config(cfg)
+            set_context(MusicSeedContext(cfg))
+        return changed
 
 
 def apply_config_and_init_db(

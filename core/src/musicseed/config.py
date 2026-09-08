@@ -209,7 +209,12 @@ def default_config_path() -> Path:
 
 
 def get_config() -> Config:
-    """Get the global config instance."""
+    """Get the operation-bound config, falling back to the process default."""
+    from musicseed.context import get_bound_context
+
+    bound = get_bound_context()
+    if bound is not None:
+        return bound.config
     global _config
     if _config is None:
         _config = load_config()

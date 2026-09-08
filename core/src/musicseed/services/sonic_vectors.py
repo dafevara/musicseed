@@ -11,11 +11,14 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from pydantic import BaseModel
+from sqlalchemy import func, select
+from sqlalchemy.dialects.sqlite import insert
 
 from musicseed.context import MusicSeedContext, get_context
-from musicseed.db.models import TrackVector
+from musicseed.db.models import RuntimeState, TrackVector
 from musicseed.db.session import ensure_schema
 from musicseed.plex_db_source import resolve_plex_dbs
+from musicseed.services.jobs import exclusive_writer
 from musicseed.sonic import load_sonic_vectors
 
 
@@ -27,10 +30,13 @@ class SonicVectorImportResult(BaseModel):
     updated: int
 
 
+@exclusive_writer("sonic_import")
 def import_plex_sonic(
     context: MusicSeedContext | None = None,
     progress_callback: Callable[[int, int, str], None] | None = None,
     should_cancel: Callable[[], bool] | None = None,
+    *,
+    batch_size: int = 500,
 ) -> SonicVectorImportResult:
     """Import Plex sonic-analysis vectors into the local database.
 
@@ -43,10 +49,10 @@ def import_plex_sonic(
 
     Args:
         context: runtime context to use; defaults to the default context.
-        progress_callback: optional ``(current, total, phase)`` callback
-            invoked once when the import finishes.
-        should_cancel: optional callable polled between vectors; the import
-            stops early when it returns True.
+        progress_callback: optional callback after each committed batch.
+        should_cancel: polled before source reads and between committed batches.
+            Source backup/decoding must finish before cancellation is checked again.
+        batch_size: maximum vector upserts per committed transaction.
 
     Returns:
         The total number of vectors found in Plex and how many rows were newly
@@ -55,7 +61,13 @@ def import_plex_sonic(
     Raises:
         NotFoundError: if the Plex blobs database is unavailable.
     """
+    if batch_size <= 0:
+        raise ValueError("batch_size must be positive")
     ctx = context or get_context()
+    if should_cancel is not None and should_cancel():
+        return SonicVectorImportResult(total=0, imported=0, updated=0)
+    if progress_callback is not None:
+        progress_callback(0, 0, "reading Plex snapshot")
     dbs = resolve_plex_dbs(ctx.config, refresh=True)
     vectors = load_sonic_vectors(
         plex_db_path=dbs.library_db,
@@ -69,22 +81,33 @@ def import_plex_sonic(
     processed = 0
 
     ensure_schema(ctx)
-    with ctx.session() as session:
-        for plex_id in sorted(vectors.plex_ids):
-            if should_cancel is not None and should_cancel():
-                break
-            vector = vectors.get(plex_id)
-            row = session.get(TrackVector, plex_id)
-            if row is None:
-                session.add(TrackVector(plex_id=plex_id, vector=vector.tolist()))
-                imported += 1
-            else:
-                row.vector = vector.tolist()
-                updated += 1
-            processed += 1
+    plex_ids = sorted(vectors.plex_ids)
+    for start in range(0, total, batch_size):
+        if should_cancel is not None and should_cancel():
+            break
+        ids = plex_ids[start:start + batch_size]
+        with ctx.session() as session:
+            existing = set(session.scalars(select(TrackVector.plex_id).where(
+                TrackVector.plex_id.in_(ids)
+            )))
+            statement = insert(TrackVector).values([
+                {"plex_id": pid, "vector": vectors.get(pid).tolist()} for pid in ids
+            ])
+            session.execute(statement.on_conflict_do_update(
+                index_elements=[TrackVector.plex_id],
+                set_={"vector": statement.excluded.vector, "updated_at": func.now()},
+            ))
+            revision = insert(RuntimeState).values(key="sonic_generation", value=1)
+            session.execute(revision.on_conflict_do_update(
+                index_elements=[RuntimeState.key], set_={"value": RuntimeState.value + 1},
+            ))
+        # Only count/report durable rows, with no competing writer transaction open.
+        imported += len(ids) - len(existing)
+        updated += len(existing)
+        processed += len(ids)
+        if progress_callback is not None:
+            progress_callback(processed, total, "sonic vectors")
 
     ctx.reset_sonic_vectors()
-    if progress_callback is not None:
-        progress_callback(processed, total, "sonic vectors")
 
     return SonicVectorImportResult(total=total, imported=imported, updated=updated)

@@ -145,6 +145,34 @@ hot reload (API + `next dev` on port 3000).
 Relevant API routes: `GET /discovery`, `GET /discovery/plex-servers`,
 `POST /discovery/check`, `POST /discovery/config` (save-only), `POST /discovery/init-db`.
 
+### Import state and recovery
+
+- Import/enrichment services and API background jobs share **one writer per MusicSeed database**.
+  A SQLite transaction checks and claims the writer atomically. Pending jobs and cancellation
+  requests still reserve it; completion is published after the worker target returns.
+- Each job captures a deep copy of its runtime configuration. Work, progress callbacks, and job
+  state writes use that context even if the process default later changes. Settings rejects
+  changes while jobs are active; it saves a copy before replacing the default context.
+- Source/library-specific `import_state` records store the input snapshot identity, expected
+  counts, last committed phase, and completion time. Deleting job history does not delete these
+  records. Old successful job rows and equal aggregate counts alone are **not verified coverage**;
+  rerun an incremental import once to establish provenance on an older installation.
+- An initial partial/failed import remains incomplete. Later Plex count drift is advisory once
+  that source has completed an import. A different source/library does not inherit its completion.
+  No automatic deletion or catalog replacement occurs when changing sources; use a separate
+  MusicSeed database if you want an independent library.
+- Vector upserts commit in batches of 500 by default. Progress callbacks and cancellation checks
+  run outside write transactions; canceled/failed runs retain committed batches and can be rerun.
+  Snapshot transfer and source decoding still finish before cancellation can be checked again.
+- Each committed vector batch increments `runtime_state.sonic_generation`. API and CLI contexts
+  check it before reusing cached vectors; a restart is not required after another process imports.
+  Direct SQL edits to vector rows must also update this generation or explicitly reset caches.
+- Discovery does not initialize or migrate MusicSeed databases. It reports separate capabilities:
+  `can_import` (readable configured source and usable destination), `can_recommend` (local tracks),
+  and `can_write_playlists` (authorized Plex connection). An unreachable Plex HTTP API need not
+  prevent local import/recommendation. A fallback path suggestion must be saved before import.
+  The setup wizard refreshes both discovery and library status when a job finishes.
+
 ### Ports
 
 `musicseed` listens on `127.0.0.1:8789` (JSON at `/api`, UI at `/`). Contributor `dev.sh`

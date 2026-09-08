@@ -3,19 +3,27 @@
 Every operation (create, start, update progress, complete, fail,
 cancel-request) writes through a dedicated SQLAlchemy session. The
 ``JobManager`` singleton runs workers in daemon threads — no external
-queue, no Redis, no containers. On first access it reconciles any jobs
-left in a ``running`` state from a prior process into ``interrupted``.
+queue, no Redis, no containers. On first access it reconciles jobs
+left in any nonterminal state by a dead process into ``interrupted``.
 """
 
 from __future__ import annotations
 
 import os
+import sqlite3
 import threading
 from collections.abc import Callable
+from contextlib import closing, contextmanager
+from contextvars import ContextVar
 from datetime import UTC, datetime
 from enum import StrEnum
+from functools import wraps
+from inspect import signature
 
-from musicseed.db.models import Job
+from sqlalchemy import case, text, update
+
+from musicseed.context import MusicSeedContext, get_context, use_context
+from musicseed.db.models import ImportState, Job
 from musicseed.db.session import ensure_schema, get_session
 from musicseed.exceptions import JobConflictError
 
@@ -37,6 +45,111 @@ class JobState(StrEnum):
     CANCELED = "canceled"
     CANCEL_REQUESTED = "cancel_requested"
     INTERRUPTED = "interrupted"
+
+
+ACTIVE_STATES = (JobState.PENDING, JobState.RUNNING, JobState.CANCEL_REQUESTED)
+_configuration_lock = threading.RLock()
+_worker_job: ContextVar[tuple[str, int] | None] = ContextVar("musicseed_worker_job", default=None)
+_managed_worker: ContextVar[bool] = ContextVar("musicseed_managed_worker", default=False)
+_requested_result: ContextVar[str] = ContextVar("musicseed_requested_result", default="")
+_requested_failure: ContextVar[str | None] = ContextVar("musicseed_requested_failure", default=None)
+
+
+@contextmanager
+def configuration_change():
+    """Serialize config replacement with submissions; never initialize a database."""
+    with _configuration_lock:
+        path = get_context().config.database.path_expanded
+        if path.exists():
+            with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
+                tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_schema")}
+                if "jobs" in tables and conn.execute(
+                    "SELECT 1 FROM jobs WHERE state IN (?, ?, ?) LIMIT 1", ACTIVE_STATES
+                ).fetchone():
+                    raise JobConflictError(
+                        "Wait for active jobs to finish before changing settings."
+                    )
+        yield
+
+
+def current_job_id() -> int | None:
+    """The operation-bound job ID, if called from a claimed writer."""
+    owned = _worker_job.get()
+    return owned[1] if owned else None
+
+
+def _claim_job(kind: str, context: MusicSeedContext) -> int:
+    ensure_schema(context)
+    reconcile_running_jobs()
+    with context.session() as session:
+        # Atomic across processes: reserve SQLite's writer before checking.
+        session.execute(text("BEGIN IMMEDIATE"))
+        if session.query(Job).filter(Job.state.in_(ACTIVE_STATES)).first():
+            raise JobConflictError("A job is already active; wait for it to finish.")
+        job = Job(kind=kind, state=JobState.PENDING, pid=os.getpid())
+        session.add(job)
+        session.flush()
+        return job.id
+
+
+def exclusive_writer(kind: str):
+    """Use the same persisted writer claim for synchronous CLI/service imports.
+
+    A service called inside a managed worker reuses its claim. There is no
+    separate queue or scheduler; the SQLite job row is the reservation.
+    """
+    def decorate(function):
+        parameters = signature(function)
+
+        @wraps(function)
+        def wrapped(*args, **kwargs):
+            bound = parameters.bind(*args, **kwargs)
+            context = bound.arguments.get("context") or get_context()
+            owned = _worker_job.get()
+            if owned is not None:
+                if owned[0] != context.config.database.url:
+                    raise JobConflictError("A worker cannot change its database.")
+                job_id = owned[1]
+            else:
+                with _configuration_lock:
+                    context = MusicSeedContext(context.config.model_copy(deep=True))
+                    with use_context(context):
+                        job_id = _claim_job(kind, context)
+            with use_context(context):
+                bound.arguments["context"] = context
+                original_cancel = bound.arguments.get("should_cancel")
+                saw_cancel = False
+
+                def should_cancel():
+                    nonlocal saw_cancel
+                    saw_cancel = bool(saw_cancel or (original_cancel and original_cancel())
+                                      or get_job(job_id)["state"] == JobState.CANCEL_REQUESTED)
+                    return saw_cancel
+
+                bound.arguments["should_cancel"] = should_cancel
+                token = _worker_job.set((context.config.database.url, job_id))
+                try:
+                    if owned is None:
+                        start_job(job_id)
+                    result = function(*bound.args, **bound.kwargs)
+                    if saw_cancel or get_job(job_id)["state"] == JobState.CANCEL_REQUESTED:
+                        cancel_job(job_id)
+                    elif owned is None:
+                        complete_job(job_id)
+                    return result
+                except BaseException as error:
+                    if owned is None:
+                        if isinstance(error, KeyboardInterrupt):
+                            cancel_job(job_id)
+                        else:
+                            fail_job(job_id, f"{type(error).__name__}: {error}")
+                    raise
+                finally:
+                    _worker_job.reset(token)
+                    if owned is None:
+                        context.engine.dispose()
+        return wrapped
+    return decorate
 
 
 # ------------------------------------------------------------------ helpers
@@ -84,11 +197,9 @@ def start_job(job_id: int) -> None:
         job_id: id of the job row to update. Unknown ids are ignored.
     """
     with get_session() as session:
-        job = session.get(Job, job_id)
-        if job is None:
-            return
-        job.state = JobState.RUNNING
-        job.started_at = _now()
+        session.execute(update(Job).where(
+            Job.id == job_id, Job.state == JobState.PENDING,
+        ).values(state=JobState.RUNNING, started_at=_now()))
 
 
 def update_progress(
@@ -126,16 +237,17 @@ def complete_job(job_id: int, result_summary: str = "") -> None:
     Args:
         job_id: id of the job row to update. Unknown ids are ignored.
         result_summary: optional JSON-serialized outcome summary; only stored
-            when non-empty.
+            when non-empty. Managed targets defer completion until they return.
     """
+    if _managed_worker.get() and _worker_job.get()[1] == job_id:
+        _requested_result.set(result_summary)
+        return
     with get_session() as session:
-        job = session.get(Job, job_id)
-        if job is None:
-            return
-        job.state = JobState.SUCCEEDED
-        job.completed_at = _now()
-        if result_summary:
-            job.result_summary = result_summary
+        session.execute(update(Job).where(Job.id == job_id, Job.state.in_(ACTIVE_STATES)).values(
+            state=case((Job.state == JobState.CANCEL_REQUESTED, JobState.CANCELED),
+                       else_=JobState.SUCCEEDED),
+            completed_at=_now(), result_summary=result_summary or None,
+        ))
 
 
 def fail_job(job_id: int, error_summary: str) -> None:
@@ -145,13 +257,15 @@ def fail_job(job_id: int, error_summary: str) -> None:
         job_id: id of the job row to update. Unknown ids are ignored.
         error_summary: failure description, truncated to 500 characters.
     """
+    if _managed_worker.get() and current_job_id() == job_id:
+        _requested_failure.set(error_summary)
+        return
     with get_session() as session:
-        job = session.get(Job, job_id)
-        if job is None:
-            return
-        job.state = JobState.FAILED
-        job.error_summary = (error_summary or "")[:500]
-        job.completed_at = _now()
+        session.execute(update(Job).where(Job.id == job_id, Job.state.in_(ACTIVE_STATES)).values(
+            state=case((Job.state == JobState.CANCEL_REQUESTED, JobState.CANCELED),
+                       else_=JobState.FAILED),
+            error_summary=(error_summary or "")[:500], completed_at=_now(),
+        ))
 
 
 def request_cancel(job_id: int) -> None:
@@ -165,24 +279,20 @@ def request_cancel(job_id: int) -> None:
         job_id: id of the job row to update. Unknown ids are ignored.
     """
     with get_session() as session:
-        job = session.get(Job, job_id)
-        if job is None:
-            return
-        job.state = JobState.CANCEL_REQUESTED
+        session.execute(update(Job).where(
+            Job.id == job_id, Job.state.in_((JobState.PENDING, JobState.RUNNING)),
+        ).values(state=JobState.CANCEL_REQUESTED))
 
 
 def cancel_job(job_id: int) -> None:
-    """Mark a job ``canceled`` and stamp its completion time.
-
-    Args:
-        job_id: id of the job row to update. Unknown ids are ignored.
-    """
+    """Mark canceled, retaining a managed worker's claim until its target exits."""
+    if _managed_worker.get() and _worker_job.get()[1] == job_id:
+        request_cancel(job_id)
+        return
     with get_session() as session:
-        job = session.get(Job, job_id)
-        if job is None:
-            return
-        job.state = JobState.CANCELED
-        job.completed_at = _now()
+        session.execute(update(Job).where(Job.id == job_id, Job.state.in_(ACTIVE_STATES)).values(
+            state=JobState.CANCELED, completed_at=_now(),
+        ))
 
 
 def get_job(job_id: int) -> dict | None:
@@ -207,6 +317,8 @@ def delete_job(job_id: int) -> bool:
         job = session.get(Job, job_id)
         if job is None:
             return False
+        if job.state in ACTIVE_STATES:
+            raise JobConflictError("Cancel the job and wait for it to stop before deleting it.")
         session.delete(job)
         return True
 
@@ -253,7 +365,7 @@ def get_latest_job(kind: str) -> dict | None:
 
 
 def get_active_jobs() -> list[dict]:
-    """Return all jobs in a non-terminal state (``running`` or ``pending``).
+    """Return pending/running/cancel-requested jobs; all still reserve the writer.
 
     Returns:
         Job snapshots as plain dicts.
@@ -262,7 +374,7 @@ def get_active_jobs() -> list[dict]:
         ensure_schema()
         jobs = (
             session.query(Job)
-            .filter(Job.state.in_([JobState.RUNNING, JobState.PENDING]))
+            .filter(Job.state.in_(ACTIVE_STATES))
             .all()
         )
         return [_job_to_dict(j) for j in jobs]
@@ -284,22 +396,25 @@ def _pid_alive(pid: int | None) -> bool:
 
 
 def reconcile_running_jobs() -> None:
-    """Mark ``running`` jobs from dead processes as ``interrupted``.
+    """Reconcile every nonterminal state owned by a dead process.
 
-    A job is only interrupted when its recorded owner pid is no longer alive,
-    so starting one process while another genuinely runs a job leaves that job
-    untouched.
+    Pending jobs and cancellation requests can also survive a crash. Live
+    owners are left alone, including other API/CLI processes.
     """
     with get_session() as session:
         ensure_schema()
         orphans = (
             session.query(Job)
-            .filter(Job.state == JobState.RUNNING)
+            .filter(Job.state.in_(ACTIVE_STATES))
             .all()
         )
         for job in orphans:
             if not _pid_alive(job.pid):
                 job.state = JobState.INTERRUPTED
+                job.completed_at = _now()
+                session.query(ImportState).filter(
+                    ImportState.job_id == job.id, ImportState.state == "running",
+                ).update({"state": "interrupted"})
 
 
 # ------------------------------------------------------------------ manager
@@ -314,7 +429,7 @@ class JobManager:
     DB — workers poll it at safe checkpoints).
     """
 
-    def __init__(self, max_concurrent: int = 2) -> None:
+    def __init__(self, max_concurrent: int = 1) -> None:
         """Create a manager that runs at most ``max_concurrent`` jobs at once.
 
         Args:
@@ -322,7 +437,7 @@ class JobManager:
                 active simultaneously; further submissions are rejected.
         """
         self._max = max_concurrent
-        self._active: dict[int, threading.Thread] = {}
+        self._active: dict[tuple[str, int], tuple[threading.Thread, MusicSeedContext]] = {}
         self._lock = threading.Lock()
 
     def submit(self, kind: str, target: Callable[..., None], *args, **kwargs) -> int:
@@ -332,8 +447,8 @@ class JobManager:
         id is always the first positional argument.
 
         Args:
-            kind: job kind (see ``JobKind``); only one active job per kind is
-                allowed across all processes sharing the database.
+            kind: job kind (see ``JobKind``); only one active job of any kind
+                is allowed across all processes sharing the database.
             target: blocking callable to run in the worker thread.
             *args (Any): extra positional arguments forwarded to ``target``.
             **kwargs (Any): keyword arguments forwarded to ``target``.
@@ -345,27 +460,28 @@ class JobManager:
             JobConflictError: if a job of the same kind is already active, or
                 the concurrency pool is full.
         """
-        active_kinds = {j["kind"] for j in get_active_jobs()}
-        if kind in active_kinds:
-            raise JobConflictError(
-                f"A {kind} job is already running — wait for it to finish."
-            )
-        with self._lock:
+        with _configuration_lock, self._lock:
             if len(self._active) >= self._max:
-                raise JobConflictError(
-                    f"Already at the maximum of {self._max} concurrent jobs."
-                )
-
-        job_id = create_job(kind)
-        thread = threading.Thread(
-            target=self._worker,
-            args=(job_id, kind, target, args, kwargs),
-            daemon=True,
-        )
-        with self._lock:
-            self._active[job_id] = thread
-        thread.start()
-        return job_id
+                raise JobConflictError("An operation is still running; wait for it to finish.")
+            # A deep copy isolates both the config and all legacy callback lookups.
+            context = MusicSeedContext(get_context().config.model_copy(deep=True))
+            with use_context(context):
+                job_id = _claim_job(kind, context)
+            key = (context.config.database.url, job_id)
+            thread = threading.Thread(
+                target=self._worker,
+                args=(key, context, job_id, target, args, kwargs),
+                daemon=True,
+            )
+            self._active[key] = (thread, context)
+            try:
+                thread.start()
+            except Exception:
+                self._active.pop(key, None)
+                with use_context(context):
+                    fail_job(job_id, "Could not start worker thread")
+                raise
+            return job_id
 
     def request_cancel(self, job_id: int) -> None:
         """Ask a job to stop (cooperative; see ``request_cancel``).
@@ -392,27 +508,41 @@ class JobManager:
     def shutdown(self) -> None:
         """Request cancellation of every active job (threads are daemons)."""
         with self._lock:
-            job_ids = list(self._active.keys())
-        for jid in job_ids:
-            request_cancel(jid)
+            active = list(self._active.items())
+        for (_url, jid), (_thread, context) in active:
+            with use_context(context):
+                request_cancel(jid)
 
-    def _worker(self, job_id: int, kind: str, target: Callable, args, kwargs) -> None:
-        try:
-            start_job(job_id)
-            target(job_id, *args, **kwargs)
-            job = get_job(job_id)
-            if job and job["state"] == JobState.CANCEL_REQUESTED:
-                cancel_job(job_id)
-            elif job and job["state"] != JobState.SUCCEEDED:
-                complete_job(job_id)
-        except Exception as e:
-            if self.should_cancel(job_id):
-                cancel_job(job_id)
-            else:
-                fail_job(job_id, f"{type(e).__name__}: {e}")
-        finally:
-            with self._lock:
-                self._active.pop(job_id, None)
+    def _worker(self, key, context, job_id: int, target: Callable, args, kwargs) -> None:
+        with use_context(context):
+            token = _worker_job.set(key)
+            try:
+                start_job(job_id)
+                managed = _managed_worker.set(True)
+                try:
+                    if not self.should_cancel(job_id):
+                        target(job_id, *args, **kwargs)
+                finally:
+                    _managed_worker.reset(managed)
+                job = get_job(job_id)
+                if job and job["state"] == JobState.CANCEL_REQUESTED:
+                    cancel_job(job_id)
+                elif job and job["state"] in ACTIVE_STATES:
+                    failure = _requested_failure.get()
+                    if failure is not None:
+                        fail_job(job_id, failure)
+                    else:
+                        complete_job(job_id, _requested_result.get())
+            except BaseException as e:
+                if isinstance(e, KeyboardInterrupt) or self.should_cancel(job_id):
+                    cancel_job(job_id)
+                else:
+                    fail_job(job_id, f"{type(e).__name__}: {e}")
+            finally:
+                _worker_job.reset(token)
+                context.engine.dispose()
+                with self._lock:
+                    self._active.pop(key, None)
 
 
 # Module-level singleton (lazy, reconciled on first access)
@@ -422,7 +552,7 @@ _manager: JobManager | None = None
 def get_manager() -> JobManager:
     """Return the module-level ``JobManager`` singleton, creating it lazily.
 
-    On first access, jobs left ``running`` by dead processes are reconciled
+    On first access, nonterminal jobs owned by dead processes are reconciled
     to ``interrupted`` before the manager is returned.
 
     Returns:

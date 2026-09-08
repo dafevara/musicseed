@@ -9,8 +9,10 @@ from musicseed.context import MusicSeedContext, get_context
 from musicseed.db.session import ensure_schema
 from musicseed.enrichers.pipeline import EnrichmentStats, run_enrichment
 from musicseed.exceptions import ConfigurationError
+from musicseed.services.jobs import exclusive_writer
 
 
+@exclusive_writer("enrich")
 def enrich_tracks(
     source: str = "listenbrainz",
     batch_size: int = 50,

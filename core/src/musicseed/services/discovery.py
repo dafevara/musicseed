@@ -235,7 +235,10 @@ class DiscoveryResult(BaseModel):
     plex_blobs_db: FileDiscovery
     sonic_vectors: SonicVectorsDiscovery
     plex_server: PlexServerDiscovery
-    ready: bool  # every check ok; surfaces can gate "start import" on this
+    ready: bool  # compatibility summary; prefer the capability flags below
+    can_import: bool = False
+    can_recommend: bool = False
+    can_write_playlists: bool = False
     enrichers: EnrichmentDiscovery
     first_run: FirstRunStatus
     missing_inputs: list[str]
@@ -493,7 +496,22 @@ def discover(
         database is reported but no longer blocks ``ready`` (it is only needed
         to import sonic vectors). The Plex token is never included.
     """
-    cfg = config if config is not None else get_config()
+    cfg = (config if config is not None else get_config()).model_copy(deep=True)
+    # One effective configuration for probes AND coverage; never change the caller.
+    if musicseed_db_path:
+        cfg.database.path = musicseed_db_path
+    if plex_db_path:
+        cfg.plex.db_path = plex_db_path
+        if not plex_db_ssh:
+            cfg.plex.db_ssh_target = ""
+    if plex_db_ssh:
+        cfg.plex.db_ssh_target = plex_db_ssh
+    if plex_url:
+        cfg.plex.url = plex_url
+    if plex_library:
+        cfg.plex.library = plex_library
+    if plex_token is not None:
+        cfg.plex.token = plex_token
     default_plex = PlexConfig()
 
     # MusicSeed's own database (single effective path)
@@ -562,6 +580,12 @@ def discover(
             ok=False,
         )
 
+    source_matches_config = bool(
+        ssh_target or (
+            plex_library_db.selected
+            and Path(plex_library_db.selected.path).resolve() == cfg.plex.db_path_expanded.resolve()
+        )
+    )
     ready = all([
         musicseed_db.ok,
         plex_library_db.ok,
@@ -601,12 +625,16 @@ def discover(
     import_incomplete = False
     if not db_missing and not library_empty:
         from musicseed.context import MusicSeedContext
+        from musicseed.services.import_state import read_import_state
         from musicseed.services.library import get_import_coverage
 
-        # Probe against the same config discover was given, not the process
-        # global config (which may differ when a surface passes an override).
-        coverage = get_import_coverage(context=MusicSeedContext(cfg))
-        import_incomplete = bool(coverage and coverage.setup_incomplete)
+        probe_context = MusicSeedContext(cfg)
+        coverage = get_import_coverage(context=probe_context)
+        state = read_import_state(probe_context)
+        import_incomplete = bool(
+            coverage.setup_incomplete if coverage else
+            state and not state["completed_at"] and state["state"] != "complete"
+        )
     first_run_reasons = [
         reason
         for reason, flag in (
@@ -637,6 +665,12 @@ def discover(
         sonic_vectors=SonicVectorsDiscovery(imported_count=vectors_imported),
         plex_server=plex_server,
         ready=ready,
+        can_import=(plex_library_db.ok and source_matches_config
+                    and musicseed_db.reason not in {
+            Reason.NOT_A_FILE, Reason.NOT_WRITABLE, Reason.PARENT_NOT_WRITABLE,
+        }),
+        can_recommend=track_count is not None and track_count > 0,
+        can_write_playlists=plex_server.ok,
         enrichers=enrichers,
         first_run=first_run,
         missing_inputs=missing,

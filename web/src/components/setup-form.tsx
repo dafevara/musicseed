@@ -67,7 +67,8 @@ export function SetupForm({
       <h2 className="mt-0 text-lg font-semibold">Provide the missing values</h2>
       <p className="muted text-sm">
         Fill in what needs attention and re-run the checks. Leave a field blank to
-        keep the automatic value. The token is never stored or displayed.
+        keep the saved or automatic value. Secrets are saved locally in your configuration
+        but never echoed in discovery results.
       </p>
       <form onSubmit={handleSubmit} className="grid gap-3 max-w-md">
         {(!visible || visible.has("plexUrl")) && (
@@ -142,7 +143,7 @@ export function SetupForm({
                 <label className="grid gap-1 text-sm">
                   SSH password{" "}
                   <span className="text-[var(--muted)]">
-                    (leave blank to use your ~/.ssh keys)
+                    (blank keeps the saved password; keys are used if none is saved)
                   </span>
                   <input
                     type="password"

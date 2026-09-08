@@ -68,6 +68,11 @@ export function DiscoveryChecks({
   return (
     <section className="panel">
       <h2 className="mt-0 text-lg font-semibold">Checks</h2>
+      <p className="text-sm muted">
+        Import: {result.can_import ? "available" : "needs source access"} ·
+        Recommend: {result.can_recommend ? "available locally" : "needs local tracks"} ·
+        Write playlists: {result.can_write_playlists ? "available" : "needs Plex connection"}
+      </p>
       <ul className="list-none m-0 p-0 grid gap-2.5">
         {/* MusicSeed DB */}
         <li className="flex flex-wrap items-baseline gap-x-1.5">

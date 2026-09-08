@@ -6,7 +6,8 @@
     "dev": "next dev --port 3000",
     "build": "NEXT_OUTPUT=export next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "node --experimental-strip-types --test tests/*.test.mjs"
   },
   "dependencies": {
     "next": "^15.1.0",

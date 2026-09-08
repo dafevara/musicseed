@@ -80,6 +80,7 @@ API shapes are typed in `src/lib/types.ts`.
 npm install
 npm run dev          # Next.js dev server on http://127.0.0.1:3000 (proxies /api to :8789)
 npx tsc --noEmit     # type-check
+npm test            # offline setup/recovery state tests (Node 22.18+; native TS stripping)
 npm run lint         # ESLint
 npm run build        # static export to web/out/ (not committed)
 ```

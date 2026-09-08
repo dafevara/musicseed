@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { DiscoveryResponse, LibraryStatus } from "@/lib/types";
+import { discoveredLocalPlexPath, refreshSetupState, type SetupStep as Step } from "@/lib/setup-state";
 import { DiscoveryChecks } from "@/components/discovery-checks";
 import { SetupForm } from "@/components/setup-form";
 import { SetupIntro } from "@/components/setup-intro";
@@ -10,8 +11,6 @@ import { PlexServerPicker } from "@/components/plex-server-picker";
 import { HelpIcon } from "@/components/help-icon";
 import { JobProgress } from "@/components/job-progress";
 import { PageHeader } from "@/components/page-header";
-
-type Step = "detect" | "review" | "importing" | "enriching" | "done";
 
 const STEPS: { key: Step; label: string }[] = [
   { key: "detect", label: "Connect Plex" },
@@ -30,20 +29,6 @@ const MISSING_LABELS: Record<string, string> = {
   db_location: "MusicSeed database location",
   enrichment_credentials: "enrichment credentials",
 };
-
-function resolveStep(d: DiscoveryResponse, status: LibraryStatus | null): Step {
-  const incomplete = d.result.first_run.import_incomplete
-    || (status?.import_coverage && !status.import_coverage.ever_succeeded
-      && (status.import_coverage.tracks.plex > status.import_coverage.tracks.local
-        || status.import_coverage.albums.plex > status.import_coverage.albums.local));
-  if (status && status.track_count > 0 && !incomplete) return "done";
-  // "Review" once Plex is connected (or the DB already exists); "detect" is
-  // only the first step, before a server has been reached. Without the
-  // server-ok check, saving a manually entered URL/token would bounce back
-  // to the server picker forever because the DB does not exist yet.
-  if (d.result.plex_server.ok || d.result.musicseed_db.exists) return "review";
-  return "detect";
-}
 
 function StepIndicator({ current }: { current: Step }) {
   const activeIndex = STEPS.findIndex((s) => s.key === current);
@@ -76,29 +61,23 @@ export default function SetupPage() {
   const [saved, setSaved] = useState(false);
   const [jobId, setJobId] = useState<number | null>(null);
   const [jobKind, setJobKind] = useState<string | null>(null);
-  const [formValues, setFormValues] = useState<Record<string, string>>({});
 
-  async function refreshStatus() {
-    try {
-      const status = await api.get<LibraryStatus>("/library/status");
-      setLibraryStatus(status);
-    } catch {
-      // ignore — status is advisory
-    }
+  async function applyDiscovery(discover: () => Promise<DiscoveryResponse>) {
+    const fresh = await refreshSetupState(
+      discover, () => api.get<LibraryStatus>("/library/status"),
+    );
+    setData(fresh.discovery);
+    setLibraryStatus(fresh.status);
+    setStep(fresh.step);
   }
 
   async function bootstrap() {
     setSaved(false);
+    setSaveError(null);
     try {
-      const d = await api.get<DiscoveryResponse>("/discovery");
-      setData(d);
-      let status: LibraryStatus | null = null;
-      if (d.result.musicseed_db.exists) {
-        status = await api.get<LibraryStatus>("/library/status").catch(() => null);
-      }
-      setLibraryStatus(status);
-      setStep(resolveStep(d, status));
-    } catch {
+      await applyDiscovery(() => api.get<DiscoveryResponse>("/discovery"));
+    } catch (e) {
+      setSaveError(String(e).replace("Error: ", ""));
       setStep("detect");
     }
   }
@@ -108,16 +87,14 @@ export default function SetupPage() {
   }, []);
 
   async function handleRecheck(vals: Record<string, string>) {
-    setFormValues(vals);
     setSaveError(null);
     setSaved(false);
     try {
       // Persist (save-only) so the selected server, token, and library name
       // survive navigation, then return the fresh discovery result.
       const result = await api.post<DiscoveryResponse>("/discovery/config", vals);
-      setData(result);
+      await applyDiscovery(() => Promise.resolve(result));
       setSaved(true);
-      setStep(resolveStep(result, libraryStatus));
     } catch (e) {
       setSaveError(String(e).replace("Error: ", ""));
       setStep("review");
@@ -125,8 +102,7 @@ export default function SetupPage() {
   }
 
   async function handleSelectServer(url: string) {
-    const vals = { ...formValues, plex_url: url };
-    await handleRecheck(vals);
+    await handleRecheck({ plex_url: url });
   }
 
   async function handleInitDb() {
@@ -135,16 +111,10 @@ export default function SetupPage() {
     try {
       await api.post("/discovery/init-db", {
         musicseed_db_path: data.result.musicseed_db.path,
-        spotify_client_id: formValues.spotify_client_id || "",
-        spotify_client_secret: formValues.spotify_client_secret || "",
-        listenbrainz_token: formValues.listenbrainz_token || "",
-        plex_url: formValues.plex_url || data.result.plex_server.url,
-        plex_token: formValues.plex_token || "",
-        plex_library: formValues.plex_library || data.result.plex_server.library || "",
-        plex_db_path: formValues.plex_db_path || data.result.plex_library_db.selected?.path || "",
-        plex_db_ssh: formValues.plex_db_ssh || "",
-        plex_db_ssh_password: formValues.plex_db_ssh_password || "",
-        plex_db_ssh_port: formValues.plex_db_ssh_port || "",
+        // Credentials/source overrides were already saved; do not replay stale fields.
+        plex_url: data.result.plex_server.url,
+        plex_library: data.result.plex_server.library || "",
+        plex_db_path: discoveredLocalPlexPath(data.result),
       });
       await bootstrap();
     } catch (e) {
@@ -158,7 +128,8 @@ export default function SetupPage() {
       const { job_id } = await api.post<{ job_id: number }>("/library/import");
       setJobId(job_id);
       setJobKind("import");
-    } catch {
+    } catch (e) {
+      setSaveError(String(e).replace("Error: ", ""));
       setStep("review");
     }
   }
@@ -172,24 +143,29 @@ export default function SetupPage() {
       const { job_id } = await api.post<{ job_id: number }>(`/enrichment/${source}`);
       setJobId(job_id);
       setJobKind(`enrich:${source}`);
-    } catch {
-      setStep("done");
+    } catch (e) {
+      setSaveError(String(e).replace("Error: ", ""));
+      setStep("review");
     }
   }
 
   async function handleJobDone() {
-    if (jobKind === "import") {
-      await refreshStatus();
-      setStep("review");
-    } else {
-      setStep("done");
-    }
+    setJobId(null);
+    setJobKind(null);
+    // Refresh both sources of state, including interrupted-import flags.
+    await bootstrap();
   }
 
   if (!data) {
     return (
       <div className="panel">
-        <p className="muted">Checking your setup&hellip;</p>
+        <p className="muted">{saveError || "Checking your setup…"}</p>
+        {saveError && (
+          <>
+            <button className="btn btn-primary" onClick={bootstrap}>Retry</button>
+            <a href="/settings" className="ml-3 underline">Repair settings</a>
+          </>
+        )}
       </div>
     );
   }
@@ -398,7 +374,7 @@ export default function SetupPage() {
       {step === "done" && (
         <div className="panel">
           <h2 className="mt-0 text-lg font-semibold">MusicSeed is ready</h2>
-          <p>Your Plex library has been imported and enriched. You can now:</p>
+          <p>Your local library is available. Enrichment and sonic-vector import are optional.</p>
           <ul className="list-disc pl-5">
             <li>
               <a href="/" className="text-[var(--brand)] underline">
@@ -407,7 +383,7 @@ export default function SetupPage() {
               to review your library state.
             </li>
             <li>
-              Use <code>musicseed recommend</code> in the CLI to create playlists.
+              Use <code>musicseed-cli recommend</code> in the CLI to create playlists.
             </li>
           </ul>
           {data.result.sonic_vectors.imported_count === 0 && (

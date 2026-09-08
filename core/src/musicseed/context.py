@@ -16,6 +16,7 @@ context everywhere.
 from __future__ import annotations
 
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Generator
 
@@ -41,7 +42,7 @@ class MusicSeedContext:
 
     _engine: Engine | None = field(default=None, init=False, repr=False)
     _session_factory: sessionmaker | None = field(default=None, init=False, repr=False)
-    _sonic_vectors: SonicVectors | None = field(default=None, init=False, repr=False)
+    _sonic_cache: tuple[int, SonicVectors] | None = field(default=None, init=False, repr=False)
 
     @property
     def engine(self) -> Engine:
@@ -78,13 +79,23 @@ class MusicSeedContext:
     def sonic_vectors(self) -> SonicVectors:
         """Plex sonic vectors persisted in this context's database.
 
-        Loaded from the local ``track_vectors`` table on first use and cached
-        on the context; call ``reset_sonic_vectors`` after importing vectors.
+        Loaded from the local ``track_vectors`` table and cached until the
+        persisted generation changes, including imports by another process.
         Returns an empty ``SonicVectors`` when none are stored.
         """
-        if self._sonic_vectors is None:
-            self._sonic_vectors = self._load_sonic_vectors()
-        return self._sonic_vectors
+        from musicseed.db.models import RuntimeState
+
+        cached = self._sonic_cache
+        if cached is None:
+            ensure_schema(self)
+        with self.session() as session:
+            generation = session.get(RuntimeState, "sonic_generation")
+            revision = generation.value if generation else 0
+        if cached is None or cached[0] != revision:
+            # Publish revision and matrix together, including concurrent API reads.
+            cached = (revision, self._load_sonic_vectors())
+            self._sonic_cache = cached
+        return cached[1]
 
     def _load_sonic_vectors(self) -> SonicVectors:
         from musicseed.db.models import TrackVector
@@ -99,17 +110,36 @@ class MusicSeedContext:
 
     def reset_sonic_vectors(self) -> None:
         """Drop this context's cached vectors so the next access reloads them."""
-        self._sonic_vectors = None
+        self._sonic_cache = None
 
 
 # The default context used by the legacy module-level convenience functions
 # (config.get_config, db.session.get_session, sonic.get_sonic_vectors).
 _default_context: MusicSeedContext | None = None
+_bound_context: ContextVar[MusicSeedContext | None] = ContextVar("musicseed_context", default=None)
+
+
+def get_bound_context() -> MusicSeedContext | None:
+    """An operation's context, if explicitly bound (never constructs globals)."""
+    return _bound_context.get()
+
+
+@contextmanager
+def use_context(context: MusicSeedContext):
+    """Bind legacy helpers and callbacks to one operation, including in worker threads."""
+    token = _bound_context.set(context)
+    try:
+        yield context
+    finally:
+        _bound_context.reset(token)
 
 
 def get_context() -> MusicSeedContext:
     """Return the default context, building it from the global config on first use."""
     global _default_context
+    bound = get_bound_context()
+    if bound is not None:
+        return bound
     if _default_context is None:
         _default_context = MusicSeedContext(get_config())
     return _default_context

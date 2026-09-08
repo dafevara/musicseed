@@ -75,6 +75,7 @@ export interface ImportCoverage {
   albums: CountCompare;
   tracks: CountCompare;
   ever_succeeded: boolean;
+  verified?: boolean;
 }
 
 export interface SonicVectorsDiscovery {
@@ -82,6 +83,9 @@ export interface SonicVectorsDiscovery {
 }
 
 export interface DiscoveryResult {
+  can_import: boolean;
+  can_recommend: boolean;
+  can_write_playlists: boolean;
   musicseed_db: CheckResult;
   plex_library_db: CheckResult;
   plex_blobs_db: CheckResult;
