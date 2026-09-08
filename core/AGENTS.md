@@ -97,10 +97,12 @@ Service entry points:
   drops the whole default context (engine + sonic cache) — kept as a test/config-change hook.
 - `importers/plex.py`: Plex SQLite metadata import. Track years fall back to the album year when
   Plex doesn't set one on the track row.
-- `plex_db_source.py`: `resolve_plex_dbs(config, refresh=...)` turns the configured Plex DB
-  source into local `Path`s — local by default, or remote files fetched over scp into
-  `~/.cache/musicseed/plex-dbs/`. Used by import/coverage/sonic-import; the recommendation
-  runtime never calls it.
+- `plex_db_source.py`: `resolve_plex_dbs(config, refresh=...)` returns local files or stable
+  SSH snapshot generations under `~/.cache/musicseed/plex-dbs/snapshots-v1/`. The remote
+  `_plex_snapshot.py` helper uses Python's SQLite backup API and streams standalone files;
+  never copy live DB/WAL/SHM files. Validate staged generations before atomic publication,
+  preserve previous readers, and verify known SSH host keys. Remote Python3/SQLite is required.
+  Used by import/coverage/sonic-import; the recommendation runtime never calls it.
 - `enrichers/`: ListenBrainz and Spotify clients + the async enrichment pipeline. (The old
   MusicBrainz MBID→Spotify cross-reference client was removed; it was never wired in.)
 - `sonic.py`: `load_sonic_vectors` reads Plex sonic-analysis vectors from the Plex blobs DB

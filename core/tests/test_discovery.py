@@ -193,6 +193,15 @@ def test_ssh_source_probed_ok(
     assert result.plex_blobs_db.ok
 
 
+def test_malformed_ssh_target_is_reported_not_raised(tmp_path):
+    cfg = _config(tmp_path)
+    cfg.plex.db_ssh_target = "missing-colon"
+    result = discover(check_server=False, config=cfg)
+    assert not result.plex_library_db.ok
+    assert result.plex_library_db.candidates[0].reason == discovery.Reason.ERROR
+    assert "expected" in result.plex_library_db.candidates[0].detail
+
+
 def test_ssh_source_missing_reports_plex_db_ssh(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

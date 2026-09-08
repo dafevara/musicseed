@@ -133,8 +133,10 @@ Checks and recovery:
 ## Database backup and recovery
 
 - **Backup = copy the file.** MusicSeed state is one SQLite file (default
-  `~/.local/share/musicseed/musicseed.db`). Copy it while MusicSeed is stopped; if it must stay
-  running, also copy the `-wal` and `-shm` sidecars, or use SQLite's online backup.
+  `~/.local/share/musicseed/musicseed.db`). Copy it after a clean shutdown of every API/CLI
+  process. If a WAL remains after an interrupted shutdown, or MusicSeed must stay running,
+  use SQLite's online backup API or `.backup` command. Sequentially copying a live database
+  and its `-wal`/`-shm` sidecars does **not** produce a guaranteed consistent backup.
 - **Restore** by copying the file back. If the file is corrupt or you want a clean start, stop the
   API/CLI, move the file aside, and run setup again (the wizard re-runs when the database is
   missing — the `db_missing` first-run signal).

@@ -27,6 +27,7 @@ from musicseed.config import (
     plex_data_dir_candidates,
     plex_library_db_candidates,
 )
+from musicseed.exceptions import NotFoundError
 from musicseed.logging_config import get_logger
 from musicseed.plex_db_source import (
     PLEX_BLOBS_DB_NAME,
@@ -287,7 +288,13 @@ def _probe_ssh(
     target: str, filename: str, *, password: str = "", port: int = 22
 ) -> PathCandidate:
     """Probe a remote SQLite file over SSH (reachability + presence)."""
-    _user, host, remote_dir = parse_ssh_target(target)
+    try:
+        _user, host, remote_dir = parse_ssh_target(target)
+    except NotFoundError as exc:
+        return PathCandidate(
+            path=target, source="ssh", exists=False, usable=False,
+            reason=Reason.ERROR, detail=str(exc),
+        )
     path = f"{host}:{remote_dir}/{filename}"
     exists, error = ssh_file_exists(target, filename, password=password, port=port)
     if exists is True:

@@ -37,8 +37,8 @@ def import_library(
 
     Reads artists, albums, tracks, and play history from Plex's own SQLite
     database into MusicSeed. Incremental by default — pass --full for a
-    complete re-import. Use --plex-db-ssh to fetch the database from a remote
-    Plex host over scp.
+    complete re-import. Use --plex-db-ssh to create and fetch consistent SQLite
+    backups over verified SSH (remote python3/sqlite3 required).
     """
     from musicseed.services import library as library_service
 

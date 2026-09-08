@@ -18,7 +18,7 @@ actions.
 - Plex SQLite database as a read-only import source.
 - Plex blobs SQLite database as a read-only source of sonic analysis vectors, imported into
   MusicSeed's local `track_vectors` store (MUS-83); a remote Plex host's files can be fetched
-  over scp via `plex.db_ssh_target` (see [Remote Plex DB access](#remote-plex-db-access)).
+  as consistent snapshots over verified SSH via `plex.db_ssh_target` (see [Remote Plex DB access](#remote-plex-db-access)).
 - Optional Plex HTTP API for playlist creation (`core/src/musicseed/clients/plex_api.py`).
 - Optional external HTTP APIs: ListenBrainz and Spotify.
 - Local logs under `~/.local/share/musicseed/logs/`.
@@ -76,15 +76,53 @@ plex:
   db_ssh_port: 22                    # optional
 ```
 
-MusicSeed fetches the files (plus their `-wal`/`-shm` sidecars) over SFTP into
-`~/.cache/musicseed/plex-dbs/` at import time. When `db_ssh_password` is set it
-authenticates with that password; otherwise it uses the user's `~/.ssh` keys and agent.
-`import` and `import-plex-sonic` re-fetch on each run; the recommendation runtime never
-touches the remote files.
+The remote host needs **SSH command execution, `python3` with the standard-library
+`sqlite3` module, read access to Plex's databases, and enough temporary space for both
+backups**. MusicSeed runs a small bundled helper over SSH: SQLite's online backup API reads
+committed pages (including WAL contents) into independent standalone database files, then
+streams those files back. No helper installation, HTTP server, Plex shutdown, or copying of
+live `-wal`/`-shm` files is needed. Backup does not rebuild Plex's custom indexes/collations.
+Each database has a consistent snapshot; the two databases are backed up sequentially, not
+in a cross-database transaction. Missing blobs are optional; an unreadable or invalid supplied
+backup fails the refresh. Local-file mode is unchanged: use local Plex files or consistent
+backups, not arbitrary copies of a running remote server's databases.
 
-SSH access must be enabled on the Plex host (most NASes expose this in their settings). The
-fetched files contain metadata and sonic vectors but never the Plex token (that stays in
-`plex.token`); the SSH password is stored in `config.yaml` like the token.
+**Host identity is verified.** First verify the server's fingerprint through a trusted channel,
+then connect once as the same local OS user that runs MusicSeed:
+
+```bash
+ssh -p 22 admin@nas.local
+```
+
+This establishes trust in `~/.ssh/known_hosts` (non-default ports use their own known-hosts
+entry). Unknown or changed host keys fail closed. Never blindly accept a changed fingerprint
+or use unverified `ssh-keyscan` output as proof of identity. When `db_ssh_password` is set,
+MusicSeed uses that password; otherwise it uses standard key files and the SSH agent. Paramiko
+does not interpret `~/.ssh/config` aliases: supply the actual host, user and port.
+
+Each refresh downloads into a private generation under
+`~/.cache/musicseed/plex-dbs/snapshots-v1/` (or `$XDG_CACHE_HOME/musicseed/plex-dbs/`).
+The cache key includes target and port. MusicSeed validates bounded headers, file/page sizes,
+and schema readability, plus SQLite `quick_check` where supported, then atomically publishes
+the complete generation. Plex-specific collations can prevent stock SQLite's `quick_check`;
+in that case validation is structural only, not a claim of full index integrity. Failed
+backups/transfers leave the previous published generation untouched; absent optional blobs
+never inherit an older copy. Legacy live-file caches are ignored and require one new import.
+`import` and `import-plex-sonic` each refresh; status reuses the published snapshot without
+SSH access. Recommendations use MusicSeed's own local database.
+
+Old published generations are retained so active readers keep stable paths. They consume disk
+space; **only while MusicSeed and all CLI imports are stopped**, you may remove this source's
+cache directory to reclaim space (the next import recreates it). Do not remove MusicSeed's
+own database. Remote temporary backups are cleaned when the helper exits normally; abrupt
+host/process failure can leave `musicseed-snapshot-*` temporary directories for host-side
+cleanup. A backup that cannot finish within five minutes fails; retry when Plex is less busy.
+Transfer inactivity times out after six minutes.
+
+If refresh fails, check host trust, Python/SQLite availability, database permissions, remote
+and local free space, and Plex activity. Fix the cause and rerun the import; do not repair a
+bad cache by copying live sidecars. SSH credentials stay in `config.yaml` like the Plex token
+and are not included in the snapshot stream.
 
 ## Web UI, First-Run Wizard, And Settings
 
