@@ -31,6 +31,22 @@ Missing signals should degrade gracefully. A track without a popularity value or
 should not crash the recommendation flow; it should receive neutral or lower component scores
 depending on the scoring function.
 
+The per-track `ScoreBreakdown.availability` map distinguishes:
+
+- `observed`: a real comparison (including genuine mid-range scores).
+- `neutral_missing`: neutral `0.5` for missing/unusable sonic vectors or unknown popularity/year.
+- `not_applicable`: the seed has no style/genre basis (score `0.5`).
+- `missing`: the seed has tags but the candidate does not. **The historical Jaccard score remains
+  zero**, but this is missing metadata, not evidence of a measured mismatch.
+- `mixed`: frequency-populate votes used different availability states. Numeric scores remain
+  the mean over the seeds that voted for the candidate, not all playlist seeds.
+- `unknown`: a legacy score did not supply evidence metadata. No observed evidence is invented.
+
+CLI `--explain` and web tooltips expose these distinctions. Zero-norm vectors were already neutral;
+MUS-94 additionally treats non-finite or incompatible vectors as neutral rather than producing a
+perfect NaN-derived similarity or an exception. This is an explicit invalid-input bug fix; valid
+finite-input scoring, weights, and tag-missing numeric policy are unchanged.
+
 ## Popularity
 
 Popularity is a supporting signal, not the main product. It should help distinguish candidates
@@ -48,17 +64,19 @@ popularity is a 0-100 provider value. Scoring converts the best available value 
 ## Sonic Vectors
 
 Sonic similarity uses Plex's own sonic analysis vectors. Plex stores one 50-dimensional vector per
-analyzed track in `com.plexapp.plugins.library.blobs.db`; MusicSeed reads them straight from that
-database at query time (`core/src/musicseed/sonic.py`) into an in-memory, L2-normalized matrix
-keyed by `plex_id`. Nearest-neighbor search is a single numpy matmul — trivially fast at
-personal-library scale — so there is no vector index and no stored copy that could drift out of
-date. MusicSeed does not generate its own embeddings (the Essentia pipeline was removed) and never
-reads audio files.
+analyzed track in `com.plexapp.plugins.library.blobs.db`; MusicSeed copies them into its own
+`track_vectors` table (`musicseed-cli import-plex-sonic`, or `POST /sonic/import` from the API),
+then rebuilds an in-memory, L2-normalized matrix keyed by `plex_id` from that local store
+(`core/src/musicseed/context.py`). Production scoring looks up these local vectors while streaming
+all eligible scalar metadata; the older nearest-neighbor helper is retained for offline bounded
+comparisons. No vector index is needed for the measured implementation; see the
+[retrieval benchmark and limits](../resolvers/retrieval-decision.md), rather than assuming every
+query is instantaneous. MusicSeed does not generate its own embeddings and never reads audio files.
 
 Coverage is Plex's responsibility. A track Plex hasn't analyzed simply has no vector and receives
-a neutral 0.5 sonic score. If the Plex blobs database itself is unavailable, `recommend` fails
-with `NotFoundError` rather than degrading silently. Check coverage with `sonic-probe`; trigger
-analysis with `sonic-refresh`.
+a neutral 0.5 sonic score. After vectors are imported, the recommender reads them from the local
+`track_vectors` store and no longer needs the blobs database at query time. Check coverage with
+`sonic-probe`; trigger analysis with `sonic-refresh`, then re-run `import-plex-sonic`.
 
 Use sonic similarity as one signal among several. A recommendation should still produce reasonable
 results for tracks without vectors by falling back to tags, era, popularity, and novelty.
@@ -85,7 +103,7 @@ When changing recommendation logic, inspect:
 
 - Does `--explain` still make sense to a human?
 - Are seed tracks excluded from candidates?
-- Does the candidate pool include more tracks than the requested playlist length?
+- Are all eligible non-seed tracks scored before the artist/limit constraints?
 - Are missing metadata values handled without exceptions?
 - Does artist diversity still apply after scoring?
 - Do weights normalize correctly when users adjust them?

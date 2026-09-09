@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Form, Query
+from musicseed.logging_config import get_logger
 
 from musicseed_api.handlers.discovery import (
     apply_config_and_init_db,
@@ -14,6 +15,21 @@ from musicseed_api.handlers.discovery import (
     save_config_overrides,
     wizard_ready,
 )
+
+logger = get_logger("api.routes.discovery")
+
+
+def _log_result(action: str, result) -> None:
+    lib = getattr(result, "plex_library_db", None)
+    detail = lib.candidates[0].detail if lib is not None and lib.candidates else None
+    logger.info(
+        "%s: ready=%s missing=%s library_db.ok=%s detail=%s",
+        action,
+        getattr(result, "ready", None),
+        getattr(result, "missing_inputs", None),
+        lib.ok if lib is not None else None,
+        detail,
+    )
 
 router = APIRouter(tags=["discovery"])
 
@@ -28,12 +44,14 @@ def get_plex_servers() -> dict:
 def get_discovery(
     musicseed_db_path: str = Query(default=""),
     plex_db_path: str = Query(default=""),
+    plex_db_ssh: str = Query(default=""),
     plex_url: str = Query(default=""),
     plex_library: str = Query(default=""),
 ) -> dict:
     result = run_discovery(
         musicseed_db_path=musicseed_db_path,
         plex_db_path=plex_db_path,
+        plex_db_ssh=plex_db_ssh,
         plex_url=plex_url,
         plex_library=plex_library,
     )
@@ -44,6 +62,7 @@ def get_discovery(
 def check_discovery(
     musicseed_db_path: Annotated[str, Form()] = "",
     plex_db_path: Annotated[str, Form()] = "",
+    plex_db_ssh: Annotated[str, Form()] = "",
     plex_url: Annotated[str, Form()] = "",
     plex_token: Annotated[str, Form()] = "",
     plex_library: Annotated[str, Form()] = "",
@@ -51,6 +70,7 @@ def check_discovery(
     overrides, _form = extract_overrides(
         musicseed_db_path=musicseed_db_path,
         plex_db_path=plex_db_path,
+        plex_db_ssh=plex_db_ssh,
         plex_url=plex_url,
         plex_token=plex_token,
         plex_library=plex_library,
@@ -69,6 +89,9 @@ def init_database(
     plex_token: Annotated[str, Form()] = "",
     plex_library: Annotated[str, Form()] = "",
     plex_db_path: Annotated[str, Form()] = "",
+    plex_db_ssh: Annotated[str, Form()] = "",
+    plex_db_ssh_password: Annotated[str, Form()] = "",
+    plex_db_ssh_port: Annotated[str, Form()] = "",
 ) -> dict:
     overrides, _form = extract_overrides(
         musicseed_db_path=musicseed_db_path,
@@ -79,9 +102,13 @@ def init_database(
         plex_token=plex_token,
         plex_library=plex_library,
         plex_db_path=plex_db_path,
+        plex_db_ssh=plex_db_ssh,
+        plex_db_ssh_password=plex_db_ssh_password,
+        plex_db_ssh_port=plex_db_ssh_port,
     )
     apply_config_and_init_db(**overrides)
     result = run_discovery()
+    _log_result("init-db", result)
     return {"ready": wizard_ready(result), "result": result.model_dump()}
 
 
@@ -95,6 +122,9 @@ def save_config(
     plex_token: Annotated[str, Form()] = "",
     plex_library: Annotated[str, Form()] = "",
     plex_db_path: Annotated[str, Form()] = "",
+    plex_db_ssh: Annotated[str, Form()] = "",
+    plex_db_ssh_password: Annotated[str, Form()] = "",
+    plex_db_ssh_port: Annotated[str, Form()] = "",
 ) -> dict:
     overrides, _form = extract_overrides(
         musicseed_db_path=musicseed_db_path,
@@ -105,7 +135,11 @@ def save_config(
         plex_token=plex_token,
         plex_library=plex_library,
         plex_db_path=plex_db_path,
+        plex_db_ssh=plex_db_ssh,
+        plex_db_ssh_password=plex_db_ssh_password,
+        plex_db_ssh_port=plex_db_ssh_port,
     )
     save_config_overrides(**overrides)
     result = run_discovery()
+    _log_result("config saved", result)
     return {"ready": wizard_ready(result), "result": result.model_dump()}

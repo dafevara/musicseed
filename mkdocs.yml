@@ -51,6 +51,8 @@ nav:
       - Music recommendation: domain/music-recommendation.md
   - Resolvers:
       - Recommendation resolvers: resolvers/recommendation-resolvers.md
+      - Offline evaluation: resolvers/recommendation-evaluation.md
+      - Retrieval and schema decisions: resolvers/retrieval-decision.md
   - Infrastructure:
       - Local runtime: infra/local-runtime.md
       - Troubleshooting: infra/troubleshooting.md

@@ -1,10 +1,12 @@
-"""Plex sonic analysis vectors, read directly from Plex at query time.
+"""Plex sonic analysis vectors, imported from Plex and stored locally.
 
 Plex stores a sonic-analysis vector per analyzed track in
-``com.plexapp.plugins.library.blobs.db``. MusicSeed reads those vectors straight
-from that database instead of copying them into its own schema — the whole
-library is a few megabytes in memory, so there is nothing to gain from storing a
-second copy that can drift out of date.
+``com.plexapp.plugins.library.blobs.db``. ``load_sonic_vectors`` reads those
+vectors straight from that database once — it is the import reader used by
+``services.sonic_vectors.import_plex_sonic`` — and ``sonic_vectors_from_mapping``
+rebuilds the in-memory L2-normalized matrix from the locally persisted
+``track_vectors`` table. Recommendations read the local store, so the blobs
+database is only needed when importing (or re-importing) vectors.
 
 Both Plex databases are opened read-only and are in WAL mode, so loading vectors
 neither blocks nor is blocked by a running Plex Media Server.
@@ -18,7 +20,6 @@ from pathlib import Path
 
 import numpy as np
 
-from musicseed.config import get_config
 from musicseed.exceptions import NotFoundError
 from musicseed.logging_config import get_logger
 
@@ -99,8 +100,18 @@ class SonicVectors:
             return None
         return self._matrix[index]
 
-    def nearest(self, query: np.ndarray, limit: int) -> list[int]:
-        """Return the Plex ids most cosine-similar to ``query``, best first."""
+    def nearest(
+        self, query: np.ndarray, limit: int, *, allowed: set[int] | None = None
+    ) -> list[int]:
+        """Return the Plex ids most cosine-similar to ``query``, best first.
+
+        Args:
+            query: the seed embedding (L2-normalized here).
+            limit: maximum number of neighbors to return.
+            allowed: optional set of Plex ids to restrict the search to. Ids
+                without a stored vector are ignored. When ``None``, every
+                stored vector is a candidate.
+        """
         if limit <= 0 or len(self) == 0:
             return []
 
@@ -109,11 +120,26 @@ class SonicVectors:
         if norm == 0:
             return []
 
-        similarities = self._normalized @ (vector / norm)
+        if allowed is None:
+            matrix = self._normalized
+            plex_ids = self._plex_ids
+        else:
+            indices = [
+                self._index_by_plex_id[plex_id]
+                for plex_id in allowed
+                if plex_id in self._index_by_plex_id
+            ]
+            if not indices:
+                return []
+            idx = np.asarray(indices, dtype=np.int64)
+            matrix = self._normalized[idx]
+            plex_ids = self._plex_ids[idx]
+
+        similarities = matrix @ (vector / norm)
         limit = min(limit, similarities.shape[0])
         top = np.argpartition(-similarities, limit - 1)[:limit]
         top = top[np.argsort(-similarities[top])]
-        return [int(plex_id) for plex_id in self._plex_ids[top]]
+        return [int(plex_id) for plex_id in plex_ids[top]]
 
 
 def load_sonic_vectors(
@@ -174,55 +200,36 @@ def load_sonic_vectors(
     return SonicVectors(plex_ids, matrix)
 
 
-# Global instance (lazy loaded), mirroring the config module's pattern.
-_vectors: SonicVectors | None = None
-# Signature of the Plex blobs database files at the time ``_vectors`` was
-# loaded, so a change (newly analyzed tracks) invalidates the cache.
-_vectors_signature: tuple | None = None
+def sonic_vectors_from_mapping(vectors: dict[int, list[float]]) -> SonicVectors:
+    """Build a ``SonicVectors`` matrix from a ``{plex_id: vector}`` mapping.
 
-
-def _blobs_signature(blobs_db_path: Path) -> tuple:
-    """A cheap fingerprint of the blobs DB (main + WAL) used to detect change.
-
-    Plex appends sonic blobs to the WAL file before checkpointing, so both
-    files are inspected; ``(mtime, size)`` per file is enough to notice a new
-    analysis without re-reading the database.
+    Used to reconstruct the in-memory matrix from the locally persisted
+    ``track_vectors`` table. Every vector must already be ``PLEX_SONIC_DIM``
+    long (``load_sonic_vectors`` guarantees this via ``decode_sonic_blob``).
     """
-    parts: list[tuple[float, int] | None] = []
-    for candidate in (blobs_db_path, Path(f"{blobs_db_path}-wal")):
-        try:
-            st = candidate.stat()
-            parts.append((st.st_mtime, st.st_size))
-        except OSError:
-            parts.append(None)
-    return tuple(parts)
+    plex_ids = list(vectors)
+    matrix = (
+        np.asarray([vectors[pid] for pid in plex_ids], dtype=np.float32)
+        if plex_ids
+        else np.empty((0, PLEX_SONIC_DIM), dtype=np.float32)
+    )
+    return SonicVectors(plex_ids, matrix)
 
 
 def get_sonic_vectors() -> SonicVectors:
-    """Get the global sonic vector store, loading it on first use.
+    """Get the default context's sonic vector store, loading it on first use.
 
-    Cached because recommendation flows (notably playlist population) run many
-    seed queries in one process and must not re-read Plex each time. The cache
-    reloads whenever the underlying blobs database changes, so newly analyzed
-    tracks contribute to scoring without a process restart.
+    Thin wrapper over ``musicseed.context.get_context().sonic_vectors`` so
+    callers that don't pass an explicit context keep working during the
+    context migration.
     """
-    global _vectors, _vectors_signature
-    config = get_config()
-    blobs_db_path = config.plex.blobs_db_path_expanded
-    signature = _blobs_signature(blobs_db_path)
-    if _vectors is not None and signature == _vectors_signature:
-        return _vectors
-    _vectors = load_sonic_vectors(
-        plex_db_path=config.plex.db_path_expanded,
-        blobs_db_path=blobs_db_path,
-        library_name=config.plex.library,
-    )
-    _vectors_signature = signature
-    return _vectors
+    from musicseed.context import get_context
+
+    return get_context().sonic_vectors
 
 
 def reset_sonic_vectors() -> None:
-    """Drop the cached vectors (useful for testing or config changes)."""
-    global _vectors, _vectors_signature
-    _vectors = None
-    _vectors_signature = None
+    """Drop the default context's cached vectors (testing / config changes)."""
+    from musicseed.context import get_context
+
+    get_context().reset_sonic_vectors()

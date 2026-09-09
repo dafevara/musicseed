@@ -15,6 +15,8 @@ from fastapi.testclient import TestClient
 from musicseed.recommender.scoring import ScoreBreakdown, SonicCoverage, Weights
 from musicseed.services.library import EnrichmentCoverage, LibraryStatus
 from musicseed.services.plex_discovery import DiscoveredPlexServer
+from musicseed.services.recommend import RecommendationResult
+from musicseed.services.schemas import ServiceRecommendation, ServiceTrack
 from musicseed_api.app import create_app
 from pydantic import BaseModel
 
@@ -75,33 +77,41 @@ def test_recommend_typeahead_route(monkeypatch):
 
 
 def test_recommend_route(monkeypatch):
-    class FakeTrack:
-        id = 1
-        title = "t"
-        artist = None
-
-    class FakeRec:
-        track = FakeTrack()
-        score = ScoreBreakdown(
+    track = ServiceTrack(
+        id=1, title="t", artist="Fixture artist", album="Fixture album",
+        year=1999, popularity=55, plex_id=101,
+    )
+    result = RecommendationResult(
+        seed_tracks=[track],
+        recommendations=[ServiceRecommendation(track=track, score=ScoreBreakdown(
             total=0.5, sonic=0.5, popularity=0.5,
             style=0.5, genre=0.5, era=0.5, novelty=0.5,
-        )
-
-    class FakeResult:
-        seed_tracks = [FakeTrack()]
-        recommendations = [FakeRec()]
-        sonic_coverage = SonicCoverage(candidates=1, with_vector=0)
-
-    monkeypatch.setattr(recommend_routes, "run_recommendations", lambda **kw: FakeResult())
-    resp = TestClient(create_app()).post("/recommend", data={"seed_ids": "1"})
+        ), sources=["style"])],
+        sonic_coverage=SonicCoverage(candidates=1, with_vector=0),
+    )
+    calls = {}
+    monkeypatch.setattr(
+        recommend_routes,
+        "run_recommendations",
+        lambda **kw: calls.update(kw) or result,
+    )
+    resp = TestClient(create_app()).post(
+        "/recommend", data={"seed_ids": "1", "method": "frequency", "per_seed_limit": "7"}
+    )
     assert resp.status_code == 200
     body = resp.json()
     assert body["seed_track_ids"] == [1]
     assert body["recommendations"][0]["track_id"] == 1
     assert body["sonic_coverage"]["with_vector"] == 0
+    assert body["method"] == "frequency"
+    assert calls["method"] == "frequency" and calls["per_seed_limit"] == 7
     # The response carries the effective weights so the UI can render
     # weighted contributions.
     assert body["weights"]["sonic"] == 0.30
+    invalid = TestClient(create_app()).post(
+        "/recommend", data={"seed_ids": "1", "method": "median"}
+    )
+    assert invalid.status_code == 422
 
 
 def test_sonic_status_route(monkeypatch):
@@ -114,6 +124,18 @@ def test_sonic_status_route(monkeypatch):
     resp = TestClient(create_app()).get("/sonic/status")
     assert resp.status_code == 200
     assert resp.json()["total_tracks"] == 0
+
+
+def test_sonic_import_route(monkeypatch):
+    submitted = {}
+    monkeypatch.setattr(
+        sonic_routes,
+        "submit_job",
+        lambda kind, target: submitted.update(kind=kind) or 123,
+    )
+    resp = TestClient(create_app()).post("/sonic/import")
+    assert resp.json() == {"job_id": 123}
+    assert submitted["kind"] == "sonic_import"
 
 
 def test_dashboard_route(monkeypatch):

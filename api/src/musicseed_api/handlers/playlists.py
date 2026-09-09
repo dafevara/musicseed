@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from musicseed.recommender.populate import PopulateMethod
 from musicseed.recommender.scoring import Weights
+from musicseed.services.playlist_tracks import create_playlist_from_tracks
 from musicseed.services.populate import (
     PopulateApplyResult,
     PopulateResult,
@@ -35,8 +36,18 @@ def create_playlist_from_seeds(
     year_min: int | None = None,
     year_max: int | None = None,
     max_tracks_per_artist: int = 3,
+    track_ids: list[int] | None = None,
 ) -> dict:
-    """Create a new Plex playlist from seed track recommendations."""
+    """Create from approved IDs when supplied; otherwise generate a new selection."""
+    if track_ids is not None:
+        seeds = list(dict.fromkeys(seed_ids))
+        written = create_playlist_from_tracks(name, seeds + track_ids)
+        return {
+            "name": written.playlist.title,
+            "track_count": len(written.tracks),
+            "seed_count": len(seeds),
+            "recommendation_count": len(written.tracks) - len(seeds),
+        }
     result: PlaylistCreateResult = create_playlist(
         name=name,
         seed_ids=seed_ids,
@@ -84,7 +95,12 @@ def preview_populate(
             {
                 "track_id": r.track.id,
                 "title": r.track.title,
-                "artist": r.track.artist.name if r.track.artist else None,
+                "artist": r.track.artist,
+                "album": r.track.album,
+                "year": r.track.year,
+                "popularity": r.track.popularity,
+                "plex_id": r.track.plex_id,
+                "sources": r.sources,
                 "score": r.score.model_dump() if hasattr(r.score, "model_dump") else r.score,
             }
             for r in result.recommendations

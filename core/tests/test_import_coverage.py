@@ -52,10 +52,10 @@ def test_has_succeeded_import_false_by_default() -> None:
     assert has_succeeded_import() is False
 
 
-def test_has_succeeded_import_after_complete() -> None:
+def test_job_success_alone_does_not_verify_a_source() -> None:
     jid = create_job("import")
     complete_job(jid, "ok")
-    assert has_succeeded_import() is True
+    assert has_succeeded_import() is False
 
 
 def test_get_import_coverage_none_when_plex_db_missing() -> None:

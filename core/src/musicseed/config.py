@@ -94,6 +94,15 @@ class PlexConfig(BaseModel):
     token: str = ""
     library: str = "Music"
     db_path: str = Field(default_factory=default_plex_db_path)
+    # Optional scp-style SSH target for a remote Plex server, e.g.
+    # ``"admin@nas.local:/volume1/Plex/.../Databases"``. When set, MusicSeed
+    # creates standalone SQLite backups on the host and streams them over
+    # verified SSH on each import. Empty means "use the local db_path".
+    db_ssh_target: str = ""
+    # Optional SSH password. Leave empty to use the user's ``~/.ssh`` keys
+    # and agent instead.
+    db_ssh_password: str = ""
+    db_ssh_port: int = 22
 
     @property
     def db_path_expanded(self) -> Path:
@@ -200,7 +209,12 @@ def default_config_path() -> Path:
 
 
 def get_config() -> Config:
-    """Get the global config instance."""
+    """Get the operation-bound config, falling back to the process default."""
+    from musicseed.context import get_bound_context
+
+    bound = get_bound_context()
+    if bound is not None:
+        return bound.config
     global _config
     if _config is None:
         _config = load_config()
@@ -216,9 +230,17 @@ def get_config_path() -> Path | None:
 
 
 def set_config(config: Config) -> None:
-    """Set the global config instance."""
+    """Set the global config instance and drop the derived runtime context.
+
+    The default ``MusicSeedContext`` caches an engine and sonic vectors derived
+    from config, so replacing the config must invalidate it; the next access
+    rebuilds from this config.
+    """
     global _config
     _config = config
+    from musicseed.context import reset_context
+
+    reset_context()
 
 
 def save_config(config: Config, path: Path | None = None) -> Path:

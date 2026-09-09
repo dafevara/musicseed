@@ -9,6 +9,7 @@ import typer
 from musicseed_cli.commands import (
     enrich,
     import_library,
+    import_sonic,
     init_db,
     optimize_db,
     playlist,
@@ -25,6 +26,7 @@ _MODULES = (
     optimize_db,
     status,
     import_library,
+    import_sonic,
     sonic_probe,
     sonic_refresh,
     enrich,

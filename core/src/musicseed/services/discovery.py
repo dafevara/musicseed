@@ -27,8 +27,17 @@ from musicseed.config import (
     plex_data_dir_candidates,
     plex_library_db_candidates,
 )
+from musicseed.exceptions import NotFoundError
+from musicseed.logging_config import get_logger
+from musicseed.plex_db_source import (
+    PLEX_BLOBS_DB_NAME,
+    PLEX_LIBRARY_DB_NAME,
+    SQLITE_HEADER,
+    parse_ssh_target,
+    ssh_file_exists,
+)
 
-_SQLITE_HEADER = b"SQLite format 3\x00"
+logger = get_logger("discovery")
 
 
 def _plex_data_dir() -> Path:
@@ -195,6 +204,14 @@ class EnrichmentDiscovery(BaseModel):
     listenbrainz: ListenBrainzTokenCheck
 
 
+class SonicVectorsDiscovery(BaseModel):
+    """Locally persisted Plex sonic vectors (imported via ``import_plex_sonic``)."""
+
+    model_config = {"frozen": True}
+
+    imported_count: int
+
+
 class FirstRunStatus(BaseModel):
     """Derived first-run state and the reasons it is considered a first run."""
 
@@ -216,8 +233,12 @@ class DiscoveryResult(BaseModel):
     musicseed_db: DatabasePathDiscovery
     plex_library_db: FileDiscovery
     plex_blobs_db: FileDiscovery
+    sonic_vectors: SonicVectorsDiscovery
     plex_server: PlexServerDiscovery
-    ready: bool  # every check ok; surfaces can gate "start import" on this
+    ready: bool  # compatibility summary; prefer the capability flags below
+    can_import: bool = False
+    can_recommend: bool = False
+    can_write_playlists: bool = False
     enrichers: EnrichmentDiscovery
     first_run: FirstRunStatus
     missing_inputs: list[str]
@@ -243,13 +264,13 @@ def _probe_file(path: Path, source: str) -> PathCandidate:
         )
     try:
         with open(path, "rb") as f:
-            header = f.read(len(_SQLITE_HEADER))
+            header = f.read(len(SQLITE_HEADER))
     except OSError as e:
         return PathCandidate(
             path=str(path), source=source, exists=True, usable=False,
             reason=Reason.NOT_READABLE, detail=f"Could not open file: {e}",
         )
-    if header != _SQLITE_HEADER:
+    if header != SQLITE_HEADER:
         return PathCandidate(
             path=str(path), source=source, exists=True, usable=False,
             reason=Reason.INVALID_SQLITE,
@@ -264,6 +285,55 @@ def _discover_file(candidates: list[tuple[Path, str]]) -> FileDiscovery:
     probed = [_probe_file(path, source) for path, source in candidates]
     selected = next((c for c in probed if c.usable), None)
     return FileDiscovery(candidates=probed, selected=selected, ok=selected is not None)
+
+
+def _probe_ssh(
+    target: str, filename: str, *, password: str = "", port: int = 22
+) -> PathCandidate:
+    """Probe a remote SQLite file over SSH (reachability + presence)."""
+    try:
+        _user, host, remote_dir = parse_ssh_target(target)
+    except NotFoundError as exc:
+        return PathCandidate(
+            path=target, source="ssh", exists=False, usable=False,
+            reason=Reason.ERROR, detail=str(exc),
+        )
+    path = f"{host}:{remote_dir}/{filename}"
+    exists, error = ssh_file_exists(target, filename, password=password, port=port)
+    if exists is True:
+        candidate = PathCandidate(
+            path=path, source="ssh", exists=True, usable=True, reason=Reason.OK
+        )
+    elif exists is False:
+        candidate = PathCandidate(
+            path=path, source="ssh", exists=False, usable=False,
+            reason=Reason.NOT_FOUND,
+            detail=f"No {filename} at {host}:{remote_dir}.",
+        )
+    else:
+        candidate = PathCandidate(
+            path=path, source="ssh", exists=False, usable=False,
+            reason=Reason.UNREACHABLE,
+            detail=f"Could not connect to {host} over SSH: {error or 'unknown error'}",
+        )
+    logger.debug(
+        "SSH probe %s -> %s%s",
+        path, candidate.reason.value,
+        f": {candidate.detail}" if candidate.detail else "",
+    )
+    return candidate
+
+
+def _discover_ssh_file(
+    target: str, filename: str, *, password: str = "", port: int = 22
+) -> FileDiscovery:
+    """Build a single-candidate ``FileDiscovery`` for one remote SSH file."""
+    candidate = _probe_ssh(target, filename, password=password, port=port)
+    return FileDiscovery(
+        candidates=[candidate],
+        selected=candidate if candidate.usable else None,
+        ok=candidate.usable,
+    )
 
 
 def _discover_musicseed_db(path: Path, source: str) -> DatabasePathDiscovery:
@@ -391,6 +461,7 @@ def discover(
     *,
     musicseed_db_path: str | None = None,
     plex_db_path: str | None = None,
+    plex_db_ssh: str | None = None,
     plex_url: str | None = None,
     plex_token: str | None = None,
     plex_library: str | None = None,
@@ -408,6 +479,7 @@ def discover(
     Args:
         musicseed_db_path: override for the MusicSeed database path.
         plex_db_path: override for the Plex library database path.
+        plex_db_ssh: override for the scp-style SSH target (remote Plex).
         plex_url: override for the Plex server URL.
         plex_token: override for the Plex token.
         plex_library: override for the Plex library name.
@@ -419,10 +491,27 @@ def discover(
 
     Returns:
         The complete discovery result, including per-check ``reason`` codes,
-        enrichment readiness, missing inputs, and the derived first-run
-        status. The Plex token is never included.
+        enrichment readiness, missing inputs, the count of locally stored
+        sonic vectors, and the derived first-run status. The Plex blobs
+        database is reported but no longer blocks ``ready`` (it is only needed
+        to import sonic vectors). The Plex token is never included.
     """
-    cfg = config if config is not None else get_config()
+    cfg = (config if config is not None else get_config()).model_copy(deep=True)
+    # One effective configuration for probes AND coverage; never change the caller.
+    if musicseed_db_path:
+        cfg.database.path = musicseed_db_path
+    if plex_db_path:
+        cfg.plex.db_path = plex_db_path
+        if not plex_db_ssh:
+            cfg.plex.db_ssh_target = ""
+    if plex_db_ssh:
+        cfg.plex.db_ssh_target = plex_db_ssh
+    if plex_url:
+        cfg.plex.url = plex_url
+    if plex_library:
+        cfg.plex.library = plex_library
+    if plex_token is not None:
+        cfg.plex.token = plex_token
     default_plex = PlexConfig()
 
     # MusicSeed's own database (single effective path)
@@ -432,22 +521,35 @@ def discover(
         Path(os.path.expanduser(db_value)), db_source
     )
 
-    # Plex library database (candidates: override/config value, then the default)
-    plex_value = plex_db_path or cfg.plex.db_path
-    plex_source = _source(plex_db_path, cfg.plex.db_path, default_plex.db_path)
-    library_candidates = _dedup_candidates([
-        (Path(os.path.expanduser(plex_value)), plex_source),
-        *[(path, "default") for path in plex_library_db_candidates()],
-    ])
-    plex_library_db = _discover_file(library_candidates)
+    # Plex library + blobs databases. When an SSH target is configured (or
+    # overridden) the source is remote; otherwise use the local filesystem.
+    ssh_target = (plex_db_ssh or cfg.plex.db_ssh_target).strip() or None
+    if ssh_target:
+        plex_library_db = _discover_ssh_file(
+            ssh_target, PLEX_LIBRARY_DB_NAME,
+            password=cfg.plex.db_ssh_password, port=cfg.plex.db_ssh_port,
+        )
+        plex_blobs_db = _discover_ssh_file(
+            ssh_target, PLEX_BLOBS_DB_NAME,
+            password=cfg.plex.db_ssh_password, port=cfg.plex.db_ssh_port,
+        )
+    else:
+        # Plex library database (candidates: override/config value, then the default)
+        plex_value = plex_db_path or cfg.plex.db_path
+        plex_source = _source(plex_db_path, cfg.plex.db_path, default_plex.db_path)
+        library_candidates = _dedup_candidates([
+            (Path(os.path.expanduser(plex_value)), plex_source),
+            *[(path, "default") for path in plex_library_db_candidates()],
+        ])
+        plex_library_db = _discover_file(library_candidates)
 
-    # Plex blobs database (derived from each library-db candidate, as in
-    # PlexConfig.blobs_db_path_expanded)
-    blobs_candidates = _dedup_candidates([
-        (PlexConfig(db_path=str(path)).blobs_db_path_expanded, source)
-        for path, source in library_candidates
-    ])
-    plex_blobs_db = _discover_file(blobs_candidates)
+        # Plex blobs database (derived from each library-db candidate, as in
+        # PlexConfig.blobs_db_path_expanded)
+        blobs_candidates = _dedup_candidates([
+            (PlexConfig(db_path=str(path)).blobs_db_path_expanded, source)
+            for path, source in library_candidates
+        ])
+        plex_blobs_db = _discover_file(blobs_candidates)
 
     # Plex HTTP API
     url = plex_url or cfg.plex.url
@@ -478,10 +580,15 @@ def discover(
             ok=False,
         )
 
+    source_matches_config = bool(
+        ssh_target or (
+            plex_library_db.selected
+            and Path(plex_library_db.selected.path).resolve() == cfg.plex.db_path_expanded.resolve()
+        )
+    )
     ready = all([
         musicseed_db.ok,
         plex_library_db.ok,
-        plex_blobs_db.ok,
         plex_server.ok,
     ])
 
@@ -496,8 +603,8 @@ def discover(
     missing: list[str] = []
     if not musicseed_db.ok:
         missing.append("db_location")
-    if not plex_library_db.ok or not plex_blobs_db.ok:
-        missing.append("plex_db_path")
+    if not plex_library_db.ok:
+        missing.append("plex_db_ssh" if ssh_target else "plex_db_path")
     if not plex_server.ok:
         if plex_server.reason in (Reason.MISSING_TOKEN, Reason.UNAUTHORIZED):
             missing.append("plex_token")
@@ -513,13 +620,21 @@ def discover(
     no_config = get_config_path() is None
     db_missing = not musicseed_db.exists
     track_count = _count_tracks(Path(musicseed_db.path)) if not db_missing else None
+    vectors_imported = _count_vectors(Path(musicseed_db.path)) if not db_missing else 0
     library_empty = track_count == 0
     import_incomplete = False
     if not db_missing and not library_empty:
+        from musicseed.context import MusicSeedContext
+        from musicseed.services.import_state import read_import_state
         from musicseed.services.library import get_import_coverage
 
-        coverage = get_import_coverage()
-        import_incomplete = bool(coverage and coverage.setup_incomplete)
+        probe_context = MusicSeedContext(cfg)
+        coverage = get_import_coverage(context=probe_context)
+        state = read_import_state(probe_context)
+        import_incomplete = bool(
+            coverage.setup_incomplete if coverage else
+            state and not state["completed_at"] and state["state"] != "complete"
+        )
     first_run_reasons = [
         reason
         for reason, flag in (
@@ -539,16 +654,49 @@ def discover(
         reasons=first_run_reasons,
     )
 
+    logger.debug(
+        "discover: ready=%s missing=%s library_db=%s blobs=%s server=%s",
+        ready, missing, plex_library_db.ok, plex_blobs_db.ok, plex_server.ok,
+    )
     return DiscoveryResult(
         musicseed_db=musicseed_db,
         plex_library_db=plex_library_db,
         plex_blobs_db=plex_blobs_db,
+        sonic_vectors=SonicVectorsDiscovery(imported_count=vectors_imported),
         plex_server=plex_server,
         ready=ready,
+        can_import=(plex_library_db.ok and source_matches_config
+                    and musicseed_db.reason not in {
+            Reason.NOT_A_FILE, Reason.NOT_WRITABLE, Reason.PARENT_NOT_WRITABLE,
+        }),
+        can_recommend=track_count is not None and track_count > 0,
+        can_write_playlists=plex_server.ok,
         enrichers=enrichers,
         first_run=first_run,
         missing_inputs=missing,
     )
+
+
+def _count_vectors(db_path: Path) -> int:
+    """Return the number of locally stored sonic vectors, or 0 when unknown.
+
+    Reads the discovered database read-only (``mode=ro``) so discovery never
+    writes. Any error — missing file, missing schema, locked database — yields
+    0 rather than raising.
+    """
+    if not db_path.exists() or not db_path.is_file():
+        return 0
+    try:
+        conn = sqlite3.connect(f"file:{quote(str(db_path))}?mode=ro", uri=True)
+    except sqlite3.Error:
+        return 0
+    try:
+        cur = conn.execute("SELECT COUNT(*) FROM track_vectors")
+        return int(cur.fetchone()[0])
+    except sqlite3.Error:
+        return 0
+    finally:
+        conn.close()
 
 
 def _count_tracks(db_path: Path) -> int | None:

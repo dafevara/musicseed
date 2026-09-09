@@ -62,12 +62,17 @@ export function DiscoveryChecks({
   result: DiscoveryResult;
   ready: boolean;
 }) {
-  const { musicseed_db, plex_library_db, plex_blobs_db, plex_server } = result;
+  const { musicseed_db, plex_library_db, plex_blobs_db, sonic_vectors, plex_server } = result;
   const dbOk = musicseed_db.reason === "ok" || musicseed_db.reason === "parent_missing";
 
   return (
     <section className="panel">
       <h2 className="mt-0 text-lg font-semibold">Checks</h2>
+      <p className="text-sm muted">
+        Import: {result.can_import ? "available" : "needs source access"} ·
+        Recommend: {result.can_recommend ? "available locally" : "needs local tracks"} ·
+        Write playlists: {result.can_write_playlists ? "available" : "needs Plex connection"}
+      </p>
       <ul className="list-none m-0 p-0 grid gap-2.5">
         {/* MusicSeed DB */}
         <li className="flex flex-wrap items-baseline gap-x-1.5">
@@ -128,10 +133,26 @@ export function DiscoveryChecks({
               </span>
               <HelpIcon>
                 {dbGuidance(plex_blobs_db.candidates[0]?.reason, plex_blobs_db.candidates[0]?.detail)}{" "}
-                It normally sits next to the library database with a{" "}
-                <code>.blobs.db</code> suffix.
+                Sonic vectors are imported into MusicSeed&apos;s local store, so the blobs
+                database is only needed when importing them. It normally sits next to the
+                library database with a <code>.blobs.db</code> suffix.
               </HelpIcon>
             </>
+          )}
+        </li>
+
+        {/* Sonic vectors (local) */}
+        <li className="flex flex-wrap items-baseline gap-x-1.5">
+          <StatusBadge ok={sonic_vectors.imported_count > 0} />
+          <strong>Sonic vectors (local)</strong>
+          <span className="text-[var(--muted)] text-sm">
+            {sonic_vectors.imported_count.toLocaleString()} imported
+          </span>
+          {sonic_vectors.imported_count === 0 && (
+            <HelpIcon>
+              Import Plex sonic vectors from Settings to enable the sonic similarity
+              signal in recommendations.
+            </HelpIcon>
           )}
         </li>
 

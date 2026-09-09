@@ -5,12 +5,14 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable
 
-from musicseed.config import get_config
+from musicseed.context import MusicSeedContext, get_context
 from musicseed.db.session import ensure_schema
 from musicseed.enrichers.pipeline import EnrichmentStats, run_enrichment
 from musicseed.exceptions import ConfigurationError
+from musicseed.services.jobs import exclusive_writer
 
 
+@exclusive_writer("enrich")
 def enrich_tracks(
     source: str = "listenbrainz",
     batch_size: int = 50,
@@ -21,6 +23,7 @@ def enrich_tracks(
     concurrency: int = 5,
     progress_callback: Callable[[int, int, str], None] | None = None,
     should_cancel: Callable[[], bool] | None = None,
+    context: MusicSeedContext | None = None,
 ) -> EnrichmentStats:
     """Enrich tracks with external metadata from Spotify or ListenBrainz.
 
@@ -39,6 +42,7 @@ def enrich_tracks(
         progress_callback: optional ``(current, total, message)`` callback.
         should_cancel: optional callable polled by the pipeline; enrichment
             stops early when it returns True.
+        context: runtime context to use; defaults to the default context.
 
     Returns:
         Aggregate enrichment statistics (processed, matched, unmatched,
@@ -49,7 +53,8 @@ def enrich_tracks(
             source='spotify', or the ListenBrainz user token is missing when
             source='listenbrainz'.
     """
-    config = get_config()
+    ctx = context or get_context()
+    config = ctx.config
 
     if source == "spotify" and (
         not config.spotify.client_id or not config.spotify.client_secret
@@ -66,7 +71,7 @@ def enrich_tracks(
             "listenbrainz.token to your config file."
         )
 
-    ensure_schema()
+    ensure_schema(ctx)
     return asyncio.run(
         run_enrichment(
             source=source,
@@ -81,5 +86,6 @@ def enrich_tracks(
             concurrency=concurrency,
             progress_callback=progress_callback,
             should_cancel=should_cancel,
+            session_scope=ctx.session,
         )
     )

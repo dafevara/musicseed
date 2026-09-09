@@ -118,8 +118,9 @@ class Track(Base):
     listenbrainz_listener_count: Mapped[Optional[int]] = mapped_column(Integer)
     listenbrainz_matched: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    # Sonic vectors are not stored: they are read from Plex at query time
-    # (see musicseed.sonic), keyed by plex_id.
+    # Sonic vectors are persisted in the ``track_vectors`` table (see
+    # ``services.sonic_vectors``); the recommender reads them from there,
+    # keyed by ``plex_id``.
 
     # Plex reference
     plex_guid: Mapped[Optional[str]] = mapped_column(String(255))
@@ -314,3 +315,47 @@ class Job(Base):
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     result_summary: Mapped[Optional[str]] = mapped_column(Text)
     pid: Mapped[Optional[int]] = mapped_column(Integer)
+
+
+class RuntimeState(Base):
+    """Small persisted cache revisions, shared by API and CLI contexts."""
+
+    __tablename__ = "runtime_state"
+
+    key: Mapped[str] = mapped_column(String(50), primary_key=True)
+    value: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class ImportState(Base):
+    """Source-specific import checkpoint, independent of deletable job history."""
+
+    __tablename__ = "import_state"
+
+    source_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    # Deliberately no FK: pruning job history must not erase import provenance.
+    job_id: Mapped[Optional[int]] = mapped_column(Integer)
+    state: Mapped[str] = mapped_column(String(30), nullable=False)
+    snapshot: Mapped[Optional[str]] = mapped_column(Text)
+    expected: Mapped[Optional[dict]] = mapped_column(JSON)
+    checkpoint: Mapped[Optional[str]] = mapped_column(String(100))
+    processed: Mapped[int] = mapped_column(Integer, default=0)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class TrackVector(Base):
+    """A Plex sonic-analysis vector persisted locally (MUS-83).
+
+    Stores the raw (un-normalized) 50-dimension vector read from Plex's blobs
+    database so recommendations no longer need that file at query time.
+    """
+
+    __tablename__ = "track_vectors"
+
+    plex_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    vector: Mapped[list[float]] = mapped_column(JSON, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )

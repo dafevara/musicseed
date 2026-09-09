@@ -141,6 +141,84 @@ def test_plex_dbs_found_with_derived_blobs(tmp_path: Path, isolated_plex: Path) 
     assert result.plex_blobs_db.selected.path.endswith(".blobs.db")
 
 
+def test_ready_does_not_require_blobs_db(
+    tmp_path: Path, isolated_plex: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _make_sqlite(isolated_plex / "com.plexapp.plugins.library.db")
+    db = _make_sqlite(tmp_path / "ms" / "musicseed.db")
+    _patch_client(monkeypatch, check=_ok_check(), sections=[_music_section()])
+
+    result = discover(musicseed_db_path=str(db), config=_config(tmp_path))
+
+    assert result.plex_library_db.ok
+    assert not result.plex_blobs_db.ok
+    assert result.ready
+
+
+def test_sonic_vectors_imported_count(
+    tmp_path: Path, isolated_plex: Path
+) -> None:
+    db = tmp_path / "ms" / "musicseed.db"
+    db.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(db))
+    conn.execute("CREATE TABLE track_vectors (plex_id INTEGER PRIMARY KEY, vector TEXT)")
+    conn.executemany(
+        "INSERT INTO track_vectors (plex_id, vector) VALUES (?, ?)",
+        [(i, "[]") for i in range(3)],
+    )
+    conn.commit()
+    conn.close()
+
+    result = discover(musicseed_db_path=str(db), check_server=False,
+                      config=_config(tmp_path))
+
+    assert result.sonic_vectors.imported_count == 3
+
+
+def test_ssh_source_probed_ok(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = Config.model_validate({
+        "database": {"path": str(tmp_path / "ms" / "musicseed.db")},
+        "plex": {"db_ssh_target": "user@nas.local:/volume1/Plex/Databases"},
+    })
+
+    monkeypatch.setattr(discovery, "ssh_file_exists", lambda *a, **k: (True, None))
+
+    result = discover(check_server=False, config=cfg)
+
+    assert result.plex_library_db.ok
+    assert result.plex_library_db.selected.source == "ssh"
+    assert result.plex_library_db.selected.path.endswith(discovery.PLEX_LIBRARY_DB_NAME)
+    assert result.plex_blobs_db.ok
+
+
+def test_malformed_ssh_target_is_reported_not_raised(tmp_path):
+    cfg = _config(tmp_path)
+    cfg.plex.db_ssh_target = "missing-colon"
+    result = discover(check_server=False, config=cfg)
+    assert not result.plex_library_db.ok
+    assert result.plex_library_db.candidates[0].reason == discovery.Reason.ERROR
+    assert "expected" in result.plex_library_db.candidates[0].detail
+
+
+def test_ssh_source_missing_reports_plex_db_ssh(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = Config.model_validate({
+        "database": {"path": str(tmp_path / "ms" / "musicseed.db")},
+        "plex": {"db_ssh_target": "user@nas.local:/volume1/Plex/Databases"},
+    })
+
+    monkeypatch.setattr(discovery, "ssh_file_exists", lambda *a, **k: (False, None))
+
+    result = discover(check_server=False, config=cfg)
+
+    assert not result.plex_library_db.ok
+    assert "plex_db_ssh" in result.missing_inputs
+    assert "plex_db_path" not in result.missing_inputs
+
+
 def test_plex_db_missing(tmp_path: Path, isolated_plex: Path) -> None:
     missing = isolated_plex / "com.plexapp.plugins.library.db"
     result = discover(check_server=False, config=_config(tmp_path))

@@ -1,7 +1,7 @@
 """Plex sonic analysis service — inspect and trigger Plex's own sonic analysis.
 
-Keeps the Plex sonic vectors that MusicSeed reads at query time (see
-``musicseed.sonic``) up to date:
+Keeps Plex's own sonic analysis up to date so MusicSeed can import fresh vectors
+into its local store (see ``musicseed.sonic``):
 
 1. Which tracks has Plex already analyzed sonically (``musicAnalysisVersion``)?
 2. Trigger the ``MusicAnalysis`` Butler task on demand (``POST /butler/…``) and
@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 from pydantic import BaseModel
 
 from musicseed.clients.plex import LibrarySectionResult, MediaItem, PlexClient
-from musicseed.config import get_config
+from musicseed.context import MusicSeedContext, get_context
 from musicseed.exceptions import ConfigurationError, NotFoundError
 
 BUTLER_SONIC_TASK = "MusicAnalysis"
@@ -111,8 +111,10 @@ class SonicRefreshResult(BaseModel):
         return self.pending_tracks_after == 0
 
 
-def _plex_client(timeout: float = 120.0) -> PlexClient:
-    config = get_config()
+def _plex_client(
+    timeout: float = 120.0, context: MusicSeedContext | None = None
+) -> PlexClient:
+    config = (context or get_context()).config
     if not config.plex.token:
         raise ConfigurationError(
             "plex.token is not configured. Add it to your config file."
@@ -176,6 +178,7 @@ def get_sonic_status(
     library_name: str | None = None,
     *,
     recent_days: int = 7,
+    context: MusicSeedContext | None = None,
 ) -> SonicStatusResult:
     """Report Plex sonic analysis coverage for a music library.
 
@@ -187,6 +190,7 @@ def get_sonic_status(
         library_name: Plex music library to inspect; defaults to the
             configured ``plex.library``.
         recent_days: size of the "recent additions" window in days.
+        context: runtime context to use; defaults to the default context.
 
     Returns:
         Coverage counts for the whole library and the recent window, plus the
@@ -197,9 +201,9 @@ def get_sonic_status(
         NotFoundError: if the library name doesn't match a music section.
         PlexAPIError: if the Plex API call fails.
     """
-    config = get_config()
-    target_library = library_name or config.plex.library
-    client = _plex_client()
+    ctx = context or get_context()
+    target_library = library_name or ctx.config.plex.library
+    client = _plex_client(context=ctx)
     section = _resolve_music_section(client, target_library)
     tracks = client.get_section_tracks(section.key)
 
@@ -219,12 +223,14 @@ def get_sonic_status(
 
 
 def _pick_probe_album(
-    album_rating_key: str | None, library_name: str | None
+    album_rating_key: str | None,
+    library_name: str | None,
+    context: MusicSeedContext | None = None,
 ) -> str:
     """Resolve the album to watch: the given key, or the most recent unanalyzed one."""
     if album_rating_key is not None:
         return album_rating_key
-    status = get_sonic_status(library_name)
+    status = get_sonic_status(library_name, context=context)
     if not status.unanalyzed_albums:
         raise NotFoundError(
             f"Every album in library '{status.library_name}' already has "
@@ -291,7 +297,9 @@ def _run_trigger_probe(
     )
 
 
-def refresh_album(album_rating_key: str) -> None:
+def refresh_album(
+    album_rating_key: str, context: MusicSeedContext | None = None
+) -> None:
     """Ask Plex to refresh one album's metadata (re-reads its files from disk).
 
     This recreates the album's media items, which clears the failed-analysis
@@ -299,12 +307,13 @@ def refresh_album(album_rating_key: str) -> None:
 
     Args:
         album_rating_key: Plex rating key of the album to refresh.
+        context: runtime context to use; defaults to the default context.
 
     Raises:
         ConfigurationError: if plex.token is not configured.
         PlexAPIError: if the Plex API call fails.
     """
-    client = _plex_client(timeout=30.0)
+    client = _plex_client(timeout=30.0, context=context)
     client.refresh_item(album_rating_key)
 
 
@@ -314,6 +323,7 @@ def probe_sonic_trigger(
     *,
     wait_seconds: float = 120.0,
     poll_interval: float = 5.0,
+    context: MusicSeedContext | None = None,
 ) -> SonicTriggerProbeResult:
     """Trigger Plex analysis on one album and check if sonic analysis follows.
 
@@ -329,6 +339,7 @@ def probe_sonic_trigger(
             configured ``plex.library``.
         wait_seconds: maximum time to watch for analysis.
         poll_interval: seconds between polls.
+        context: runtime context to use; defaults to the default context.
 
     Returns:
         The probe outcome, including analyzed counts before/after and the
@@ -339,8 +350,8 @@ def probe_sonic_trigger(
         NotFoundError: if no unanalyzed album can be found.
         PlexAPIError: if the Plex API call fails.
     """
-    client = _plex_client()
-    album_rating_key = _pick_probe_album(album_rating_key, library_name)
+    client = _plex_client(context=context)
+    album_rating_key = _pick_probe_album(album_rating_key, library_name, context=context)
     return _run_trigger_probe(
         client,
         album_rating_key,
@@ -358,6 +369,7 @@ def probe_butler_trigger(
     butler_task: str = "MusicAnalysis",
     wait_seconds: float = 120.0,
     poll_interval: float = 5.0,
+    context: MusicSeedContext | None = None,
 ) -> SonicTriggerProbeResult:
     """Trigger a Plex Butler task and check if sonic analysis follows.
 
@@ -373,6 +385,7 @@ def probe_butler_trigger(
         butler_task: name of the Butler task to run.
         wait_seconds: maximum time to watch for analysis.
         poll_interval: seconds between polls.
+        context: runtime context to use; defaults to the default context.
 
     Returns:
         The probe outcome for the watched album, including analyzed counts
@@ -383,8 +396,8 @@ def probe_butler_trigger(
         NotFoundError: if no unanalyzed album can be found.
         PlexAPIError: if the Plex API call fails.
     """
-    client = _plex_client()
-    album_rating_key = _pick_probe_album(album_rating_key, library_name)
+    client = _plex_client(context=context)
+    album_rating_key = _pick_probe_album(album_rating_key, library_name, context=context)
     return _run_trigger_probe(
         client,
         album_rating_key,
@@ -414,6 +427,7 @@ def refresh_sonic_analysis(
     poll_interval: float = 15.0,
     stall_after: int = 4,
     on_poll: Callable[[int, int], None] | None = None,
+    context: MusicSeedContext | None = None,
 ) -> SonicRefreshResult:
     """Refresh sonic analysis for music added in the last ``days`` days.
 
@@ -433,6 +447,7 @@ def refresh_sonic_analysis(
         poll_interval: seconds between polls.
         stall_after: consecutive polls without progress before giving up.
         on_poll: optional ``(pending_now, pending_before)`` progress callback.
+        context: runtime context to use; defaults to the default context.
 
     Returns:
         The refresh outcome, including pending counts before/after, whether a
@@ -443,8 +458,8 @@ def refresh_sonic_analysis(
         NotFoundError: if the library name doesn't match a music section.
         PlexAPIError: if the Plex API call fails.
     """
-    client = _plex_client()
-    before = get_sonic_status(library_name, recent_days=days)
+    client = _plex_client(context=context)
+    before = get_sonic_status(library_name, recent_days=days, context=context)
     pending_before = before.recent_unanalyzed_tracks
 
     if pending_before == 0:
@@ -474,7 +489,7 @@ def refresh_sonic_analysis(
             label = f"{activity.title} — {activity.subtitle}".strip(" —")
             if label not in activities_observed:
                 activities_observed.append(label)
-        last_status = get_sonic_status(library_name, recent_days=days)
+        last_status = get_sonic_status(library_name, recent_days=days, context=context)
         previous = pending_now
         pending_now = last_status.recent_unanalyzed_tracks
         stalls = stalls + 1 if pending_now >= previous else 0

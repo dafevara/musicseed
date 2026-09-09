@@ -57,3 +57,12 @@ own database.
 The PostgreSQL → SQLite migration has since shipped: MusicSeed now uses a single local SQLite
 file (see [`docs/musicseed-dependency-architecture.html`](../musicseed-dependency-architecture.html));
 ARD 001's PostgreSQL-specific database sections no longer apply.
+
+## Amendment (2026-09)
+
+`import-plex-sonic` was reintroduced (MUS-87 and later): sonic vectors are imported from Plex's
+blobs database into the local `track_vectors` table
+(`core/src/musicseed/services/sonic_vectors.py`), so recommendations read the local store and
+only the import needs Plex's files. Remote Plex setups fetch validated SSH snapshots of both
+Plex databases (`core/src/musicseed/plex_db_source.py`). The core decision — use Plex's 50-D
+vectors, no self-generated embeddings — is unchanged.

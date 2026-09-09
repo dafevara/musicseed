@@ -15,8 +15,9 @@ jobs, and explainable recommendations over large-scale product architecture.
   `~/.local/share/musicseed/musicseed.db`) — no database server required.
 - Enriches popularity from ListenBrainz by MusicBrainz recording MBID (free user token required),
   with Spotify as a credentialed fallback.
-- Uses Plex's own sonic analysis vectors (50-dimensional, read in memory at query time) for sonic
-  similarity — MusicSeed generates no embeddings and stores no vectors.
+- Uses Plex's own sonic analysis vectors (50-dimensional) for sonic similarity — imported once from
+  the Plex blobs database into the local store, then read in memory; MusicSeed generates no
+  embeddings of its own.
 - Recommends tracks from six signals: sonic similarity, popularity proximity, style, genre, era,
   and novelty.
 - Creates and populates Plex playlists from recommendations.

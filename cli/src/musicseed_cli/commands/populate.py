@@ -19,8 +19,8 @@ def populate(
         str,
         typer.Option(
             "--method",
-            help="Recommendation strategy: 'average' (mean of playlist) or "
-            "'frequency' (vote count across per-track seeds)",
+            help="Strategy: 'average' (one library scan) or 'frequency' (one scan per "
+            "distinct seed; mean scores with vote-count ties). Prefer average for large playlists.",
         ),
     ] = "average",
     limit: Annotated[
@@ -30,7 +30,7 @@ def populate(
     per_seed_limit: Annotated[
         int,
         typer.Option(
-            "--per-seed-limit", help="Candidates gathered per track (frequency method only)"
+            "--per-seed-limit", help="Recommendations per seed (frequency method only)"
         ),
     ] = 30,
     explain: Annotated[
@@ -160,15 +160,7 @@ def populate(
 
     try:
         result = populate_service.populate_playlist(
-            playlist_id,
-            method=method,
-            limit=limit,
-            per_seed_limit=per_seed_limit,
-            weights=weights,
-            year_min=year_min,
-            year_max=year_max,
-            max_tracks_per_artist=artist_max,
-            min_score=min_score,
+            playlist_id, track_ids=[rec.track.id for rec in preview.recommendations],
         )
         console.print(
             f"\n[green]✓ Added {result.added_count} tracks to playlist "

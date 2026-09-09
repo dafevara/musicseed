@@ -9,7 +9,10 @@ runner = CliRunner()
 def test_help_lists_commands():
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
-    for cmd in ("init-db", "status", "import", "enrich", "recommend", "playlist", "populate"):
+    for cmd in (
+        "init-db", "status", "import", "import-plex-sonic",
+        "enrich", "recommend", "playlist", "populate",
+    ):
         assert cmd in result.output
 
 

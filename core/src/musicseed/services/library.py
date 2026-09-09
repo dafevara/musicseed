@@ -2,19 +2,20 @@
 
 from __future__ import annotations
 
+import sqlite3
 from collections.abc import Callable
+from contextlib import closing
 from pathlib import Path
 
 from pydantic import BaseModel
 
-from musicseed.config import get_config
-from musicseed.db.models import Job
-from musicseed.db.session import IndexResult, create_indexes, ensure_schema, get_session, init_db
+from musicseed.context import MusicSeedContext, get_context
+from musicseed.db.session import IndexResult, create_indexes, ensure_schema, init_db
 from musicseed.exceptions import NotFoundError
 from musicseed.importers.plex import PlexImporter, import_from_plex
-from musicseed.sonic import get_sonic_vectors
-
-_sonic_count_cache: tuple[tuple[str, int, int], int] | None = None
+from musicseed.plex_db_source import resolve_plex_dbs
+from musicseed.services.import_state import checkpoint, read_import_state, snapshot_id
+from musicseed.services.jobs import exclusive_writer
 
 
 class EnrichmentCoverage(BaseModel):
@@ -75,12 +76,14 @@ class ImportCoverage(BaseModel):
     albums: CountCompare
     tracks: CountCompare
     ever_succeeded: bool
+    verified: bool = False
 
     @property
     def complete(self) -> bool:
-        """True when every Plex artist, album, and track is imported locally."""
+        """True when the source completed and counts match the current snapshot."""
         return (
-            self.artists.missing == 0
+            self.verified
+            and self.artists.missing == 0
             and self.albums.missing == 0
             and self.tracks.missing == 0
         )
@@ -95,33 +98,45 @@ class ImportCoverage(BaseModel):
         return not self.ever_succeeded and not self.complete
 
 
-def initialize_database() -> None:
-    """Create the SQLite database file and tables. Idempotent."""
-    init_db()
+def initialize_database(context: MusicSeedContext | None = None) -> None:
+    """Create the SQLite database file and tables. Idempotent.
+
+    Args:
+        context: runtime context to use; defaults to the default context.
+    """
+    init_db(context)
 
 
-def optimize_database() -> list[IndexResult]:
+def optimize_database(context: MusicSeedContext | None = None) -> list[IndexResult]:
     """Create performance indexes.
+
+    Args:
+        context: runtime context to use; defaults to the default context.
 
     Returns:
         Per-index results describing success or failure for each index.
     """
-    ensure_schema()
-    return create_indexes()
+    ensure_schema(context)
+    return create_indexes(context)
 
 
+@exclusive_writer("import")
 def import_library(
     plex_db_path: Path | None = None,
+    plex_db_ssh: str | None = None,
     library_name: str | None = None,
     full_import: bool = False,
     progress_callback: Callable[[int, int, str], None] | None = None,
     should_cancel: Callable[[], bool] | None = None,
+    context: MusicSeedContext | None = None,
 ) -> ImportResult:
     """Import metadata from the Plex database into the local library.
 
     Args:
-        plex_db_path: path to the Plex SQLite database; defaults to the
-            configured ``plex.db_path``.
+        plex_db_path: path to the Plex SQLite database; overrides the
+            configured source when given.
+        plex_db_ssh: scp-style SSH target of a remote Plex database
+            directory; overrides ``plex.db_ssh_target`` when given.
         library_name: Plex library to import; defaults to the configured
             ``plex.library``.
         full_import: re-import everything instead of an incremental import.
@@ -129,6 +144,7 @@ def import_library(
             invoked as the import progresses.
         should_cancel: optional callable polled by the importer; the import
             stops early when it returns True.
+        context: runtime context to use; defaults to the default context.
 
     Returns:
         Counts of imported artists, albums, tracks, and play history rows.
@@ -136,53 +152,82 @@ def import_library(
     Raises:
         NotFoundError: if the Plex database file does not exist.
     """
-    config = get_config()
-    db_path = plex_db_path or config.plex.db_path_expanded
-    target_library = library_name or config.plex.library
+    ctx = context or get_context()
+    if plex_db_path is not None or plex_db_ssh is not None or library_name is not None:
+        cfg = ctx.config.model_copy(deep=True)
+        if plex_db_path is not None:
+            cfg.plex.db_path = str(plex_db_path)
+            cfg.plex.db_ssh_target = ""
+        elif plex_db_ssh is not None:
+            cfg.plex.db_ssh_target = plex_db_ssh
+        if library_name is not None:
+            cfg.plex.library = library_name
+        ctx = MusicSeedContext(cfg)
+    ensure_schema(ctx)
+    cancelled = False
 
-    if not db_path.exists():
-        raise NotFoundError(f"Plex database not found at {db_path}")
+    def is_cancelled() -> bool:
+        nonlocal cancelled
+        cancelled = cancelled or (should_cancel is not None and should_cancel())
+        return cancelled
 
-    with get_session() as session:
-        result = import_from_plex(
-            session=session,
-            plex_db_path=db_path,
-            library_name=target_library,
-            full_import=full_import,
-            progress_callback=progress_callback,
-            should_cancel=should_cancel,
-        )
+    def on_progress(current: int, total: int, phase: str) -> None:
+        checkpoint(ctx, "running", phase=phase, processed=current)
+        if progress_callback is not None:
+            progress_callback(current, total, phase)
 
-    return ImportResult(**result)
-
-
-def has_succeeded_import() -> bool:
-    """Return True when any import job has ever reached ``succeeded``.
-
-    Returns False (rather than raising) when the database cannot be read.
-    """
+    checkpoint(ctx, "running", phase="reading source", processed=0)
     try:
-        ensure_schema()
-        with get_session() as session:
-            return (
-                session.query(Job)
-                .filter(Job.kind == "import", Job.state == "succeeded")
-                .first()
-                is not None
+        if is_cancelled():
+            checkpoint(ctx, "canceled")
+            return ImportResult(artists=0, albums=0, tracks=0, play_history=0)
+        if ctx.config.plex.db_ssh_target:
+            on_progress(0, 0, "downloading Plex database")
+        db_path = resolve_plex_dbs(ctx.config, refresh=True).library_db
+        if not db_path.exists():
+            raise NotFoundError(f"Plex database not found at {db_path}")
+        with closing(PlexImporter(db_path, ctx.config.plex.library)) as importer:
+            expected = importer.get_counts()
+        checkpoint(ctx, "running", snapshot=snapshot_id(db_path), expected=expected)
+        with ctx.session() as session:
+            result = import_from_plex(
+                session=session, plex_db_path=db_path, library_name=ctx.config.plex.library,
+                full_import=full_import, progress_callback=on_progress, should_cancel=is_cancelled,
             )
-    except Exception:
-        return False
+        if cancelled:
+            checkpoint(ctx, "canceled")
+        else:
+            checkpoint(ctx, "complete", phase="finished")
+        return ImportResult(**result)
+    except BaseException as error:
+        checkpoint(ctx, "canceled" if isinstance(error, KeyboardInterrupt) else "failed")
+        raise
 
 
-def get_import_coverage() -> ImportCoverage | None:
+def has_succeeded_import(context: MusicSeedContext | None = None) -> bool:
+    """Whether this source/library completed an import, independent of job history."""
+    state = read_import_state(context or get_context())
+    return bool(state and state["completed_at"])
+
+
+def get_import_coverage(
+    context: MusicSeedContext | None = None,
+) -> ImportCoverage | None:
     """Compare MusicSeed artist/album/track counts to the configured Plex library.
+
+    Args:
+        context: runtime context to use; defaults to the default context.
 
     Returns:
         The coverage comparison, or None when the Plex database cannot be
         read. Does not raise.
     """
-    config = get_config()
-    plex_db = config.plex.db_path_expanded
+    ctx = context or get_context()
+    config = ctx.config
+    try:
+        plex_db = resolve_plex_dbs(config, refresh=False).library_db
+    except NotFoundError:
+        return None
     if not plex_db.exists():
         return None
 
@@ -194,62 +239,43 @@ def get_import_coverage() -> ImportCoverage | None:
     finally:
         importer.close()
 
-    from musicseed.db.models import Album, Artist, Track
-
     try:
-        ensure_schema()
-        with get_session() as session:
-            local_artists = session.query(Artist).count()
-            local_albums = session.query(Album).count()
-            local_tracks = session.query(Track).count()
-    except Exception:
-        local_artists = local_albums = local_tracks = 0
+        path = ctx.config.database.path_expanded.resolve()
+        with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)) as conn:
+            local_artists = conn.execute("SELECT COUNT(*) FROM artists").fetchone()[0]
+            local_albums = conn.execute("SELECT COUNT(*) FROM albums").fetchone()[0]
+            local_tracks = conn.execute("SELECT COUNT(*) FROM tracks").fetchone()[0]
+        state = read_import_state(ctx)
+        verified = bool(state and state["state"] == "complete"
+                        and state["snapshot"] == snapshot_id(plex_db))
+    except (sqlite3.Error, OSError):
+        return None
 
     return ImportCoverage(
         artists=CountCompare(plex=plex["artists"], local=local_artists),
         albums=CountCompare(plex=plex["albums"], local=local_albums),
         tracks=CountCompare(plex=plex["tracks"], local=local_tracks),
-        ever_succeeded=has_succeeded_import(),
+        ever_succeeded=has_succeeded_import(context=ctx),
+        verified=verified,
     )
 
 
-def _count_tracks_with_sonic(session, track_count: int) -> int:
-    """Count local tracks Plex currently has a sonic vector for.
+def _count_tracks_with_sonic(session) -> int:
+    """Count local tracks that have a stored Plex sonic vector."""
+    from musicseed.db.models import Track, TrackVector
 
-    Returns 0 rather than raising when Plex's databases are unavailable, so
-    status still renders the rest of the library.
-
-    The count is cached by ``(db_path, track_count, vector_count)``: it only
-    changes when tracks are imported (track_count changes) or Plex analyzes
-    more items (vector count changes), so the full ``tracks.plex_id`` scan is
-    avoided on repeat dashboard polls.
-    """
-    from musicseed.db.models import Track
-
-    global _sonic_count_cache
-
-    try:
-        vectors = get_sonic_vectors()
-    except NotFoundError:
-        return 0
-
-    plex_ids = vectors.plex_ids
-    db_key = str(get_config().database.path_expanded)
-    cache_key = (db_key, track_count, len(plex_ids))
-    if _sonic_count_cache is not None and _sonic_count_cache[0] == cache_key:
-        return _sonic_count_cache[1]
-
-    track_plex_ids = {
-        row[0]
-        for row in session.query(Track.plex_id).filter(Track.plex_id.isnot(None))
-    }
-    count = len(plex_ids & track_plex_ids)
-    _sonic_count_cache = (cache_key, count)
-    return count
+    return (
+        session.query(Track)
+        .join(TrackVector, Track.plex_id == TrackVector.plex_id)
+        .count()
+    )
 
 
-def get_status() -> LibraryStatus:
+def get_status(context: MusicSeedContext | None = None) -> LibraryStatus:
     """Return library statistics and enrichment coverage.
+
+    Args:
+        context: runtime context to use; defaults to the default context.
 
     Returns:
         Entity counts (artists, albums, tracks, plays, tags), per-source
@@ -260,10 +286,11 @@ def get_status() -> LibraryStatus:
 
     from musicseed.db.models import Album, Artist, Genre, Mood, PlayHistory, Style, Track
 
-    config = get_config()
-    ensure_schema()
+    ctx = context or get_context()
+    config = ctx.config
+    ensure_schema(ctx)
 
-    with get_session() as session:
+    with ctx.session() as session:
         artist_count = session.query(Artist).count()
         album_count = session.query(Album).count()
         track_count = session.query(Track).count()
@@ -272,7 +299,7 @@ def get_status() -> LibraryStatus:
         tracks_with_mbid = session.query(Track).filter(Track.mbid.isnot(None)).count()
         tracks_with_spotify = session.query(Track).filter(Track.spotify_id.isnot(None)).count()
         spotify_attempted = session.query(Track).filter(Track.spotify_matched.is_(True)).count()
-        tracks_with_sonic = _count_tracks_with_sonic(session, track_count)
+        tracks_with_sonic = _count_tracks_with_sonic(session)
         tracks_with_listenbrainz = (
             session.query(Track)
             .filter(
@@ -305,7 +332,7 @@ def get_status() -> LibraryStatus:
         genre_count=genre_count,
         mood_count=mood_count,
         style_count=style_count,
-        import_coverage=get_import_coverage(),
+        import_coverage=get_import_coverage(context=ctx),
         enrichment=EnrichmentCoverage(
             tracks_with_mbid=tracks_with_mbid,
             tracks_with_spotify=tracks_with_spotify,

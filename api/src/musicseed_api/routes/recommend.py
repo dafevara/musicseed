@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Form, Query
 from musicseed.recommender.scoring import Weights
@@ -36,6 +36,8 @@ def typeahead(
 def recommend(
     seed_ids: Annotated[str, Form()],
     limit: Annotated[int, Form()] = 50,
+    method: Annotated[Literal["average", "frequency"], Form()] = "average",
+    per_seed_limit: Annotated[int, Form()] = 30,
     year_min: Annotated[str, Form()] = "",
     year_max: Annotated[str, Form()] = "",
     max_tracks_per_artist: Annotated[int, Form()] = 3,
@@ -65,6 +67,8 @@ def recommend(
     result = run_recommendations(
         seed_ids=ids,
         limit=limit,
+        method=method,
+        per_seed_limit=per_seed_limit,
         year_min=y_min,
         year_max=y_max,
         max_tracks_per_artist=max_tracks_per_artist,
@@ -74,11 +78,17 @@ def recommend(
     effective_weights = weights or Weights()
     return {
         "seed_track_ids": [t.id for t in result.seed_tracks],
+        "method": method,
         "recommendations": [
             {
                 "track_id": r.track.id,
                 "title": r.track.title,
-                "artist": r.track.artist.name if r.track.artist else None,
+                "artist": r.track.artist,
+                "album": r.track.album,
+                "year": r.track.year,
+                "popularity": r.track.popularity,
+                "plex_id": r.track.plex_id,
+                "sources": r.sources,
                 "score": r.score,
             }
             for r in result.recommendations

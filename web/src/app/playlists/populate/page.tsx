@@ -123,8 +123,6 @@ function PopulatePlaylistPageInner() {
         added_count: number;
         playlist_track_count: number;
       }>(`/playlists/${encodeURIComponent(playlistId)}/populate`, {
-        limit: 40,
-        method,
         track_ids: trackIds.join(","),
       });
       router.push(

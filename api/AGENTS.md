@@ -45,7 +45,7 @@ JSON. Handlers are the reusable part — routes are the HTTP-specific projection
 |---|---|
 | `handlers/discovery.run_discovery` | `services.discovery.discover` (with key filtering) |
 | `handlers/discovery.run_plex_discovery` | `services.plex_discovery.discover_plex_servers` |
-| `handlers/discovery.save_config_overrides` | `config.get_config` → `save_config` → `db.session.reset_engine` (persist only — no DB init) |
+| `handlers/discovery.save_config_overrides` | active-job guard → deep-copy config → `save_config` → replace config/context (no DB init) |
 | `handlers/discovery.apply_config_and_init_db` | `save_config_overrides` → `services.library.initialize_database` |
 | `handlers/library.get_library_status` | `services.library.get_status` |
 | `handlers/library.run_import_job` | `services.jobs.update_progress` → `services.library.import_library` |
@@ -57,6 +57,7 @@ JSON. Handlers are the reusable part — routes are the HTTP-specific projection
 | `handlers/recommend.run_recommendations` | `services.recommend.get_recommendations` |
 | `handlers/sonic.get_sonic_coverage` | `services.plex_analysis.get_sonic_status` |
 | `handlers/sonic.trigger_sonic_refresh` | `services.plex_analysis.refresh_sonic_analysis` |
+| `handlers/sonic.run_sonic_import_job` | `services.jobs.update_progress` → `services.sonic_vectors.import_plex_sonic` |
 | `handlers/jobs.submit_job` | `services.jobs.get_manager` → `JobManager.submit` |
 | `handlers/jobs.get_job_progress` | `services.jobs.get_job` |
 | `handlers/jobs.cancel_job` | `services.jobs.get_manager` → `JobManager.request_cancel` |
@@ -95,10 +96,16 @@ JSON. Handlers are the reusable part — routes are the HTTP-specific projection
 - **Handlers never import FastAPI.** Keep them framework-free. Routes handle HTTP concerns
   (Form parsing, Query params, status codes). If a handler starts accepting `Request` or
   returning `Response`, the boundary has been crossed.
-- **Core result models embed live ORM objects** and are not JSON-serializable (see
-  `core/AGENTS.md`). Handlers return the raw Pydantic models as-is. JSON routes must project
-  `Track` objects into plain dicts/DTOs (see `routes/recommend.py` for the pattern). Projection
-  happens only in routes — never in handlers.
+- **Core service results are JSON-safe.** Services project ORM tracks into `ServiceTrack` and
+  `ServiceRecommendation` while sessions are open. Handlers/routes may reshape these scalar DTOs
+  for the wire contract, but must not access ORM relationships. Recommendation responses preserve
+  artist/album/year/popularity, local/Plex IDs, sources, and signal availability.
+- **Playlist writes require approved IDs.** `POST /playlists/create` requires `name`, `seed_ids`,
+  and `track_ids` (the approved recommendations). `POST /playlists/{playlist_id}/populate` requires
+  `track_ids`. Scoring weights/filters belong to preview requests, not write bodies.
+  Empty/malformed/stale selections fail rather than recomputing or writing a subset.
+  Clients using the old seed-only create or selection-free populate request must preview first.
+  Core still offers explicit generate-and-write functions for non-preview programmatic callers.
 - **`enrich_tracks` calls `asyncio.run()` internally.** All routes that trigger enrichment
   are synchronous for this reason. Never call `enrich_tracks` from an `async def` route; if
   you need async, offload to a thread (`fastapi.concurrency.run_in_threadpool`).
@@ -108,7 +115,9 @@ JSON. Handlers are the reusable part — routes are the HTTP-specific projection
 - **Job runnables** (`run_import_job`, `run_enrich_job`) accept `job_id` as the first
   positional arg (the `JobManager` convention). They call `update_progress` at checkpoints
   so the UI can render progress. They are synchronous, blocking functions — the manager
-  runs them in daemon threads.
+  runs them in daemon threads with a captured context. Do not replace config inside a worker.
+  One persisted writer claim is shared by API and CLI imports/enrichment, including pending and
+  cancel-requested jobs. Terminal target results are published only after the target returns.
 - **Route prefixes are applied by the consumer.** API routes have no URL prefix. `create_ui_app()`
   mounts them at `/api`; `next dev` still rewrites `/api/*` to the unprefixed server. Do not add
   a prefix to route modules.
@@ -121,8 +130,8 @@ JSON. Handlers are the reusable part — routes are the HTTP-specific projection
 
 `fastapi`, `uvicorn`, `python-multipart`, `musicseed-core` (editable path); dev group:
 `pytest`, `httpx`. After changing core, run `uv lock` in `api/` so its lockfile re-resolves
-against the updated core. Surfaces that depend on api (`web/`) must also re-lock:
-`cd ../web && uv lock`.
+against the updated core. The web app uses npm, not uv; API-only changes do not require a web lock
+update.
 
 ## Run / verify (from `api/`)
 

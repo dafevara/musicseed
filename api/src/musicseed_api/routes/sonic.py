@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query
 
-from musicseed_api.handlers.sonic import get_sonic_coverage, trigger_sonic_refresh
+from musicseed_api.handlers.jobs import submit_job
+from musicseed_api.handlers.sonic import (
+    SONIC_IMPORT_KIND,
+    get_sonic_coverage,
+    run_sonic_import_job,
+    trigger_sonic_refresh,
+)
 
 router = APIRouter(tags=["sonic"])
 
@@ -24,3 +30,9 @@ def sonic_refresh(
 ) -> dict:
     result = trigger_sonic_refresh(library_name, days=days)
     return result.model_dump()
+
+
+@router.post("/sonic/import")
+def sonic_import() -> dict:
+    job_id = submit_job(SONIC_IMPORT_KIND, run_sonic_import_job)
+    return {"job_id": job_id}

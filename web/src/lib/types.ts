@@ -75,12 +75,21 @@ export interface ImportCoverage {
   albums: CountCompare;
   tracks: CountCompare;
   ever_succeeded: boolean;
+  verified?: boolean;
+}
+
+export interface SonicVectorsDiscovery {
+  imported_count: number;
 }
 
 export interface DiscoveryResult {
+  can_import: boolean;
+  can_recommend: boolean;
+  can_write_playlists: boolean;
   musicseed_db: CheckResult;
   plex_library_db: CheckResult;
   plex_blobs_db: CheckResult;
+  sonic_vectors: SonicVectorsDiscovery;
   plex_server: PlexServerCheck;
   enrichers: EnrichmentDiscovery;
   first_run: FirstRunStatus;
@@ -171,23 +180,39 @@ export interface ScoreBreakdown {
   genre: number;
   era: number;
   novelty: number;
+  availability?: Record<string,
+    "observed" | "neutral_missing" | "not_applicable" | "missing" | "mixed" | "unknown">;
 }
 
 export interface RecommendationItem {
   track_id: number;
   title: string;
   artist: string | null;
+  album?: string | null;
+  year?: number | null;
+  popularity?: number | null;
+  plex_id?: number | null;
+  sources?: string[];
   score: ScoreBreakdown;
 }
 
 export interface RecommendResponse {
   seed_track_ids: number[];
+  method?: RecommendMethod;
   recommendations: RecommendationItem[];
   sonic_coverage?: { candidates: number; with_vector: number };
   weights?: Record<string, number>;
 }
 
+export interface PlexPlaylist {
+  name: string;
+  rating_key: string;
+  track_count: number;
+}
+
 export type PopulateMethod = "average" | "frequency";
+
+export type RecommendMethod = "average" | "frequency";
 
 export interface PopulatePreview {
   playlist_id: string;

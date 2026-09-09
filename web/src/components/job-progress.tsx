@@ -8,10 +8,12 @@ export function JobProgress({
   jobId,
   kind,
   onDone,
+  onError,
 }: {
   jobId: number;
   kind: string;
   onDone: () => void;
+  onError?: (message: string) => void;
 }) {
   const [job, setJob] = useState<JobSummary | null>(null);
 
@@ -19,13 +21,16 @@ export function JobProgress({
     try {
       const j = await api.get<JobSummary>(`/jobs/${jobId}`);
       setJob(j);
+      if (j.state === "failed" && onError) {
+        onError(j.error_summary || "Unknown error");
+      }
       if (j.state === "succeeded" || j.state === "failed" || j.state === "canceled") {
         onDone();
       }
     } catch {
       // ignore
     }
-  }, [jobId, onDone]);
+  }, [jobId, onDone, onError]);
 
   useEffect(() => {
     poll();

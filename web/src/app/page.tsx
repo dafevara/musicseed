@@ -108,6 +108,15 @@ export default function DashboardPage() {
     }
   }
 
+  async function handleSonicImport() {
+    try {
+      await api.post<{ job_id: number }>("/sonic/import");
+      await fetchSnapshot();
+    } catch {
+      // ignore
+    }
+  }
+
   if (loading) {
     return (
       <div className="panel">
@@ -140,6 +149,7 @@ export default function DashboardPage() {
         onEnrich={handleEnrich}
         onEnrichListenBrainz={handleEnrichListenBrainz}
         onSonicRefresh={handleSonicRefresh}
+        onSonicImport={handleSonicImport}
         plexServer={plexServer}
       />
 

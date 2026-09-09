@@ -93,6 +93,54 @@ def status() -> None:
 
             console.print()
             console.print(enrichment_table)
+
+        import_cov = stat.import_coverage
+        if import_cov is not None:
+            coverage_table = Table(title="Library Import Coverage")
+            coverage_table.add_column("Metric", style="cyan")
+            coverage_table.add_column("Plex", style="blue", justify="right")
+            coverage_table.add_column("Local", style="green", justify="right")
+            coverage_table.add_column("Missing", style="yellow", justify="right")
+            coverage_table.add_row(
+                "Artists",
+                f"{import_cov.artists.plex:,}",
+                f"{import_cov.artists.local:,}",
+                f"{import_cov.artists.missing:,}",
+            )
+            coverage_table.add_row(
+                "Albums",
+                f"{import_cov.albums.plex:,}",
+                f"{import_cov.albums.local:,}",
+                f"{import_cov.albums.missing:,}",
+            )
+            coverage_table.add_row(
+                "Tracks",
+                f"{import_cov.tracks.plex:,}",
+                f"{import_cov.tracks.local:,}",
+                f"{import_cov.tracks.missing:,}",
+            )
+
+            console.print()
+            console.print(coverage_table)
+
+            missing = (
+                import_cov.artists.missing
+                + import_cov.albums.missing
+                + import_cov.tracks.missing
+            )
+            if import_cov.complete:
+                console.print("[green]Library import complete.[/green]")
+            elif import_cov.setup_incomplete:
+                console.print(
+                    f"[yellow]Import incomplete — {missing:,} item(s) missing. "
+                    "First import appears interrupted; run "
+                    "'musicseed-cli import' to resume.[/yellow]"
+                )
+            else:
+                console.print(
+                    f"[yellow]Import incomplete — {missing:,} item(s) missing; "
+                    "run 'musicseed-cli import' to sync.[/yellow]"
+                )
         console.print()
 
     except Exception as e:

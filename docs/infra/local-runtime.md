@@ -16,7 +16,9 @@ actions.
 - One local SQLite file for MusicSeed's own state (default
   `~/.local/share/musicseed/musicseed.db`, WAL mode) — no database server.
 - Plex SQLite database as a read-only import source.
-- Plex blobs SQLite database as a read-only source of sonic analysis vectors (read at query time).
+- Plex blobs SQLite database as a read-only source of sonic analysis vectors, imported into
+  MusicSeed's local `track_vectors` store (MUS-83); a remote Plex host's files can be fetched
+  as consistent snapshots over verified SSH via `plex.db_ssh_target` (see [Remote Plex DB access](#remote-plex-db-access)).
 - Optional Plex HTTP API for playlist creation (`core/src/musicseed/clients/plex_api.py`).
 - Optional external HTTP APIs: ListenBrainz and Spotify.
 - Local logs under `~/.local/share/musicseed/logs/`.
@@ -60,6 +62,68 @@ macOS path (`~/Library/Application Support/Plex Media Server/`) and Linux locati
 settings persists the detected token into `config.yaml`; when none is found the UI shows how
 to retrieve one from app.plex.tv.
 
+## Remote Plex DB Access
+
+By default MusicSeed reads Plex's two SQLite files (library metadata + blobs/sonic vectors)
+from the local filesystem — the blobs file only at import time, when its vectors are copied into
+the local `track_vectors` store. For a remote Plex server (e.g. a NAS on the LAN), set
+`plex.db_ssh_target` to an scp-style target for the directory that holds them:
+
+```yaml
+plex:
+  db_ssh_target: "admin@nas.local:/volume1/Plex/.../Databases"
+  db_ssh_password: "your-password"   # optional — omit to use ~/.ssh keys
+  db_ssh_port: 22                    # optional
+```
+
+The remote host needs **SSH command execution, `python3` with the standard-library
+`sqlite3` module, read access to Plex's databases, and enough temporary space for both
+backups**. MusicSeed runs a small bundled helper over SSH: SQLite's online backup API reads
+committed pages (including WAL contents) into independent standalone database files, then
+streams those files back. No helper installation, HTTP server, Plex shutdown, or copying of
+live `-wal`/`-shm` files is needed. Backup does not rebuild Plex's custom indexes/collations.
+Each database has a consistent snapshot; the two databases are backed up sequentially, not
+in a cross-database transaction. Missing blobs are optional; an unreadable or invalid supplied
+backup fails the refresh. Local-file mode is unchanged: use local Plex files or consistent
+backups, not arbitrary copies of a running remote server's databases.
+
+**Host identity is verified.** First verify the server's fingerprint through a trusted channel,
+then connect once as the same local OS user that runs MusicSeed:
+
+```bash
+ssh -p 22 admin@nas.local
+```
+
+This establishes trust in `~/.ssh/known_hosts` (non-default ports use their own known-hosts
+entry). Unknown or changed host keys fail closed. Never blindly accept a changed fingerprint
+or use unverified `ssh-keyscan` output as proof of identity. When `db_ssh_password` is set,
+MusicSeed uses that password; otherwise it uses standard key files and the SSH agent. Paramiko
+does not interpret `~/.ssh/config` aliases: supply the actual host, user and port.
+
+Each refresh downloads into a private generation under
+`~/.cache/musicseed/plex-dbs/snapshots-v1/` (or `$XDG_CACHE_HOME/musicseed/plex-dbs/`).
+The cache key includes target and port. MusicSeed validates bounded headers, file/page sizes,
+and schema readability, plus SQLite `quick_check` where supported, then atomically publishes
+the complete generation. Plex-specific collations can prevent stock SQLite's `quick_check`;
+in that case validation is structural only, not a claim of full index integrity. Failed
+backups/transfers leave the previous published generation untouched; absent optional blobs
+never inherit an older copy. Legacy live-file caches are ignored and require one new import.
+`import` and `import-plex-sonic` each refresh; status reuses the published snapshot without
+SSH access. Recommendations use MusicSeed's own local database.
+
+Old published generations are retained so active readers keep stable paths. They consume disk
+space; **only while MusicSeed and all CLI imports are stopped**, you may remove this source's
+cache directory to reclaim space (the next import recreates it). Do not remove MusicSeed's
+own database. Remote temporary backups are cleaned when the helper exits normally; abrupt
+host/process failure can leave `musicseed-snapshot-*` temporary directories for host-side
+cleanup. A backup that cannot finish within five minutes fails; retry when Plex is less busy.
+Transfer inactivity times out after six minutes.
+
+If refresh fails, check host trust, Python/SQLite availability, database permissions, remote
+and local free space, and Plex activity. Fix the cause and rerun the import; do not repair a
+bad cache by copying live sidecars. SSH credentials stay in `config.yaml` like the Plex token
+and are not included in the snapshot stream.
+
 ## Web UI, First-Run Wizard, And Settings
 
 The web UI is the default onboarding path. Users run `./scripts/install.sh` then `musicseed`,
@@ -70,9 +134,9 @@ hot reload (API + `next dev` on port 3000).
   manual URL), initializes the database, and optionally runs import and enrichment. Non-setup
   pages (dashboard, recommend, playlists) redirect back here while the library is missing or
   empty.
-- **Settings** (`/settings`): a persistent view for Plex URL/token/library, the Plex database
-  path, the MusicSeed database path, and Spotify credentials. Saving persists config without
-  starting any import, enrichment, or database initialization.
+- **Settings** (`/settings`): a persistent view for Plex URL/token/library, the MusicSeed
+  database path, Spotify credentials, and the local sonic-vector import action. Saving persists
+  config without starting any import, enrichment, or database initialization.
 - **Plex discovery**: local-network discovery is passive and read-only — GDM multicast on
   `239.0.0.250:32414` with an SSDP fallback on `239.255.255.250:1900`
   (`urn:plex-com:service:pms:1`), stdlib-only. Multicast never crosses routers, so servers on
@@ -80,6 +144,34 @@ hot reload (API + `next dev` on port 3000).
 
 Relevant API routes: `GET /discovery`, `GET /discovery/plex-servers`,
 `POST /discovery/check`, `POST /discovery/config` (save-only), `POST /discovery/init-db`.
+
+### Import state and recovery
+
+- Import/enrichment services and API background jobs share **one writer per MusicSeed database**.
+  A SQLite transaction checks and claims the writer atomically. Pending jobs and cancellation
+  requests still reserve it; completion is published after the worker target returns.
+- Each job captures a deep copy of its runtime configuration. Work, progress callbacks, and job
+  state writes use that context even if the process default later changes. Settings rejects
+  changes while jobs are active; it saves a copy before replacing the default context.
+- Source/library-specific `import_state` records store the input snapshot identity, expected
+  counts, last committed phase, and completion time. Deleting job history does not delete these
+  records. Old successful job rows and equal aggregate counts alone are **not verified coverage**;
+  rerun an incremental import once to establish provenance on an older installation.
+- An initial partial/failed import remains incomplete. Later Plex count drift is advisory once
+  that source has completed an import. A different source/library does not inherit its completion.
+  No automatic deletion or catalog replacement occurs when changing sources; use a separate
+  MusicSeed database if you want an independent library.
+- Vector upserts commit in batches of 500 by default. Progress callbacks and cancellation checks
+  run outside write transactions; canceled/failed runs retain committed batches and can be rerun.
+  Snapshot transfer and source decoding still finish before cancellation can be checked again.
+- Each committed vector batch increments `runtime_state.sonic_generation`. API and CLI contexts
+  check it before reusing cached vectors; a restart is not required after another process imports.
+  Direct SQL edits to vector rows must also update this generation or explicitly reset caches.
+- Discovery does not initialize or migrate MusicSeed databases. It reports separate capabilities:
+  `can_import` (readable configured source and usable destination), `can_recommend` (local tracks),
+  and `can_write_playlists` (authorized Plex connection). An unreachable Plex HTTP API need not
+  prevent local import/recommendation. A fallback path suggestion must be saved before import.
+  The setup wizard refreshes both discovery and library status when a job finishes.
 
 ### Ports
 

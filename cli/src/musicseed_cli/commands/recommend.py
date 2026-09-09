@@ -27,6 +27,20 @@ def recommend(
         int,
         typer.Option("--limit", "-n", help="Number of recommendations to return"),
     ] = 50,
+    method: Annotated[
+        str,
+        typer.Option(
+            "--method",
+            help="Strategy: 'average' (one library scan against the seeds' combined "
+            "profile) or 'frequency' (one scan per seed, ranked by average score)",
+        ),
+    ] = "average",
+    per_seed_limit: Annotated[
+        int,
+        typer.Option(
+            "--per-seed-limit", help="Recommendations per seed (frequency method only)"
+        ),
+    ] = 30,
     explain: Annotated[
         bool,
         typer.Option("--explain", help="Show component scores and candidate sources"),
@@ -64,6 +78,10 @@ def recommend(
         console.print("[red]Error: At least one --seed or --seed-id is required[/red]")
         raise typer.Exit(1)
 
+    if method not in ("average", "frequency"):
+        console.print("[red]Error: --method must be 'average' or 'frequency'[/red]")
+        raise typer.Exit(1)
+
     if min_score is not None and not (0.0 <= min_score <= 1.0):
         console.print("[red]Error: --min-score must be between 0.0 and 1.0[/red]")
         raise typer.Exit(1)
@@ -83,6 +101,7 @@ def recommend(
     if seed_id:
         console.print(f"  Seed IDs: {', '.join(map(str, seed_id))}")
     console.print(f"  Limit: {limit}")
+    console.print(f"  Method: {method}")
     console.print(
         "  Weights: "
         f"sonic={w_sonic}, popularity_proximity={w_popularity}, "
@@ -99,6 +118,8 @@ def recommend(
             seed_texts=seed,
             seed_ids=seed_id,
             limit=limit,
+            method=method,
+            per_seed_limit=per_seed_limit,
             weights=weights,
             year_min=year_min,
             year_max=year_max,

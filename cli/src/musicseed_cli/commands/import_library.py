@@ -16,6 +16,14 @@ def import_library(
         Optional[Path],
         typer.Option("--plex-db", help="Path to Plex SQLite database"),
     ] = None,
+    plex_db_ssh: Annotated[
+        Optional[str],
+        typer.Option(
+            "--plex-db-ssh",
+            help="scp-style SSH target of a remote Plex database directory "
+            "(e.g. user@nas.local:/volume1/Plex/.../Databases)",
+        ),
+    ] = None,
     library: Annotated[
         str,
         typer.Option("--library", "-l", help="Plex library name to import"),
@@ -29,7 +37,8 @@ def import_library(
 
     Reads artists, albums, tracks, and play history from Plex's own SQLite
     database into MusicSeed. Incremental by default — pass --full for a
-    complete re-import.
+    complete re-import. Use --plex-db-ssh to create and fetch consistent SQLite
+    backups over verified SSH (remote python3/sqlite3 required).
     """
     from musicseed.services import library as library_service
 
@@ -38,13 +47,14 @@ def import_library(
     target_library = library or config.plex.library
 
     console.print("\n[bold]Importing from Plex database[/bold]")
-    console.print(f"  Database: {db_path}")
+    console.print(f"  Database: {plex_db_ssh or db_path}")
     console.print(f"  Library: {target_library}")
     console.print(f"  Mode: {'Full' if full else 'Incremental'}\n")
 
     try:
         result = library_service.import_library(
             plex_db_path=plex_db,
+            plex_db_ssh=plex_db_ssh,
             library_name=library,
             full_import=full,
         )
@@ -55,7 +65,10 @@ def import_library(
         console.print(f"  Play history: {result.play_history:,}\n")
     except NotFoundError as e:
         console.print(f"[red]Error: {e}[/red]")
-        console.print("\nPlease specify the path with --plex-db or update your config file.")
+        console.print(
+            "\nPlease specify the path with --plex-db, the SSH target with "
+            "--plex-db-ssh, or update your config file."
+        )
         raise typer.Exit(1)
     except Exception as e:
         log = get_logger("cli")

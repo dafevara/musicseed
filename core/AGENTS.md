@@ -21,7 +21,10 @@ This file covers the core library only.
 `services/` is the **surface-agnostic application layer** — this is the public API of core, and the
 only layer app surfaces should call. Each service function:
 
-- opens and closes its own DB session via the `get_session()` context manager,
+- resolves its runtime context — an optional ``context: MusicSeedContext`` kwarg defaulting
+  to the default context — and opens/closes a DB session via ``context.session()``. The
+  legacy ``get_session()`` / ``get_config()`` / ``get_sonic_vectors()`` conveniences remain
+  as thin wrappers over the operation-bound context (or process default),
 - accepts plain kwargs (plus a `recommender.scoring.Weights` object where relevant),
 - returns a **Pydantic result model**, and
 - raises typed exceptions (`NotFoundError`, `ConfigurationError`, `clients.plex_api.PlexAPIError`)
@@ -32,16 +35,20 @@ Service entry points:
 - `services/library.py`: `initialize_database`, `optimize_database`, `import_library`,
   `get_status`, `get_import_coverage` (Plex vs local artist/album/track counts).
 - `services/discovery.py`: `discover` — read-only local environment probe (MusicSeed DB path,
-  Plex library/blobs DB candidates, Plex server reachability/auth/library). Returns frozen
+  Plex library/blobs DB candidates — local, or fetched over SSH via `plex_db_ssh` — plus
+  Plex server reachability/auth/library). Returns frozen
   Pydantic models with machine-readable `Reason` codes; expected failures are data, not
   exceptions. Accepts per-call overrides (never mutates global config) and never includes the
   Plex token in results. `read_plex_token` reads a token from the local Plex install
   (`Preferences.xml` → `PlexOnlineToken`, falling back to `.LocalAdminToken`); `discover` uses
   it when no token is configured and reports `plex_server.token_source`. Also reports
-  `enrichers` (Spotify credential and ListenBrainz token presence), `missing_inputs`
-  (machine-readable keys like `plex_token`, `enrichment_credentials`, `plex_unreachable`,
-  `db_location`), and a derived `first_run` status (`no_config` / `db_missing` /
-  `library_empty`; no persisted flag). The setup wizard / dashboard consume this.
+  `enrichers` (Spotify credential and ListenBrainz token presence), `sonic_vectors` (count of
+  locally imported vectors), `missing_inputs` (machine-readable keys like `plex_token`,
+  `enrichment_credentials`, `plex_unreachable`, `db_location`), and a derived `first_run`
+  status (`no_config` / `db_missing` / `library_empty` / `import_incomplete`). Coverage uses
+  read-only queries and the same effective overrides, never migrations. Prefer `can_import`,
+  `can_recommend`, and `can_write_playlists` over the legacy all-checks `ready` summary.
+  Missing blobs do not block metadata import or local recommendations.
 - `services/plex_discovery.py`: `discover_plex_servers` — passive, read-only Plex discovery.
   Local network via GDM multicast (`239.0.0.250:32414`) + SSDP fallback
   (`239.255.255.250:1900`, stdlib `socket` only), plus — when a Plex token is supplied —
@@ -51,7 +58,13 @@ Service entry points:
   wizard consumes it.
 - `services/enrichment.py`: `enrich_tracks` (**calls `asyncio.run()` internally — never call it
   from inside a running event loop; offload to a thread**).
-- `services/recommend.py`: `get_recommendations`, `create_playlist`.
+- `services/evaluation.py`: `evaluate_recommendations` — deterministic synthetic fixtures,
+  production/baseline/exhaustive comparisons, and JSON-safe metrics. Disposable databases only;
+  no owner context or network. Run `scripts/evaluate_recommendations.py` from the core environment;
+  see `docs/resolvers/recommendation-evaluation.md`. Safety passes are not listening-quality proof.
+- `services/recommend.py`: `get_recommendations`, `create_playlist` (generate-and-write).
+- `services/playlist_tracks.py`: `create_playlist_from_tracks` writes approved IDs in order
+  without recommending again; validates the entire selection before any Plex write.
 - `services/populate.py`: `list_plex_playlists`, `get_populate_recommendations`,
   `populate_playlist` — keyed by Plex playlist `rating_key`, not title.
 - `services/plex_analysis.py`: `get_sonic_status`, `probe_sonic_trigger`,
@@ -60,48 +73,89 @@ Service entry points:
   `POST /butler/MusicAnalysis` (proven to work; per-item `analyze` does NOT trigger sonic
   analysis). The Butler task always processes Plex's whole pending backlog; date windows only
   scope watching/reporting.
+- `services/sonic_vectors.py`: `import_plex_sonic` — reads the Plex blobs DB once and upserts
+  vectors into the local `track_vectors` table in committed batches of 500 (idempotent).
+  Progress/cancellation run between transactions; each batch increments a persisted generation.
+- `services/jobs.py`: one persisted writer claim per SQLite database, shared by API workers and
+  synchronous import/enrichment services. Worker config is deep-copied and bound through
+  `use_context` so work, callbacks, cancellation and job writes cannot switch databases.
+  `pending`, `running`, and `cancel_requested` all reserve the writer. Dead-owner rows become
+  `interrupted`; terminal results from targets are deferred until the target returns.
+- `services/import_state.py`: source/library-specific completion and phase checkpoints,
+  independent of deletable job history. Matching aggregate counts alone do not verify an import.
 
 ## Code Map
 
 - `config.py`: Pydantic YAML config + `${ENV}`/`~` expansion. `get_config()`/`set_config()`/
-  `load_config()`/`get_config_path()` global singleton. `get_config_path()` returns the resolved
-  config file path (or `None` when no file was found) — discovery uses it for the `no_config`
-  first-run signal. This is the CLI's config mechanism; future apps may populate
-  the same `Config` from `.env` instead.
+  `load_config()`/`get_config_path()` global singleton (the resolved-config source for the
+  default context; `set_config` also resets that context). `get_config_path()` returns the
+  resolved config file path (or `None` when no file was found) — discovery uses it for the
+  `no_config` first-run signal. `plex.db_ssh_target` (optional) is an scp-style SSH target for
+  a remote Plex host; when set it takes precedence over the local `db_path`. This is the CLI's config
+  mechanism; future apps may populate the same `Config` from `.env` instead.
+- `context.py`: `MusicSeedContext` bundles a resolved `Config` with a lazily-created SQLite
+  engine/session factory and a lazily-loaded `SonicVectors` cache backed by the local
+  `track_vectors` table. `get_context()`/`set_context()`/`reset_context()` manage the
+  process-default context. `use_context` binds legacy helpers within one operation. Services
+  take an optional ``context`` kwarg. Cached vectors check `runtime_state.sonic_generation`
+  before reuse, so imports by another context/process invalidate the cache without a restart.
 - `exceptions.py`: `MusicSeedError` (base), `ConfigurationError`, `NotFoundError`.
 - `logging_config.py`: `setup_logging`/`get_logger`. Default log dir is
   `~/.local/share/musicseed/logs/` (or `$XDG_DATA_HOME/musicseed/logs`). Pass `log_dir` to
   override.
 - `db/models.py`: SQLAlchemy 2.0 ORM (Artist, Album, Track, tag tables, play history, stats,
-  playlists). No vector columns: sonic vectors are not stored.
-- `db/session.py`: `get_engine` (SQLite, sets `journal_mode=WAL` + `foreign_keys=ON` on
-  connect), `get_session_factory` (`expire_on_commit=False`), `get_session`
-  (commit/rollback/close context manager), `init_db` (creates the DB file's parent dir),
-  `ensure_schema` (additive migrations via `PRAGMA table_info`), `create_indexes`,
-  `reset_engine` (dispose engine — the hook for tests/config reload).
+  playlists, jobs). `TrackVector` persists Plex sonic vectors locally (MUS-83), keyed by
+  `plex_id`. `ImportState` stores source-specific import provenance; `RuntimeState` stores
+  the vector-cache generation. These are additive tables, not a new migration framework.
+- `db/session.py`: pure `create_engine_for_url` (SQLite, sets `journal_mode=WAL` +
+  `foreign_keys=ON` on connect) and `create_session_factory` (`expire_on_commit=False`);
+  `get_engine`/`get_session_factory`/`get_session` are thin wrappers over the default context.
+  `init_db` (creates the DB file's parent dir), `ensure_schema` (additive migrations via
+  `PRAGMA table_info`), and `create_indexes` accept an optional ``context``. `reset_engine`
+  drops the whole default context (engine + sonic cache) — kept as a test/config-change hook.
 - `importers/plex.py`: Plex SQLite metadata import. Track years fall back to the album year when
   Plex doesn't set one on the track row.
+- `plex_db_source.py`: `resolve_plex_dbs(config, refresh=...)` returns local files or stable
+  SSH snapshot generations under `~/.cache/musicseed/plex-dbs/snapshots-v1/`. The remote
+  `_plex_snapshot.py` helper uses Python's SQLite backup API and streams standalone files;
+  never copy live DB/WAL/SHM files. Validate staged generations before atomic publication,
+  preserve previous readers, and verify known SSH host keys. Remote Python3/SQLite is required.
+  Used by import/coverage/sonic-import; the recommendation runtime never calls it.
 - `enrichers/`: ListenBrainz and Spotify clients + the async enrichment pipeline. (The old
   MusicBrainz MBID→Spotify cross-reference client was removed; it was never wired in.)
-- `sonic.py`: Plex sonic analysis vectors read at query time from the Plex blobs DB into an
-  in-memory L2-normalized matrix (`SonicVectors`, keyed by `plex_id`). Lazy global cache via
-  `get_sonic_vectors()` / `reset_sonic_vectors()`; raises `NotFoundError` when the Plex databases
-  are unavailable.
-- `recommender/`: `scoring.py` (`Weights`, `ScoreBreakdown`, `SeedProfile`, `calculate_score`),
-  `candidates.py` (`build_candidate_pool`), `playlist.py` (`Recommendation`, `recommend_tracks`,
-  `resolve_seed_tracks` — raises `ValueError` on unresolved seeds), `populate.py`
-  (`PopulateMethod = "average" | "frequency"`, `populate_playlist_recommendations`).
+- `sonic.py`: `load_sonic_vectors` reads Plex sonic-analysis vectors from the Plex blobs DB
+  (used only by `import_plex_sonic`); `sonic_vectors_from_mapping` rebuilds the in-memory
+  L2-normalized `SonicVectors` matrix (keyed by `plex_id`) from the local `track_vectors` table.
+  `get_sonic_vectors()` / `reset_sonic_vectors()` are thin wrappers over the default context.
+- `recommender/`: `scoring.py` (`Weights`, `ScoreBreakdown`, `SeedProfile`, shared `score_signals`
+  and ORM adapter `calculate_score`); `retrieval.py` (`score_eligible_tracks`, `ConstrainedTopK`)
+  streams eligible scalar facts and retains exact constrained top-k scores. `playlist.py`
+  (`Recommendation`, `recommend_tracks`, `recommend_from_profile`, `resolve_seed_tracks`) loads
+  ORM graphs only for seeds/selected tracks; ID lookup lists are bounded. `populate.py`
+  (`PopulateMethod = "average" | "frequency"`, `populate_playlist_recommendations`) reuses this
+  pipeline. `candidates.py` / `build_candidate_pool` is an offline historical reference, not a
+  production fallback. See `docs/resolvers/retrieval-decision.md` for measurements and limits.
 - `clients/plex_api.py`: thin synchronous Plex HTTP client (httpx). Raises `PlexAPIError`;
   `check_connection()` is the non-raising probe used by discovery/setup flows.
 
 ## Particularities to respect
 
-- **Result models embed raw ORM objects.** `Recommendation`, `RecommendationResult`, etc. use
-  `model_config = {"arbitrary_types_allowed": True}` and hold live SQLAlchemy `Track` objects, so
-  they are **not directly JSON-serializable**. The API surface (`api/routes/`) must project
-  `Track` into DTOs — see `routes/recommend.py` for the pattern. Sessions use
-  `expire_on_commit=False` and eager `selectinload`, so returned `Track`s stay usable after
-  the session closes — preserve both if you touch loading.
+- **Service results are JSON-safe DTOs.** `ServiceTrack` contains scalar artist/album/year,
+  popularity (0–100), and local/Plex IDs. `ServiceRecommendation` adds the score and copied
+  candidate sources. Map ORM objects **inside** the producing session, using `services/schemas.py`;
+  results must serialize after session closure and engine disposal. Only internal recommender
+  `Recommendation` objects embed ORM tracks; never return them directly from services.
+- **Explanations must survive aggregation.** Availability distinguishes observed, neutral-missing,
+  missing candidate tags (historical zero score), not-applicable, mixed votes, and legacy unknown
+  evidence. Frequency-populate averages numeric scores unchanged and aggregates these statuses.
+- **Approved selections are not new recommendation requests.** CLI/API confirmation paths pass
+  the displayed IDs to exact-selection writes. Missing/unmapped IDs reject the whole write;
+  empty selections never trigger regeneration.
+- **Retrieval is exact and deterministic.** Score all year-eligible non-seeds; no source budgets.
+  Retain artist-constrained top-k using score, frequency vote count where relevant, then local ID.
+  Normal/average sources say `eligible`; sonic coverage covers all eligible candidates before
+  score/artist constraints. Frequency excludes the whole playlist before voting and scans once
+  per distinct seed, so prefer average for large playlists. Component math is shared and unchanged.
 - **Recommendation signals are exactly six**: sonic, popularity, style, genre, era, novelty. There
   is no "mood" signal (it was removed). `Weights`/`ScoreBreakdown` are frozen Pydantic models.
 - **`rich` is a real core dependency** — the import/enrich pipelines render progress with it.
@@ -113,7 +167,7 @@ Service entry points:
 
 `rich`, `sqlalchemy>=2.0`, `pyyaml`, `httpx`, `numpy`, `pydantic>=2.0`; dev group: `pytest`.
 After changing deps: `uv lock && uv sync`
-in `core/`, then re-lock dependent apps (`cd ../cli && uv lock`, same for `web/`).
+in `core/`, then re-lock dependent Python apps (`cd ../cli && uv lock`, same for `api/`).
 
 The database is a single SQLite file (`database.path` in config, default
 `~/.local/share/musicseed/musicseed.db`). Postgres/pgvector were removed (see

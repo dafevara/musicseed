@@ -1,52 +1,75 @@
-"""Sonic vector cache reloads when the Plex blobs database changes."""
+"""The context's sonic-vector cache loads from the local database (MUS-83)."""
 
 import musicseed.sonic as sonic
+from musicseed.config import Config
+from musicseed.context import MusicSeedContext, reset_context, set_context
+from musicseed.db.models import TrackVector
+from musicseed.db.session import init_db
+from sqlalchemy import text
 
 
-class _FakeVectors:
-    pass
+def _context_for(tmp_path) -> MusicSeedContext:
+    return MusicSeedContext(
+        Config.model_validate({"database": {"path": str(tmp_path / "musicseed.db")}})
+    )
 
 
-def test_get_sonic_vectors_reloads_when_signature_changes(monkeypatch):
-    sonic.reset_sonic_vectors()
-    calls = {"n": 0}
+def _vector(n: int = 50) -> list[float]:
+    return [float(i) / n for i in range(n)]
 
-    def fake_load(**kwargs):
-        calls["n"] += 1
-        return _FakeVectors()
 
-    monkeypatch.setattr(sonic, "_blobs_signature", lambda p: ("sig-a",))
-    monkeypatch.setattr(sonic, "load_sonic_vectors", fake_load)
+def test_sonic_vectors_loaded_from_local_table(tmp_path):
+    ctx = _context_for(tmp_path)
+    init_db(ctx)
+    with ctx.session() as session:
+        session.add(TrackVector(plex_id=1, vector=_vector()))
+        session.add(TrackVector(plex_id=2, vector=_vector()))
 
+    vectors = ctx.sonic_vectors
+    assert len(vectors) == 2
+    assert 1 in vectors and 2 in vectors
+    assert vectors.get(1) is not None
+
+    # Cached: a second access returns the same object.
+    assert ctx.sonic_vectors is vectors
+
+
+def test_reset_sonic_vectors_reloads_from_table(tmp_path):
+    ctx = _context_for(tmp_path)
+    init_db(ctx)
+    with ctx.session() as session:
+        session.add(TrackVector(plex_id=1, vector=_vector()))
+
+    assert len(ctx.sonic_vectors) == 1
+
+    with ctx.session() as session:
+        session.add(TrackVector(plex_id=2, vector=_vector()))
+
+    # Stale until the cache is reset.
+    assert len(ctx.sonic_vectors) == 1
+    ctx.reset_sonic_vectors()
+    assert len(ctx.sonic_vectors) == 2
+
+
+def test_get_sonic_vectors_delegates_to_default_context(tmp_path):
+    ctx = _context_for(tmp_path)
+    init_db(ctx)
+    set_context(ctx)
     try:
-        v1 = sonic.get_sonic_vectors()
-        v2 = sonic.get_sonic_vectors()
-        assert v1 is v2  # unchanged signature -> cached
-        assert calls["n"] == 1
-
-        monkeypatch.setattr(sonic, "_blobs_signature", lambda p: ("sig-b",))
-        v3 = sonic.get_sonic_vectors()
-        assert v3 is not v1  # changed signature -> reloaded
-        assert calls["n"] == 2
+        assert sonic.get_sonic_vectors() is ctx.sonic_vectors
     finally:
-        sonic.reset_sonic_vectors()
+        reset_context()
 
 
-def test_reset_sonic_vectors_drops_cache(monkeypatch):
-    sonic.reset_sonic_vectors()
-    calls = {"n": 0}
+def test_sonic_vectors_handles_pre_existing_db_without_table(tmp_path):
+    ctx = _context_for(tmp_path)
+    init_db(ctx)
+    # Simulate a database created before the track_vectors table existed.
+    with ctx.session() as session:
+        session.execute(text("DROP TABLE track_vectors"))
+    ctx.reset_sonic_vectors()
 
-    def fake_load(**kwargs):
-        calls["n"] += 1
-        return _FakeVectors()
-
-    monkeypatch.setattr(sonic, "_blobs_signature", lambda p: ("sig-a",))
-    monkeypatch.setattr(sonic, "load_sonic_vectors", fake_load)
-
-    try:
-        sonic.get_sonic_vectors()
-        sonic.reset_sonic_vectors()
-        sonic.get_sonic_vectors()
-        assert calls["n"] == 2
-    finally:
-        sonic.reset_sonic_vectors()
+    vectors = ctx.sonic_vectors  # must re-create the table and return empty
+    assert len(vectors) == 0
+    with ctx.session() as session:
+        assert session.query(TrackVector).count() == 0

@@ -1,4 +1,9 @@
-"""Candidate generation for multi-signal recommendations."""
+"""Historical bounded-retrieval reference for offline evaluation and benchmarks.
+
+Production uses ``retrieval.score_eligible_tracks``. The original source
+budgets (including their known omissions) stay here as an explicit comparator,
+not a fallback or alternate user-facing retrieval mode.
+"""
 
 from __future__ import annotations
 
@@ -75,7 +80,7 @@ def build_candidate_pool(
     year_min: int | None = None,
     year_max: int | None = None,
 ) -> CandidatePool:
-    """Build a candidate pool from all available recommendation signals.
+    """Build the historical bounded pool for diagnostics, not production selection.
 
     Each signal contributes its own bounded query (capped at
     ``max(limit * 4, 50)`` ids) so the pool is a generous superset that the
@@ -83,7 +88,7 @@ def build_candidate_pool(
     data for them:
 
     * ``sonic`` — nearest neighbors of the seed embedding in Plex's vectors
-      (ranked in memory; the year window is still applied in SQL),
+      (ranked in memory, restricted to the year window before ranking),
     * ``genre`` / ``style`` — tracks sharing any seed genre/style,
     * ``era`` — tracks closest to the seed year,
     * ``popularity`` — tracks closest to the seed popularity,
@@ -123,9 +128,22 @@ def build_candidate_pool(
         pool.add_many(_ids(query.limit(candidate_limit)), source, seed.track_ids)
 
     if seed.embedding is not None:
-        # Sonic ranking happens in memory over Plex's vectors; the year window is
-        # still applied in SQL so it constrains this source like the others.
-        nearest_plex_ids = vectors.nearest(seed.embedding, candidate_limit)
+        # Sonic ranking happens in memory over Plex's vectors. When a year
+        # window is set, restrict the neighbor search to in-window tracks up
+        # front so a narrow era cannot starve the sonic source (ranking
+        # globally and only then filtering would trim an already-truncated
+        # neighbor list).
+        allowed: set[int] | None = None
+        if year_min is not None or year_max is not None:
+            in_window = session.query(Track.plex_id).filter(Track.plex_id.isnot(None))
+            if year_min is not None:
+                in_window = in_window.filter(Track.year >= year_min)
+            if year_max is not None:
+                in_window = in_window.filter(Track.year <= year_max)
+            allowed = {plex_id for (plex_id,) in in_window.all()}
+        nearest_plex_ids = vectors.nearest(
+            seed.embedding, candidate_limit, allowed=allowed
+        )
         if nearest_plex_ids:
             collect(
                 session.query(Track.id).filter(Track.plex_id.in_(nearest_plex_ids)),

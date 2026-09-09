@@ -11,7 +11,7 @@ rules, then routes you to the app you're working in. **Read the per-app `AGENTS.
 ## Fast Context
 
 - Product: generate Plex playlists from seed tracks using local library metadata, popularity
-  enrichment, Plex sonic analysis vectors (read at query time), and play history.
+  enrichment, Plex sonic analysis vectors (imported into the local store), and play history.
 - Runtime: Python 3.12+, SQLAlchemy, SQLite (one local file). End-user install is plain
   `python3 -m venv` + `pip` (`scripts/install.sh`); uv is development-only tooling. Typer/Rich
   in the CLI.

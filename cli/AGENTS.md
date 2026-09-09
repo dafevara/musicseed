@@ -15,8 +15,8 @@ the logic this app calls. This file covers the CLI app only.
   is `musicseed` (owned by `api/`).
 - Depends on `musicseed-core` via an **editable path source** in `pyproject.toml`, so edits
   to core are picked up without reinstalling.
-- Own `pyproject.toml` + `uv.lock` + `.venv`. Run `uv`/`musicseed` from inside `cli/` (or use
-  `uv run --project cli musicseed …`).
+- Own `pyproject.toml` + `uv.lock` + `.venv`. Run `uv`/`musicseed-cli` from inside `cli/`
+  (or use `uv run --project cli musicseed-cli …`).
 
 ## Code Map
 
@@ -51,9 +51,9 @@ Imports from core are unchanged from the pre-monorepo layout (`from musicseed.co
 | `sonic-refresh` (`--days N`, confirms before triggering the Butler task) | `services.plex_analysis.refresh_sonic_analysis` |
 | `enrich` (`--source spotify|listenbrainz`) | `services.enrichment.enrich_tracks` |
 | `recommend` | `services.recommend.get_recommendations` |
-| `playlist` | `get_recommendations` → confirm → `services.recommend.create_playlist` |
+| `playlist` | `get_recommendations` → confirm → `services.playlist_tracks.create_playlist_from_tracks` (approved IDs) |
 | `playlists` | `services.populate.list_plex_playlists` |
-| `populate` | `services.populate.get_populate_recommendations` → confirm → `populate_playlist` |
+| `populate` | `services.populate.get_populate_recommendations` → confirm → `populate_playlist(track_ids=approved_ids)` |
 
 ## Particularities to respect
 
@@ -64,8 +64,13 @@ Imports from core are unchanged from the pre-monorepo layout (`from musicseed.co
   translate to `console.print(...)` + `raise typer.Exit(1)`; unexpected errors are logged via
   `get_logger("cli")` to `logs/latest.log` before exiting. Follow this pattern for new commands.
 - **Confirm before Plex writes.** `playlist` and `populate` generate a preview, show it, then use
-  `typer.confirm(...)` before the mutating call. `populate --dry-run` skips the write entirely.
+  `typer.confirm(...)` before the mutating call. Pass the displayed IDs, including resolved seeds
+  for new playlists; do not recompute recommendations after approval. `populate --dry-run` skips
+  the write entirely. Service DTOs are JSON-safe and already detached from ORM sessions.
   Preserve this human-in-the-loop step for anything that mutates Plex.
+- **Frequency costs one eligible-library scan per distinct seed.** Average is the default and
+  the practical choice for large playlists. Frequency ranks by mean score, then vote count, then
+  local ID; seeds are excluded before each per-seed budget.
 - **Config is YAML** (this app's mechanism), loaded by core from `~/.config/musicseed/config.yaml`,
   `~/.musicseed.yaml`, or a **cwd-relative `./config.yaml`** — which, when running from `cli/`,
   means `cli/config.yaml`. Home-dir configs are unaffected by the monorepo move.
@@ -84,12 +89,13 @@ updated app.
 uv sync                                  # installs core editable + typer/rich
 uv run musicseed-cli --help
 uv run ruff check src
-uv run pytest tests -q                   # command tests (no server, no browser, no DB)
+uv run pytest tests -q                   # temporary SQLite + mocked Plex; no personal DB
 uv run musicseed-cli status                  # needs config (SQLite file; `init-db` creates it)
 ```
 
-Note: `ruff check src` currently reports pre-existing I001/E501 issues in the older command
-modules; new code must at least pass on the files it touches.
+The focused `tests/test_documented_recommend.py` sensor parses documented recommendation
+examples against the real Typer options without invoking services or the configuration callback.
+`recommend` is already a read-only preview; it does not accept `--dry-run`.
 
 The web UI is a separate Next.js app (see `web/AGENTS.md`); the CLI has no `web` command.
 

@@ -2,7 +2,7 @@
 
 MusicSeed is a personal, local-first music recommendation tool for a Plex library. It generates
 Plex playlists from seed tracks using local library metadata, popularity enrichment, Plex sonic
-analysis vectors (read at query time), and play history.
+analysis vectors (imported from Plex into the local store), and play history.
 
 ## Where to start
 

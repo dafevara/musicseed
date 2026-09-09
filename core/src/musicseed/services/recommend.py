@@ -3,31 +3,31 @@
 from pydantic import BaseModel
 
 from musicseed.clients.plex import Playlist, PlexClient
-from musicseed.config import get_config
-from musicseed.db.models import Track
-from musicseed.db.session import get_session
+from musicseed.context import MusicSeedContext, get_context
 from musicseed.exceptions import ConfigurationError, NotFoundError
-from musicseed.recommender.playlist import Recommendation, recommend_tracks
+from musicseed.recommender.playlist import RecommendMethod, recommend_tracks
 from musicseed.recommender.scoring import SonicCoverage, Weights
+from musicseed.services.schemas import (
+    ServiceRecommendation,
+    ServiceTrack,
+    to_service_recommendation,
+    to_service_track,
+)
 
 
 class RecommendationResult(BaseModel):
     """Result of a recommendation request."""
 
-    model_config = {"arbitrary_types_allowed": True}
-
-    seed_tracks: list[Track]
-    recommendations: list[Recommendation]
+    seed_tracks: list[ServiceTrack]
+    recommendations: list[ServiceRecommendation]
     sonic_coverage: SonicCoverage
 
 
 class PlaylistCreateResult(BaseModel):
     """Result of a playlist creation request."""
 
-    model_config = {"arbitrary_types_allowed": True}
-
-    seed_tracks: list[Track]
-    recommendations: list[Recommendation]
+    seed_tracks: list[ServiceTrack]
+    recommendations: list[ServiceRecommendation]
     playlist: Playlist
 
 
@@ -36,11 +36,14 @@ def get_recommendations(
     seed_texts: list[str] | None = None,
     seed_ids: list[int] | None = None,
     limit: int = 50,
+    method: RecommendMethod = "average",
+    per_seed_limit: int = 30,
     weights: Weights | None = None,
     year_min: int | None = None,
     year_max: int | None = None,
     max_tracks_per_artist: int = 3,
     min_score: float | None = None,
+    context: MusicSeedContext | None = None,
 ) -> RecommendationResult:
     """Return seed tracks and scored recommendations.
 
@@ -49,12 +52,16 @@ def get_recommendations(
             strings; at least one text or id seed is required.
         seed_ids: seed tracks by local database id.
         limit: maximum number of recommendations to return.
+        method: ``"average"`` (score against the seeds' combined profile) or
+            ``"frequency"`` (per-seed votes ranked by average score).
+        per_seed_limit: candidates gathered per seed ("frequency" method only).
         weights: signal weights; defaults to ``Weights()`` (the "balanced"
             preset).
         year_min: only recommend tracks released in this year or later.
         year_max: only recommend tracks released in this year or earlier.
         max_tracks_per_artist: artist diversity cap applied during selection.
         min_score: drop recommendations with a total score below this value.
+        context: runtime context to use; defaults to the default context.
 
     Returns:
         The resolved seed tracks, the selected recommendations, and the
@@ -63,24 +70,30 @@ def get_recommendations(
     Raises:
         NotFoundError: if one or more seed tracks cannot be resolved.
     """
+    ctx = context or get_context()
     try:
-        with get_session() as session:
+        with ctx.session() as session:
             seed_tracks, recommendations, sonic_coverage = recommend_tracks(
                 session,
                 seed_texts=seed_texts,
                 seed_ids=seed_ids,
                 limit=limit,
+                method=method,
+                per_seed_limit=per_seed_limit,
                 weights=weights,
                 year_min=year_min,
                 year_max=year_max,
                 max_tracks_per_artist=max_tracks_per_artist,
                 min_score=min_score,
+                vectors=ctx.sonic_vectors,
             )
-        return RecommendationResult(
-            seed_tracks=seed_tracks,
-            recommendations=recommendations,
-            sonic_coverage=sonic_coverage,
-        )
+            return RecommendationResult(
+                seed_tracks=[to_service_track(t) for t in seed_tracks],
+                recommendations=[
+                    to_service_recommendation(r) for r in recommendations
+                ],
+                sonic_coverage=sonic_coverage,
+            )
     except ValueError as exc:
         raise NotFoundError(str(exc)) from exc
 
@@ -96,6 +109,7 @@ def create_playlist(
     year_max: int | None = None,
     max_tracks_per_artist: int = 3,
     min_score: float | None = None,
+    context: MusicSeedContext | None = None,
 ) -> PlaylistCreateResult:
     """Generate recommendations and create a Plex playlist.
 
@@ -114,6 +128,7 @@ def create_playlist(
         year_max: only recommend tracks released in this year or earlier.
         max_tracks_per_artist: artist diversity cap applied during selection.
         min_score: drop recommendations with a total score below this value.
+        context: runtime context to use; defaults to the default context.
 
     Returns:
         The resolved seed tracks, the recommendations, and the created Plex
@@ -124,7 +139,8 @@ def create_playlist(
         NotFoundError: if seed tracks cannot be resolved.
         PlexAPIError: if the Plex API call fails.
     """
-    config = get_config()
+    ctx = context or get_context()
+    config = ctx.config
     if not config.plex.token:
         raise ConfigurationError(
             "plex.token is not configured. Add it to your config file."
@@ -139,6 +155,7 @@ def create_playlist(
         year_max=year_max,
         max_tracks_per_artist=max_tracks_per_artist,
         min_score=min_score,
+        context=ctx,
     )
 
     plex_ids = [t.plex_id for t in result.seed_tracks if t.plex_id is not None] + [

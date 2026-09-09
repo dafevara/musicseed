@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from musicseed.recommender.playlist import RecommendMethod
 from musicseed.recommender.scoring import RECOMMENDATION_PRESETS, Weights
 from musicseed.services.recommend import RecommendationResult, get_recommendations
 from musicseed.services.typeahead import TypeaheadTrack, search_tracks
@@ -25,6 +26,8 @@ def typeahead_search(query: str, exclude_ids: list[int] | None = None) -> list[T
 def run_recommendations(
     seed_ids: list[int],
     limit: int = 50,
+    method: RecommendMethod = "average",
+    per_seed_limit: int = 30,
     year_min: int | None = None,
     year_max: int | None = None,
     max_tracks_per_artist: int = 3,
@@ -37,6 +40,8 @@ def run_recommendations(
     return get_recommendations(
         seed_ids=seed_ids,
         limit=limit,
+        method=method,
+        per_seed_limit=per_seed_limit,
         year_min=year_min,
         year_max=year_max,
         max_tracks_per_artist=max_tracks_per_artist,

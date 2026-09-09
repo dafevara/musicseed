@@ -112,13 +112,13 @@
 
 <p>This document explains <strong>every dependency MusicSeed relies on today</strong> — Python
 packages, data stores, network services — and <strong>how data flows</strong> through the four
-main workflows (import, enrich, sonic retrieval, recommend) and the two surfaces (CLI, and the
+main workflows (import, enrich, sonic import, recommend) and the two surfaces (CLI, and the
 Next.js web UI via the REST API). It exists to track how small the install surface has become,
 so publishing MusicSeed as open source means a new user needs as little as possible.</p>
 
 <div class="note">
   <strong>TL;DR install surface:</strong> Python 3.12+ and SQLite 3, plus Node for building the
-  web UI during install; six core packages, two CLI packages, three API packages, and a Next.js +
+  web UI during install; seven core packages, two CLI packages, three API packages, and a Next.js +
   React web app — one SQLite file (created automatically), and read access to two Plex SQLite
   databases. Local-network Plex discovery (GDM + SSDP) is stdlib <code>socket</code> only;
   servers on other subnets are found through the optional <code>plex.tv/api/resources</code>
@@ -164,7 +164,7 @@ so publishing MusicSeed as open source means a new user needs as little as possi
   <rect x="300" y="230" rx="8" width="410" height="120" fill="#1d212b" stroke="#6ea8fe" stroke-width="1.5"/>
   <text x="505" y="254" text-anchor="middle" class="box-label">musicseed-core (import name: musicseed)</text>
   <text x="505" y="271" text-anchor="middle" class="box-sub">services/ · importers/ · enrichers/ · recommender/ · sonic.py · plex_discovery.py</text>
-  <text x="505" y="299" text-anchor="middle" class="box-sub">deps: sqlalchemy · pyyaml · httpx · numpy · pydantic · rich</text>
+  <text x="505" y="299" text-anchor="middle" class="box-sub">deps: sqlalchemy · pyyaml · httpx · numpy · pydantic · rich · paramiko</text>
   <text x="505" y="319" text-anchor="middle" class="box-sub">all business logic lives here — no UI, no Typer, no HTTP</text>
 
   <!-- MusicSeed SQLite -->
@@ -183,7 +183,7 @@ so publishing MusicSeed as open source means a new user needs as little as possi
   <rect x="550" y="388" rx="8" width="220" height="66" fill="#1d212b" stroke="#5fd0a5"/>
   <text x="660" y="412" text-anchor="middle" class="box-label">Plex blobs DB</text>
   <text x="660" y="429" text-anchor="middle" class="box-sub">…library.blobs.db · sonic vectors</text>
-  <text x="660" y="444" text-anchor="middle" class="box-sub">READ-ONLY at query time</text>
+  <text x="660" y="444" text-anchor="middle" class="box-sub">READ-ONLY · import time</text>
 
   <!-- Plex HTTP API -->
   <rect x="810" y="388" rx="8" width="190" height="66" fill="#1d212b" stroke="#e5b567"/>
@@ -218,7 +218,7 @@ so publishing MusicSeed as open source means a new user needs as little as possi
   <text x="345" y="375" class="flow-label">import</text>
 
   <line x1="610" y1="350" x2="650" y2="388" stroke="#5fd0a5" stroke-width="1.5" marker-end="url(#arrRo)"/>
-  <text x="612" y="375" class="flow-label">sonic vectors</text>
+  <text x="612" y="375" class="flow-label">import vectors (import time)</text>
 
   <path d="M 710 310 C 790 340, 870 360, 900 388" fill="none" stroke="#e5b567" stroke-width="1.5" marker-end="url(#arr)"/>
   <text x="820" y="350" class="flow-label">httpx · playlist writes</text>
@@ -239,8 +239,8 @@ so publishing MusicSeed as open source means a new user needs as little as possi
 <div class="grid cols-3">
   <div class="card">
     <h4>Python packages (core)</h4>
-    <p class="num">6</p>
-    <p>sqlalchemy, pyyaml, httpx, numpy, pydantic, rich — all pure-Python or widely pre-built wheels.</p>
+    <p class="num">7</p>
+    <p>sqlalchemy, pyyaml, httpx, numpy, pydantic, rich, paramiko — all pure-Python or widely pre-built wheels.</p>
   </div>
   <div class="card">
     <h4>Python packages (surfaces)</h4>
@@ -264,10 +264,11 @@ so publishing MusicSeed as open source means a new user needs as little as possi
   <tbody>
     <tr><td>sqlalchemy</td><td>ORM over the SQLite state file</td><td><span class="tag kept">kept</span> <span class="tag core">core</span></td></tr>
     <tr><td>httpx</td><td>HTTP to Plex API + ListenBrainz/MusicBrainz/Spotify</td><td><span class="tag kept">kept</span> <span class="tag core">core</span></td></tr>
-    <tr><td>numpy</td><td>Sonic vector math (matmul, cosine) at query time</td><td><span class="tag kept">kept</span> <span class="tag core">core</span></td></tr>
+    <tr><td>numpy</td><td>Sonic vector math (matmul, cosine) over the local vector store</td><td><span class="tag kept">kept</span> <span class="tag core">core</span></td></tr>
     <tr><td>pydantic</td><td>Config + service result models</td><td><span class="tag kept">kept</span> <span class="tag core">core</span></td></tr>
     <tr><td>pyyaml</td><td>config.yaml loading</td><td><span class="tag kept">kept</span> <span class="tag core">core</span></td></tr>
     <tr><td>rich</td><td>Progress rendering inside import/enrich pipelines</td><td><span class="tag kept">kept</span> <span class="tag core">core</span></td></tr>
+    <tr><td>paramiko</td><td>SFTP fetch of remote Plex databases (SSH)</td><td><span class="tag kept">kept</span> <span class="tag core">core</span></td></tr>
     <tr><td>typer</td><td>CLI framework</td><td><span class="tag kept">kept</span> <span class="tag cli">cli</span></td></tr>
     <tr><td>fastapi</td><td>REST API request handling</td><td><span class="tag kept">kept</span> <span class="tag web">api</span></td></tr>
     <tr><td>uvicorn</td><td>ASGI server for the API</td><td><span class="tag kept">kept</span> <span class="tag web">api</span></td></tr>
@@ -299,7 +300,7 @@ so publishing MusicSeed as open source means a new user needs as little as possi
   <thead><tr><th>Dependency</th><th>Why it exists</th><th>Access</th></tr></thead>
   <tbody>
     <tr><td>Plex metadata DB</td><td>Source of truth for artists/albums/tracks/tags/play history</td><td>read-only, stdlib sqlite3</td></tr>
-    <tr><td>Plex blobs DB</td><td>Plex's own 50-dim sonic analysis vectors</td><td>read-only, at query time</td></tr>
+    <tr><td>Plex blobs DB</td><td>Plex's own 50-dim sonic analysis vectors</td><td>read-only, import time (copied into musicseed.db)</td></tr>
     <tr><td>Plex HTTP API</td><td>Creating/populating playlists; triggering sonic analysis</td><td>optional, token-gated</td></tr>
     <tr><td>ListenBrainz / MusicBrainz</td><td>Popularity enrichment via recording MBIDs</td><td>optional, rate-limited</td></tr>
     <tr><td>Spotify Web API</td><td>Fallback popularity/metadata when MBIDs are missing</td><td>optional, credentialed</td></tr>
@@ -307,11 +308,13 @@ so publishing MusicSeed as open source means a new user needs as little as possi
 </table>
 
 <div class="note">
-  <strong>Why sonic vectors are not a stored dependency:</strong> Plex already computes a
-  50-dimensional vector per track during its own sonic analysis. MusicSeed reads those vectors
-  straight out of the Plex blobs database into an in-memory L2-normalized matrix
-  (<code>sonic.py → SonicVectors</code>) when a recommendation runs. Nothing is copied, embedded,
-  or indexed — so there is no vector column, no ANN index, and no embedding pipeline to maintain.
+  <strong>Why sonic vectors are stored locally:</strong> Plex already computes a 50-dimensional
+  vector per track during its own sonic analysis. MusicSeed copies those vectors out of the Plex
+  blobs database into its own <code>track_vectors</code> table (<code>import-plex-sonic</code> /
+  <code>POST /sonic/import</code>), then rebuilds the in-memory L2-normalized matrix
+  (<code>sonic.py → SonicVectors</code>) from that local store when a recommendation runs. The
+  blobs database is read only at import time, so there is no vector index, no ANN index, and no
+  embedding pipeline to maintain.
 </div>
 
 <!-- ============================ WORKFLOWS ============================ -->
@@ -368,27 +371,31 @@ so publishing MusicSeed as open source means a new user needs as little as possi
 <figcaption><code>musicseed enrich --source listenbrainz|spotify</code> — attempted tracks are flagged so interrupted runs resume. This is the only workflow that spends third-party API calls, which is why old Postgres data was migrated rather than re-fetched.</figcaption>
 </figure>
 
-<h3>3.3 Sonic retrieval — vectors at query time (no storage)</h3>
+<h3>3.3 Sonic import — copy vectors into musicseed.db, read local store at query time</h3>
 <figure>
 <svg width="1010" height="110" viewBox="0 0 1010 110">
   <defs><marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 1 L 9 5 L 0 9 z" fill="#5fd0a5"/></marker></defs>
-  <rect x="10" y="28" rx="8" width="180" height="54" fill="#1d212b" stroke="#5fd0a5"/>
-  <text x="100" y="50" text-anchor="middle" class="box-label">Plex blobs DB</text>
-  <text x="100" y="66" text-anchor="middle" class="box-sub">read-only</text>
-  <line x1="190" y1="55" x2="250" y2="55" stroke="#5fd0a5" stroke-width="1.5" marker-end="url(#a3)"/>
-  <rect x="255" y="28" rx="8" width="220" height="54" fill="#1d212b" stroke="#6ea8fe"/>
-  <text x="365" y="50" text-anchor="middle" class="box-label">sonic.py</text>
-  <text x="365" y="66" text-anchor="middle" class="box-sub">decode 50-dim · L2-normalize · cache</text>
-  <line x1="475" y1="55" x2="535" y2="55" stroke="#5fd0a5" stroke-width="1.5" marker-end="url(#a3)"/>
-  <rect x="540" y="28" rx="8" width="220" height="54" fill="#1d212b" stroke="#6ea8fe"/>
-  <text x="650" y="50" text-anchor="middle" class="box-label">SonicVectors (in RAM)</text>
-  <text x="650" y="66" text-anchor="middle" class="box-sub">~60K × 50 float32 ≈ 12 MB</text>
-  <line x1="760" y1="55" x2="820" y2="55" stroke="#5fd0a5" stroke-width="1.5" marker-end="url(#a3)"/>
-  <rect x="825" y="28" rx="8" width="175" height="54" fill="#1d212b" stroke="#6ea8fe"/>
-  <text x="912" y="50" text-anchor="middle" class="box-label">nearest()</text>
-  <text x="912" y="66" text-anchor="middle" class="box-sub">numpy matmul · ms-scale</text>
+  <rect x="10" y="28" rx="8" width="150" height="54" fill="#1d212b" stroke="#5fd0a5"/>
+  <text x="85" y="50" text-anchor="middle" class="box-label">Plex blobs DB</text>
+  <text x="85" y="66" text-anchor="middle" class="box-sub">read-only · import time</text>
+  <line x1="160" y1="55" x2="210" y2="55" stroke="#5fd0a5" stroke-width="1.5" marker-end="url(#a3)"/>
+  <rect x="215" y="28" rx="8" width="210" height="54" fill="#1d212b" stroke="#6ea8fe"/>
+  <text x="320" y="50" text-anchor="middle" class="box-label">import-plex-sonic</text>
+  <text x="320" y="66" text-anchor="middle" class="box-sub">decode 50-dim · upsert</text>
+  <line x1="425" y1="55" x2="475" y2="55" stroke="#5fd0a5" stroke-width="1.5" marker-end="url(#a3)"/>
+  <rect x="480" y="28" rx="8" width="180" height="54" fill="#1d212b" stroke="#6ea8fe"/>
+  <text x="570" y="50" text-anchor="middle" class="box-label">musicseed.db</text>
+  <text x="570" y="66" text-anchor="middle" class="box-sub">track_vectors table</text>
+  <line x1="660" y1="55" x2="710" y2="55" stroke="#5fd0a5" stroke-width="1.5" marker-end="url(#a3)"/>
+  <rect x="715" y="28" rx="8" width="150" height="54" fill="#1d212b" stroke="#6ea8fe"/>
+  <text x="790" y="50" text-anchor="middle" class="box-label">SonicVectors</text>
+  <text x="790" y="66" text-anchor="middle" class="box-sub">raw + normalized · RAM</text>
+  <line x1="865" y1="55" x2="915" y2="55" stroke="#5fd0a5" stroke-width="1.5" marker-end="url(#a3)"/>
+  <rect x="920" y="28" rx="8" width="80" height="54" fill="#1d212b" stroke="#6ea8fe"/>
+  <text x="960" y="50" text-anchor="middle" class="box-label">get()</text>
+  <text x="960" y="66" text-anchor="middle" class="box-sub">scoring</text>
 </svg>
-<figcaption>At this scale brute-force cosine search is single-digit milliseconds — faster than any server round-trip. No ANN index, no vector column, no padding hacks.</figcaption>
+<figcaption>Vectors are copied into the local <code>track_vectors</code> table at import time, then cached in raw/normalized matrices. Recommendations score every eligible track using local vector lookups. Cache memory scales with vector count; query latency is measured, not assumed instantaneous. See <code>docs/resolvers/retrieval-decision.md</code> for benchmarks and limits. No ANN index or pgvector column is needed.</figcaption>
 </figure>
 
 <h3>3.4 Recommend — six signals, explainable</h3>
@@ -404,12 +411,12 @@ so publishing MusicSeed as open source means a new user needs as little as possi
   <text x="295" y="86" text-anchor="middle" class="box-sub">resolve_seed_tracks</text>
   <line x1="375" y1="75" x2="425" y2="75" stroke="#6ea8fe" stroke-width="1.5" marker-end="url(#a4)"/>
   <rect x="430" y="48" rx="8" width="185" height="54" fill="#1d212b" stroke="#6ea8fe"/>
-  <text x="522" y="66" text-anchor="middle" class="box-label">build_candidate_pool</text>
-  <text x="522" y="82" text-anchor="middle" class="box-sub">sonic (numpy) + 5 SQL sources</text>
+  <text x="522" y="66" text-anchor="middle" class="box-label">score_eligible_tracks</text>
+  <text x="522" y="82" text-anchor="middle" class="box-sub">year/seed filters · scalar SQL</text>
   <line x1="615" y1="75" x2="665" y2="75" stroke="#6ea8fe" stroke-width="1.5" marker-end="url(#a4)"/>
   <rect x="670" y="48" rx="8" width="160" height="54" fill="#1d212b" stroke="#6ea8fe"/>
-  <text x="750" y="66" text-anchor="middle" class="box-label">calculate_score</text>
-  <text x="750" y="82" text-anchor="middle" class="box-sub">ScoreBreakdown · 6 weights</text>
+  <text x="750" y="66" text-anchor="middle" class="box-label">ConstrainedTopK</text>
+  <text x="750" y="82" text-anchor="middle" class="box-sub">shared score_signals · artist cap</text>
   <line x1="830" y1="75" x2="880" y2="75" stroke="#6ea8fe" stroke-width="1.5" marker-end="url(#a4)"/>
   <rect x="885" y="48" rx="8" width="115" height="54" fill="#1d212b" stroke="#b48ead"/>
   <text x="942" y="66" text-anchor="middle" class="box-label">playlist</text>
@@ -417,7 +424,7 @@ so publishing MusicSeed as open source means a new user needs as little as possi
   <rect x="430" y="118" rx="6" width="570" height="26" fill="#171a21" stroke="#2b3140"/>
   <text x="715" y="135" text-anchor="middle" class="box-sub">signals: sonic · popularity · style · genre · era · novelty — every score is explainable via --explain</text>
 </svg>
-<figcaption><code>musicseed recommend</code> previews; <code>playlist</code> / <code>populate</code> ask for confirmation, then write to Plex over the HTTP API — the only workflow that mutates anything outside musicseed.db.</figcaption>
+<figcaption><code>musicseed-cli recommend</code> previews; <code>playlist</code> / <code>populate</code> confirm and apply the exact approved IDs over Plex HTTP, without recomputing. Full retrieval hydrates only seeds and selected tracks. <code>sonic-refresh</code> is a separate, explicitly confirmed remote-analysis mutation.</figcaption>
 </figure>
 
 <!-- ============================ NEW USER PATH ============================ -->

@@ -119,6 +119,7 @@ export function HealthStrip({
   onEnrich,
   onEnrichListenBrainz,
   onSonicRefresh,
+  onSonicImport,
   plexServer,
 }: {
   snapshot: DashboardSnapshot;
@@ -126,6 +127,7 @@ export function HealthStrip({
   onEnrich: () => void | Promise<void>;
   onEnrichListenBrainz: () => void | Promise<void>;
   onSonicRefresh: () => void | Promise<void>;
+  onSonicImport: () => void | Promise<void>;
   plexServer?: PlexServerCheck | null;
 }) {
   const { library: lib, discovery } = snapshot;
@@ -137,11 +139,13 @@ export function HealthStrip({
   const spotifyEnrichJob = activeJobs.find((j) => j.kind === "enrich:spotify" && isActive(j));
   const lbEnrichJob = activeJobs.find((j) => j.kind === "enrich:listenbrainz" && isActive(j));
   const importJob = activeJobs.find((j) => j.kind === "import" && isActive(j));
+  const sonicImportJob = activeJobs.find((j) => j.kind === "sonic_import" && isActive(j));
   const importCov = lib.import_coverage;
   const [sonicStatus, setSonicStatus] = useState<SonicStatus | null>(null);
   const [enrichingSpotify, setEnrichingSpotify] = useState(false);
   const [enrichingLb, setEnrichingLb] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [importingVectors, setImportingVectors] = useState(false);
   const [confirmRefresh, setConfirmRefresh] = useState(false);
 
   async function doRefresh() {
@@ -149,6 +153,15 @@ export function HealthStrip({
     setConfirmRefresh(false);
     await onSonicRefresh();
     setRefreshing(false);
+  }
+
+  async function doImportVectors() {
+    setImportingVectors(true);
+    try {
+      await onSonicImport();
+    } finally {
+      setImportingVectors(false);
+    }
   }
 
   async function doEnrich() {
@@ -286,8 +299,8 @@ export function HealthStrip({
             }}
           />
           <CoverageBar
-            label="Sonic"
-            covered={sonicStatus ? sonicStatus.analyzed_tracks : enrichment.tracks_with_sonic}
+            label="Sonic analysis (Plex)"
+            covered={sonicStatus ? sonicStatus.analyzed_tracks : 0}
             total={sonicStatus ? sonicStatus.total_tracks : tracks}
             zeroHint={sonicHint}
             action={{
@@ -295,6 +308,19 @@ export function HealthStrip({
               icon: "refresh",
               busy: refreshing,
               onClick: () => setConfirmRefresh(true),
+            }}
+          />
+          <CoverageBar
+            label="Sonic vectors (local)"
+            covered={enrichment.tracks_with_sonic}
+            total={tracks}
+            zeroHint="Not imported yet. Import Plex sonic vectors to enable the sonic similarity signal."
+            activeJob={sonicImportJob}
+            action={sonicImportJob ? undefined : {
+              label: "Import vectors",
+              icon: "refresh",
+              busy: importingVectors,
+              onClick: doImportVectors,
             }}
           />
         </div>

@@ -1,9 +1,24 @@
 """Shared rendering helpers for recommendation output."""
 
-from musicseed.recommender.scoring import Weights
+from musicseed.recommender.scoring import SIGNALS, Weights
 from rich.table import Table
 
 from musicseed_cli.console import console
+
+
+def _availability_note(score) -> str:
+    """Summarize missing, mixed, and unknown evidence without implying neutrality."""
+    availability = getattr(score, "availability", None) or {}
+    labels = {
+        "neutral_missing": "neutral (missing)", "missing": "missing (score policy)",
+        "not_applicable": "n/a", "mixed": "mixed evidence", "unknown": "unknown evidence",
+    }
+    parts = []
+    for status, label in labels.items():
+        signals = sorted(k for k in SIGNALS if availability.get(k, "unknown") == status)
+        if signals:
+            parts.append(label + ": " + ", ".join(signals))
+    return "; ".join(parts)
 
 
 def build_weights(
@@ -42,15 +57,14 @@ def popularity_cell(track) -> str:
     """Format a track's popularity for a table cell ("" when unknown).
 
     Args:
-        track: a Track ORM object.
+        track: a ``ServiceTrack`` (or any object with a ``popularity``
+            attribute on the 0-100 scale).
 
     Returns:
-        The popularity value (0-100 scale) rounded to an integer string, or
-        an empty string when the track has no popularity data.
+        The popularity value rounded to an integer string, or an empty
+        string when the track has no popularity data.
     """
-    from musicseed.recommender.scoring import track_popularity_value
-
-    value = track_popularity_value(track)
+    value = track.popularity
     return f"{value:.0f}" if value is not None else ""
 
 
@@ -58,7 +72,7 @@ def print_seed_table(seed_tracks: list) -> None:
     """Render the resolved seed tracks as a Rich table.
 
     Args:
-        seed_tracks: Track ORM objects with artist eagerly loaded.
+        seed_tracks: ``ServiceTrack`` objects.
     """
     table = Table(title="Resolved Seeds")
     table.add_column("ID", justify="right", style="cyan")
@@ -69,7 +83,7 @@ def print_seed_table(seed_tracks: list) -> None:
     for track in seed_tracks:
         table.add_row(
             str(track.id),
-            track.artist.name if track.artist else "",
+            track.artist or "",
             track.title,
             str(track.year or ""),
             popularity_cell(track),
@@ -81,8 +95,8 @@ def print_recommendations_table(recommendations: list, *, explain: bool) -> None
     """Render recommendations as a Rich table.
 
     Args:
-        recommendations: ``Recommendation`` objects (track, score breakdown,
-            candidate sources).
+        recommendations: ``ServiceRecommendation`` objects (track, score
+            breakdown, candidate sources).
         explain: also show the per-signal component scores and the candidate
             sources that produced each recommendation.
     """
@@ -102,20 +116,21 @@ def print_recommendations_table(recommendations: list, *, explain: bool) -> None
         row = [
             str(position),
             f"{score.total:.3f}",
-            track.artist.name if track.artist else "",
+            track.artist or "",
             track.title,
             str(track.year or ""),
             popularity_cell(track),
         ]
         if explain:
-            row.extend([
-                (
-                    f"sonic={score.sonic:.2f} pop={score.popularity:.2f} "
-                    f"style={score.style:.2f} genre={score.genre:.2f} "
-                    f"era={score.era:.2f} novelty={score.novelty:.2f}"
-                ),
-                ",".join(recommendation.sources),
-            ])
+            components = (
+                f"sonic={score.sonic:.2f} pop={score.popularity:.2f} "
+                f"style={score.style:.2f} genre={score.genre:.2f} "
+                f"era={score.era:.2f} novelty={score.novelty:.2f}"
+            )
+            note = _availability_note(score)
+            if note:
+                components = f"{components}\n[dim]{note}[/dim]"
+            row.extend([components, ",".join(recommendation.sources)])
         table.add_row(*row)
     console.print()
     console.print(table)

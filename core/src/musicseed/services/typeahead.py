@@ -5,8 +5,8 @@ from __future__ import annotations
 from pydantic import BaseModel
 from sqlalchemy.orm import joinedload
 
+from musicseed.context import MusicSeedContext, get_context
 from musicseed.db.models import Artist, Track
-from musicseed.db.session import get_session
 
 
 class TypeaheadTrack(BaseModel):
@@ -25,6 +25,7 @@ def search_tracks(
     query: str,
     exclude_ids: list[int] | None = None,
     limit: int = 10,
+    context: MusicSeedContext | None = None,
 ) -> list[TypeaheadTrack]:
     """Search tracks by title or artist name for autocomplete.
 
@@ -36,6 +37,7 @@ def search_tracks(
             and artist names.
         exclude_ids: local track ids to leave out of the results.
         limit: maximum number of matches to return.
+        context: runtime context to use; defaults to the default context.
 
     Returns:
         Matching tracks as minimal JSON-safe views, ordered by title.
@@ -45,7 +47,8 @@ def search_tracks(
         return []
 
     exclude = exclude_ids or []
-    with get_session() as session:
+    ctx = context or get_context()
+    with ctx.session() as session:
         rows = (
             session.query(Track)
             .options(joinedload(Track.artist), joinedload(Track.album))

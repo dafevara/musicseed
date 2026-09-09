@@ -504,6 +504,101 @@ code {
   cursor: not-allowed;
 }
 
+/* ── Recommendation result cards ────────────── */
+.result-card {
+  border: 1px solid var(--ms-border);
+  background: color-mix(in srgb, var(--ms-surface-raised) 55%, transparent);
+  border-radius: var(--ms-radius-control);
+  padding: 0.8rem 0.9rem;
+  transition: border-color var(--ms-duration-fast) var(--ms-ease),
+    background var(--ms-duration-fast) var(--ms-ease),
+    transform var(--ms-duration-fast) var(--ms-ease);
+}
+.result-card:hover {
+  border-color: color-mix(in srgb, var(--ms-accent) 45%, transparent);
+  background: color-mix(in srgb, var(--ms-surface-raised) 85%, transparent);
+  transform: translateY(-1px);
+}
+.result-rank {
+  flex-shrink: 0;
+  width: 1.6rem;
+  padding-top: 0.12rem;
+  font-family: var(--ms-font-mono);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ms-text-subtle);
+  text-align: right;
+}
+.result-score {
+  background: var(--ms-accent-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-size: 1.35rem;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.result-score-unit {
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.result-score-caption {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ms-text-subtle);
+}
+.signal-track {
+  display: flex;
+  gap: 2px;
+  height: 4px;
+  margin-top: 0.55rem;
+  border-radius: var(--ms-radius-pill);
+  overflow: hidden;
+}
+.signal-segment {
+  display: block;
+  flex-shrink: 0;
+  height: 100%;
+  opacity: 0.85;
+}
+
+/* ── Step badges ─────────────────────────────── */
+.step-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  flex-shrink: 0;
+  border-radius: var(--ms-radius-pill);
+  background: var(--ms-accent-gradient);
+  color: var(--ms-accent-foreground);
+  font-size: 0.72rem;
+  font-weight: 800;
+  box-shadow: 0 6px 14px -8px rgba(242, 182, 50, 0.72);
+}
+
+/* ── Selects ─────────────────────────────────── */
+select {
+  min-height: 42px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--ms-border);
+  border-radius: var(--ms-radius-control);
+  font: inherit;
+  font-size: 0.95rem;
+  background: var(--ms-surface-raised);
+  color: var(--ms-text);
+  outline: none;
+}
+select:focus {
+  border-color: var(--ms-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ms-focus) 55%, transparent);
+}
+
 /* ── Help icon / popover ─────────────────────── */
 .help-anchor {
   position: relative;

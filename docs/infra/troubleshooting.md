@@ -83,10 +83,20 @@ Recovery:
   complete re-import.
 - **Enrichment** marks attempted tracks, so re-running with resume
   (`musicseed-cli enrich --source listenbrainz --resume`) skips already-attempted tracks.
-- **Cancel vs. delete.** The dashboard can cancel a running job (at the next safe batch boundary)
-  or delete a finished/failed job record. Cancelling leaves already-committed batches in place.
-- **SQLite lock contention** is the usual cause of a crash mid-job (e.g. a stale `-wal`/`-shm`
-  sidecar while another process holds the file). Stop other MusicSeed processes, then retry the job.
+- **Cancel vs. delete.** Cancellation is cooperative and keeps the writer reserved until the
+  target returns. Already-committed batches remain; active/cancel-requested rows cannot be deleted.
+  Settings changes and new imports are rejected while that writer is active.
+- **Restart recovery.** On job-system startup/submission, pending/running/cancel-requested jobs
+  owned by dead processes become interrupted. Live owners are never forcibly displaced. The
+  liveness check is PID-based and conservative. If a stale PID has been reused, do not kill an
+  unrelated process to clear the claim; stop MusicSeed and inspect the job record before manual
+  repair.
+- **Import provenance.** Completion belongs to the source and library, not a successful job row.
+  Deleting history cannot make setup incomplete again. Older installations without provenance
+  should run an incremental import once; unknown coverage is not a verified complete import.
+- **SQLite lock contention** can occur when another writer holds the file. MusicSeed serializes
+  its import/enrichment services, but external tools can still contend. Stop competing writers,
+  then retry. Do not delete WAL/SHM files to resolve contention.
 - Failed jobs keep their completed work; the dashboard shows an actionable summary and points at
   the log rather than rendering a traceback.
 
@@ -116,9 +126,21 @@ Symptom: recommendations feel random, or the dashboard shows low sonic coverage.
 
 Checks and recovery:
 
-- **Sonic vectors are read from Plex at query time.** MusicSeed stores nothing; Plex must have
-  analyzed the library. If `recommend` fails with "sonic ... unavailable", the Plex blobs database
-  path isn't resolvable — fix it in Settings.
+- **Sonic vectors are imported from Plex into the local store.** MusicSeed copies vectors into its
+  `track_vectors` table (`musicseed-cli import-plex-sonic`) and reads them from there; the blobs
+  database is only needed at import time. If `import-plex-sonic` fails with "sonic ... unavailable",
+  the Plex blobs database path isn't resolvable — fix it in Settings.
+- **Import fails with "Snapshot … is unreadable: unknown tokenizer: collating" (or "no such
+  collation sequence").** Plex's library database declares FTS tables with custom tokenizers
+  (`tokenize=collating`) and indexes with custom collations (`icu_root`) that only Plex's own
+  SQLite runtime can resolve, so stock SQLite cannot run whole-database integrity checks on a
+  snapshot. MusicSeed tolerates this (the file is still validated for completeness and the
+  vectors themselves read fine), so the import should proceed; if an older version surfaced
+  this error, upgrade and re-run the import.
+- **Canceled vector import:** committed batches (500 vectors by default) remain available.
+  Rerun `musicseed-cli import-plex-sonic` to refresh/finish; existing IDs are updated rather than
+  duplicated. Progress/cancellation happen between commits, not during snapshot transfer or
+  source decoding. Other API/CLI contexts refresh cached vectors on their next access.
 - **Check coverage:** `musicseed-cli sonic-probe` reports analyzed vs. unanalyzed tracks and the
   albums still pending.
 - **Trigger analysis:** `musicseed-cli sonic-refresh` runs Plex's MusicAnalysis Butler task. It
@@ -132,8 +154,10 @@ Checks and recovery:
 ## Database backup and recovery
 
 - **Backup = copy the file.** MusicSeed state is one SQLite file (default
-  `~/.local/share/musicseed/musicseed.db`). Copy it while MusicSeed is stopped; if it must stay
-  running, also copy the `-wal` and `-shm` sidecars, or use SQLite's online backup.
+  `~/.local/share/musicseed/musicseed.db`). Copy it after a clean shutdown of every API/CLI
+  process. If a WAL remains after an interrupted shutdown, or MusicSeed must stay running,
+  use SQLite's online backup API or `.backup` command. Sequentially copying a live database
+  and its `-wal`/`-shm` sidecars does **not** produce a guaranteed consistent backup.
 - **Restore** by copying the file back. If the file is corrupt or you want a clean start, stop the
   API/CLI, move the file aside, and run setup again (the wizard re-runs when the database is
   missing — the `db_missing` first-run signal).

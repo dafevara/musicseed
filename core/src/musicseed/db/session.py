@@ -1,18 +1,23 @@
-"""Database session management."""
+"""Database session management.
+
+Pure engine/session factory functions live here; the module-level
+``get_engine``/``get_session``/``reset_engine`` conveniences delegate to the
+default ``MusicSeedContext`` (see ``musicseed.context``).
+"""
+
+from __future__ import annotations
 
 from contextlib import contextmanager
-from typing import Generator
+from typing import TYPE_CHECKING, Generator
 
 from pydantic import BaseModel
-from sqlalchemy import create_engine, event, text
+from sqlalchemy import Engine, create_engine, event, text
 from sqlalchemy.orm import Session, sessionmaker
 
-from musicseed.config import get_config
 from musicseed.db.models import Base
 
-# Global engine and session factory
-_engine = None
-_SessionLocal = None
+if TYPE_CHECKING:
+    from musicseed.context import MusicSeedContext
 
 
 class IndexResult(BaseModel):
@@ -25,56 +30,76 @@ class IndexResult(BaseModel):
     error: str | None = None
 
 
-def get_engine():
-    """Get or create the SQLite database engine."""
-    global _engine
-    if _engine is None:
-        config = get_config()
-        engine = create_engine(config.database.url, echo=False)
+def create_engine_for_url(url: str) -> Engine:
+    """Create a SQLite engine with MusicSeed's connect-time pragmas.
 
-        @event.listens_for(engine, "connect")
-        def _set_sqlite_pragmas(dbapi_connection, _connection_record) -> None:
-            cursor = dbapi_connection.cursor()
-            cursor.execute("PRAGMA journal_mode=WAL")
-            cursor.execute("PRAGMA foreign_keys=ON")
-            cursor.execute("PRAGMA busy_timeout=15000")
-            cursor.close()
+    Args:
+        url: SQLAlchemy connection URL (``sqlite:///...``).
 
-        _engine = engine
-    return _engine
+    Returns:
+        A new engine that enables WAL journaling, foreign keys, and a busy
+        timeout on every connection.
+    """
+    engine = create_engine(url, echo=False)
+
+    @event.listens_for(engine, "connect")
+    def _set_sqlite_pragmas(dbapi_connection, _connection_record) -> None:
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.execute("PRAGMA busy_timeout=15000")
+        cursor.close()
+
+    return engine
 
 
-def get_session_factory():
-    """Get or create the session factory."""
-    global _SessionLocal
-    if _SessionLocal is None:
-        _SessionLocal = sessionmaker(bind=get_engine(), expire_on_commit=False)
-    return _SessionLocal
+def create_session_factory(engine: Engine) -> sessionmaker:
+    """Create a session factory bound to ``engine``.
+
+    Uses ``expire_on_commit=False`` for internal multi-step workflows. Public
+    services still project scalar DTOs inside their session; this setting does
+    not make unloaded ORM relationships safe to access after session closure.
+    """
+    return sessionmaker(bind=engine, expire_on_commit=False)
+
+
+def get_engine() -> Engine:
+    """Get the default context's SQLite engine (created on first use)."""
+    from musicseed.context import get_context
+
+    return get_context().engine
+
+
+def get_session_factory() -> sessionmaker:
+    """Get the default context's session factory."""
+    from musicseed.context import get_context
+
+    return get_context().session_factory
 
 
 @contextmanager
 def get_session() -> Generator[Session, None, None]:
-    """Get a database session as a context manager."""
-    session_local = get_session_factory()
-    session = session_local()
-    try:
+    """Get a database session from the default context as a context manager."""
+    from musicseed.context import get_context
+
+    with get_context().session() as session:
         yield session
-        session.commit()
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        session.close()
 
 
-def init_db() -> None:
-    """Initialize the database schema, creating the DB file's parent dir if needed."""
-    config = get_config()
-    config.database.path_expanded.parent.mkdir(parents=True, exist_ok=True)
+def init_db(context: MusicSeedContext | None = None) -> None:
+    """Initialize the database schema, creating the DB file's parent dir if needed.
 
-    engine = get_engine()
-    Base.metadata.create_all(engine)
-    ensure_schema()
+    Args:
+        context: runtime context to operate on; defaults to the default
+            context.
+    """
+    from musicseed.context import get_context
+
+    ctx = context or get_context()
+    ctx.config.database.path_expanded.parent.mkdir(parents=True, exist_ok=True)
+
+    Base.metadata.create_all(ctx.engine)
+    ensure_schema(ctx)
 
 
 # (table, column, column DDL) for lightweight additive migrations on existing files.
@@ -89,15 +114,21 @@ _ADDITIVE_COLUMNS = [
 ]
 
 
-def ensure_schema() -> None:
+def ensure_schema(context: MusicSeedContext | None = None) -> None:
     """Apply lightweight additive schema updates for existing local databases.
 
     New tables are created via ``Base.metadata.create_all(checkfirst=True)``;
     additive column migrations are handled per-table via the PRAGMA list.
+
+    Args:
+        context: runtime context to operate on; defaults to the default
+            context.
     """
-    engine = get_engine()
-    Base.metadata.create_all(engine, checkfirst=True)
-    with engine.connect() as conn:
+    from musicseed.context import get_context
+
+    ctx = context or get_context()
+    Base.metadata.create_all(ctx.engine, checkfirst=True)
+    with ctx.engine.connect() as conn:
         for table, column, column_ddl in _ADDITIVE_COLUMNS:
             existing = {
                 row[1] for row in conn.execute(text(f"PRAGMA table_info({table})"))
@@ -109,9 +140,19 @@ def ensure_schema() -> None:
         conn.commit()
 
 
-def create_indexes() -> list[IndexResult]:
-    """Create additional indexes (call after initial data load)."""
-    engine = get_engine()
+def create_indexes(context: MusicSeedContext | None = None) -> list[IndexResult]:
+    """Create additional indexes (call after initial data load).
+
+    Args:
+        context: runtime context to operate on; defaults to the default
+            context.
+
+    Returns:
+        Per-index results describing success or failure for each index.
+    """
+    from musicseed.context import get_context
+
+    ctx = context or get_context()
 
     indexes = [
         # Common queries
@@ -198,7 +239,7 @@ def create_indexes() -> list[IndexResult]:
     ]
 
     results: list[IndexResult] = []
-    with engine.connect() as conn:
+    with ctx.engine.connect() as conn:
         for index_name, index_sql in indexes:
             try:
                 conn.execute(text(index_sql))
@@ -212,9 +253,11 @@ def create_indexes() -> list[IndexResult]:
 
 
 def reset_engine() -> None:
-    """Reset the engine (useful for testing or config changes)."""
-    global _engine, _SessionLocal
-    if _engine:
-        _engine.dispose()
-    _engine = None
-    _SessionLocal = None
+    """Drop the default context (engine, session factory, and sonic cache).
+
+    Preserved as a test/config-change hook; with explicit contexts the
+    preferred reset is to construct and install a fresh ``MusicSeedContext``.
+    """
+    from musicseed.context import reset_context
+
+    reset_context()

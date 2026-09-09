@@ -14,7 +14,6 @@ from musicseed_api.handlers.playlists import (
     get_playlists,
     preview_populate,
 )
-from musicseed_api.handlers.recommend import parse_seed_ids
 
 router = APIRouter(tags=["playlists"])
 
@@ -31,6 +30,19 @@ def _parse_method(value: str) -> PopulateMethod:
     return method  # type: ignore[return-value]
 
 
+def _approved_ids(value: str) -> list[int]:
+    """Reject empty/malformed selections instead of generating or writing a subset."""
+    parts = [part.strip() for part in value.split(",")]
+    if not parts or any(
+        len(part) > 19 or not part.isascii() or not part.isdecimal() for part in parts
+    ):
+        raise HTTPException(status_code=400, detail="Provide approved track_ids from a preview.")
+    ids = [int(part) for part in parts]
+    if any(not 0 < track_id <= 2**63 - 1 for track_id in ids):
+        raise HTTPException(status_code=400, detail="Track IDs must be positive SQLite integers.")
+    return list(dict.fromkeys(ids))
+
+
 @router.get("/playlists")
 def list_playlists() -> list[dict]:
     return get_playlists()
@@ -40,43 +52,15 @@ def list_playlists() -> list[dict]:
 def create_playlist(
     name: Annotated[str, Form()],
     seed_ids: Annotated[str, Form()],
-    limit: Annotated[int, Form()] = 50,
-    year_min: Annotated[str, Form()] = "",
-    year_max: Annotated[str, Form()] = "",
-    max_tracks_per_artist: Annotated[int, Form()] = 3,
-    w_sonic: Annotated[str, Form()] = "",
-    w_popularity: Annotated[str, Form()] = "",
-    w_style: Annotated[str, Form()] = "",
-    w_genre: Annotated[str, Form()] = "",
-    w_era: Annotated[str, Form()] = "",
-    w_novelty: Annotated[str, Form()] = "",
+    track_ids: Annotated[str, Form()],
 ) -> dict:
-    ids = parse_seed_ids(seed_ids)
-    if not ids:
-        raise HTTPException(status_code=400, detail="At least one seed track is required.")
+    """Create the approved preview; scoring inputs belong to the preview request."""
+    ids = _approved_ids(seed_ids)
+    selected_ids = _approved_ids(track_ids)
     if not name.strip():
         raise HTTPException(status_code=400, detail="Playlist name is required.")
-
-    y_min = int(year_min) if year_min.strip() else None
-    y_max = int(year_max) if year_max.strip() else None
-
-    weight_kwargs = {}
-    for key, param in [
-        ("sonic", w_sonic), ("popularity", w_popularity), ("style", w_style),
-        ("genre", w_genre), ("era", w_era), ("novelty", w_novelty),
-    ]:
-        if param.strip():
-            weight_kwargs[key] = float(param)
-    weights = Weights(**weight_kwargs) if weight_kwargs else None
-
     return create_playlist_from_seeds(
-        name=name.strip(),
-        seed_ids=ids,
-        limit=limit,
-        weights=weights,
-        year_min=y_min,
-        year_max=y_max,
-        max_tracks_per_artist=max_tracks_per_artist,
+        name=name.strip(), seed_ids=ids, track_ids=selected_ids,
     )
 
 
@@ -121,42 +105,7 @@ def preview(
 @router.post("/playlists/{playlist_id}/populate")
 def populate(
     playlist_id: str,
-    limit: Annotated[int, Form()] = 40,
-    method: Annotated[str, Form()] = "average",
-    year_min: Annotated[str, Form()] = "",
-    year_max: Annotated[str, Form()] = "",
-    max_tracks_per_artist: Annotated[int, Form()] = 3,
-    track_ids: Annotated[str, Form()] = "",
-    w_sonic: Annotated[str, Form()] = "",
-    w_popularity: Annotated[str, Form()] = "",
-    w_style: Annotated[str, Form()] = "",
-    w_genre: Annotated[str, Form()] = "",
-    w_era: Annotated[str, Form()] = "",
-    w_novelty: Annotated[str, Form()] = "",
+    track_ids: Annotated[str, Form()],
 ) -> dict:
-    y_min = int(year_min) if year_min.strip() else None
-    y_max = int(year_max) if year_max.strip() else None
-
-    selected_ids = parse_seed_ids(track_ids) if track_ids.strip() else None
-    if selected_ids is not None and not selected_ids:
-        raise HTTPException(status_code=400, detail="No tracks selected to add.")
-
-    weight_kwargs = {}
-    for key, param in [
-        ("sonic", w_sonic), ("popularity", w_popularity), ("style", w_style),
-        ("genre", w_genre), ("era", w_era), ("novelty", w_novelty),
-    ]:
-        if param.strip():
-            weight_kwargs[key] = float(param)
-    weights = Weights(**weight_kwargs) if weight_kwargs else None
-
-    return apply_populate(
-        playlist_id=playlist_id,
-        limit=limit,
-        method=_parse_method(method),
-        weights=weights,
-        year_min=y_min,
-        year_max=y_max,
-        max_tracks_per_artist=max_tracks_per_artist,
-        track_ids=selected_ids,
-    )
+    """Append the approved selection without regenerating or re-filtering it."""
+    return apply_populate(playlist_id=playlist_id, track_ids=_approved_ids(track_ids))

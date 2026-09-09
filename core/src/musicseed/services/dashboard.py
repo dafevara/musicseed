@@ -4,6 +4,7 @@ job status into one surface-agnostic snapshot.
 
 from pydantic import BaseModel
 
+from musicseed.context import MusicSeedContext, get_context
 from musicseed.services.discovery import DiscoveryResult, discover
 from musicseed.services.jobs import JobState, get_active_jobs, get_latest_job, list_jobs
 from musicseed.services.library import EnrichmentCoverage, LibraryStatus, get_status
@@ -26,7 +27,9 @@ class DashboardSnapshot(BaseModel):
         return self.library.track_count > 0
 
 
-def get_dashboard(check_server: bool = False) -> DashboardSnapshot:
+def get_dashboard(
+    check_server: bool = False, context: MusicSeedContext | None = None
+) -> DashboardSnapshot:
     """Aggregate a dashboard snapshot.
 
     ``check_server`` gates the live Plex HTTP probe inside discovery. It
@@ -38,15 +41,17 @@ def get_dashboard(check_server: bool = False) -> DashboardSnapshot:
     Args:
         check_server: whether to probe the Plex server over HTTP as part of
             the embedded discovery result.
+        context: runtime context to use; defaults to the default context.
 
     Returns:
         A snapshot with discovery, library status, active and recent jobs,
         and the last successful import (``last_sync``, None when no import
         has succeeded yet).
     """
-    discovery_result = discover(check_server=check_server)
+    ctx = context or get_context()
+    discovery_result = discover(check_server=check_server, config=ctx.config)
     try:
-        library = get_status()
+        library = get_status(context=ctx)
     except Exception:
         library = LibraryStatus(
             db_path="", db_size_bytes=None, plex_url="", plex_db="", plex_library="",
