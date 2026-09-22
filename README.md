@@ -119,7 +119,8 @@ MusicSeed is a monorepo of independent apps that share one core library. Each ap
   layer; `npm run build` writes a static export the API serves.
 - **[`cli/`](cli/README.md)** — `musicseed-cli`, the Typer command-line app. Depends on `core`
   via an editable path dependency. No API dependency.
-- `mcp/` — future surface (MCP server). Not present yet.
+- **[`mcp/`](mcp/README.md)** — `musicseed-mcp`, an MCP server exposing playlist create/populate
+  as typed agent tools over core's services (stdio, no web server). Depends on `core` only.
 
 Shared infrastructure (`docs/`, `ruff.toml`, `scripts/`) lives at the repo root.
 

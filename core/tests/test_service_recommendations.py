@@ -3,7 +3,7 @@
 import json
 
 import pytest
-from musicseed.clients.plex import MediaItem, Playlist
+from musicseed.clients.plex import MediaItem, Playlist, PlexAPIError
 from musicseed.config import Config
 from musicseed.context import MusicSeedContext
 from musicseed.db.models import Album, Artist, Genre, Style, Track, TrackVector
@@ -51,6 +51,9 @@ def library(tmp_path, monkeypatch):
 
         def get_playlist(self, _id):
             return Playlist(rating_key="playlist", title="Fixture Playlist", leaf_count=2)
+
+        def find_playlist(self, _name):
+            return None
 
         def get_playlist_tracks(self, _id):
             return [MediaItem(rating_key="101"), MediaItem(rating_key="102")]
@@ -142,4 +145,56 @@ def test_unmapped_approved_track_rejects_the_whole_write(library):
         session.get(Track, ids[2]).plex_id = None
     with pytest.raises(NotFoundError):
         playlist_tracks.create_playlist_from_tracks("Stale", ids[2:], context=ctx)
+    assert not plex.created
+
+
+def test_populate_reconciles_partially_present_tracks(library, monkeypatch):
+    ctx, ids, plex = library
+    # Playlist already contains 104; only 103 should be added.
+    monkeypatch.setattr(plex, "get_playlist_tracks", lambda _id: [
+        MediaItem(rating_key="101"), MediaItem(rating_key="102"),
+        MediaItem(rating_key="104"),
+    ])
+    applied = populate.populate_playlist("playlist", track_ids=[ids[3], ids[2]], context=ctx)
+    assert plex.added == [("playlist", [103])]
+    assert applied.added_count == 1
+    assert applied.already_present_count == 1
+
+
+def test_populate_skips_write_when_all_tracks_already_present(library, monkeypatch):
+    ctx, ids, plex = library
+    # Retry after a lost response: the whole selection is already there.
+    monkeypatch.setattr(plex, "get_playlist_tracks", lambda _id: [
+        MediaItem(rating_key="101"), MediaItem(rating_key="102"),
+        MediaItem(rating_key="104"), MediaItem(rating_key="103"),
+    ])
+    applied = populate.populate_playlist("playlist", track_ids=[ids[3], ids[2]], context=ctx)
+    assert not plex.added
+    assert applied.added_count == 0
+    assert applied.already_present_count == 2
+
+
+def test_create_playlist_is_idempotent_on_same_name_and_contents(library, monkeypatch):
+    ctx, ids, plex = library
+    existing = Playlist(rating_key="existing", title="Approved", leaf_count=2)
+    monkeypatch.setattr(plex, "find_playlist", lambda _name: existing)
+    monkeypatch.setattr(plex, "get_playlist_tracks", lambda _id: [
+        MediaItem(rating_key="104"), MediaItem(rating_key="103"),
+    ])
+    result = playlist_tracks.create_playlist_from_tracks(
+        "Approved", [ids[3], ids[2]], context=ctx
+    )
+    assert result.playlist.rating_key == "existing"
+    assert not plex.created
+
+
+def test_create_playlist_conflicts_when_name_exists_with_different_tracks(library, monkeypatch):
+    ctx, ids, plex = library
+    existing = Playlist(rating_key="existing", title="Approved", leaf_count=1)
+    monkeypatch.setattr(plex, "find_playlist", lambda _name: existing)
+    monkeypatch.setattr(plex, "get_playlist_tracks", lambda _id: [MediaItem(rating_key="101")])
+    with pytest.raises(PlexAPIError):
+        playlist_tracks.create_playlist_from_tracks(
+            "Approved", [ids[3], ids[2]], context=ctx
+        )
     assert not plex.created

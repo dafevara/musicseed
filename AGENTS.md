@@ -29,7 +29,7 @@ and `.venv`; run `uv` commands from inside the app directory.
 | `api/` | `musicseed-api` — REST API (FastAPI, JSON) + the `musicseed` product command. Wraps core's services; consumed by the web UI over HTTP. | [`api/AGENTS.md`](api/AGENTS.md) |
 | `cli/` | `musicseed-cli` — Typer CLI (`musicseed-cli`). Thin wrapper over core's services; depends on core via an editable path. | [`cli/AGENTS.md`](cli/AGENTS.md) |
 | `web/` | `musicseed-web` — local web UI (Next.js + React + TypeScript, client-rendered SPA). Thin rendering layer over the API; no business logic. `npm run build` writes `web/out/`; `musicseed` serves it. | [`web/AGENTS.md`](web/AGENTS.md) |
-| `mcp/` | Future surface (MCP server). Not present yet; will be a sibling app depending on `core` (and `api` if REST is the preferred transport). | — |
+| `mcp/` | `musicseed-mcp` — MCP server (stdio) exposing playlist create/populate as typed agent tools. Thin adapter over core's services; depends on core only. | [`mcp/AGENTS.md`](mcp/AGENTS.md) |
 
 Shared at the repo root: `ruff.toml` (lint config for all apps), `docs/`, `data/`, `logs/`,
 `scripts/` (one-shot utilities, e.g. `migrate_pg_to_sqlite.py`).

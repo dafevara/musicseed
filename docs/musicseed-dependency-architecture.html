@@ -77,6 +77,7 @@
   .tag.core { background: rgba(110,168,254,.12); color: var(--accent); }
   .tag.cli { background: rgba(180,142,173,.12); color: var(--purple); }
   .tag.web { background: rgba(229,192,123,.12); color: var(--amber); }
+  .tag.mcp { background: rgba(86,182,194,.12); color: #56b6c2; }
   .tag.opt { background: rgba(229,181,103,.12); color: var(--amber); }
 
   figure {
@@ -154,6 +155,11 @@ so publishing MusicSeed as open source means a new user needs as little as possi
   <text x="350" y="40" text-anchor="middle" class="box-label">musicseed-cli</text>
   <text x="350" y="58" text-anchor="middle" class="box-sub">Typer commands · Rich output</text>
 
+  <!-- MCP -->
+  <rect x="490" y="16" rx="8" width="200" height="58" fill="#1d212b" stroke="#56b6c2"/>
+  <text x="590" y="40" text-anchor="middle" class="box-label">musicseed-mcp</text>
+  <text x="590" y="58" text-anchor="middle" class="box-sub">MCP tools · stdio</text>
+
   <!-- API -->
   <rect x="170" y="116" rx="8" width="250" height="72" fill="#1d212b" stroke="#c678dd" stroke-width="1.5"/>
   <text x="295" y="138" text-anchor="middle" class="box-label">musicseed-api</text>
@@ -211,6 +217,10 @@ so publishing MusicSeed as open source means a new user needs as little as possi
   <line x1="420" y1="74" x2="540" y2="230" stroke="#6ea8fe" stroke-width="1" stroke-dasharray="4,4" marker-end="url(#arr)"/>
   <text x="490" y="145" class="flow-label">services (direct)</text>
 
+  <!-- edges: MCP → core (direct, preview/apply tools) -->
+  <line x1="590" y1="74" x2="590" y2="230" stroke="#56b6c2" stroke-width="1" stroke-dasharray="4,4" marker-end="url(#arr)"/>
+  <text x="600" y="150" class="flow-label">services (direct)</text>
+
   <path d="M 400 350 C 300 370, 180 380, 145 388" fill="none" stroke="#6ea8fe" stroke-width="1.5" marker-end="url(#arr)"/>
   <text x="215" y="370" class="flow-label">SQLAlchemy ORM</text>
 
@@ -230,7 +240,8 @@ so publishing MusicSeed as open source means a new user needs as little as possi
   Everything MusicSeed touches. Green borders are read-only SQLite files owned by Plex;
   the blue-bordered file is the only writable store. Amber is network I/O. Purple is the
   API orchestration layer — the browser UI reaches it over HTTP (Next.js proxy), while the
-  CLI calls core services directly. Removed in the dependency reduction: PostgreSQL server,
+  CLI and the MCP server call core services directly (MCP is a thin stdio agent surface for
+  playlist create/populate). Removed in the dependency reduction: PostgreSQL server,
   Docker, pgvector, psycopg, essentia-tensorflow, Jinja/HTMX server rendering, and all
   audio-file reads.
 </figcaption>
@@ -244,9 +255,10 @@ so publishing MusicSeed as open source means a new user needs as little as possi
   </div>
   <div class="card">
     <h4>Python packages (surfaces)</h4>
-    <p class="num">2 + 3 + Node</p>
-    <p>cli: typer, rich · api: fastapi, uvicorn, python-multipart · web: next, react, react-dom
-    (Node). Web talks to api over HTTP; api and cli depend on core via editable paths.</p>
+    <p class="num">2 + 3 + 2 + Node</p>
+    <p>cli: typer, rich · api: fastapi, uvicorn, python-multipart · mcp: mcp, anyio · web: next,
+    react, react-dom (Node). Web talks to api over HTTP; api, cli, and mcp depend on core via
+    editable paths.</p>
   </div>
   <div class="card">
     <h4>External processes</h4>
@@ -274,6 +286,8 @@ so publishing MusicSeed as open source means a new user needs as little as possi
     <tr><td>uvicorn</td><td>ASGI server for the API</td><td><span class="tag kept">kept</span> <span class="tag web">api</span></td></tr>
     <tr><td>python-multipart</td><td>HTML form parsing (setup wizard, credential forms)</td><td><span class="tag kept">kept</span> <span class="tag web">api</span></td></tr>
     <tr><td>next / react / react-dom</td><td>Next.js + React client-rendered web UI (Node)</td><td><span class="tag kept">kept</span> <span class="tag web">web</span></td></tr>
+    <tr><td>mcp</td><td>MCP server framework for the agent surface</td><td><span class="tag kept">kept</span> <span class="tag mcp">mcp</span></td></tr>
+    <tr><td>anyio</td><td>Worker-thread offload for synchronous core service calls</td><td><span class="tag kept">kept</span> <span class="tag mcp">mcp</span></td></tr>
     <tr class="removed"><td>jinja2</td><td>Server-rendered templates</td><td><span class="tag gone">removed · React rewrite</span></td></tr>
     <tr class="removed"><td>htmx (vendored file)</td><td>Fragment updates without a JS build step</td><td><span class="tag gone">removed · React rewrite</span></td></tr>
     <tr class="removed"><td>essentia-tensorflow</td><td>Self-generated audio embeddings (MusiCNN)</td><td><span class="tag gone">removed · Phase 1</span></td></tr>

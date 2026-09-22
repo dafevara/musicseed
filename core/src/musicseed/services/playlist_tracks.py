@@ -3,7 +3,7 @@
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, selectinload
 
-from musicseed.clients.plex import Playlist, PlexClient
+from musicseed.clients.plex import Playlist, PlexAPIError, PlexClient
 from musicseed.context import MusicSeedContext, get_context
 from musicseed.db.models import Track
 from musicseed.exceptions import ConfigurationError, NotFoundError
@@ -49,12 +49,27 @@ def create_playlist_from_tracks(
     Callers should include approved seed IDs in the selection when desired.
     """
     ctx = context or get_context()
-    if not name.strip() or not track_ids:
+    name = name.strip()
+    if not name or not track_ids:
         raise ConfigurationError("A playlist name and approved tracks are required.")
     if not ctx.config.plex.token:
         raise ConfigurationError("plex.token is not configured. Add it to your config file.")
     with ctx.session() as session:
         tracks = resolve_track_selection(session, track_ids)
     client = PlexClient(base_url=ctx.config.plex.url, token=ctx.config.plex.token)
-    playlist = client.create_playlist(name.strip(), [t.plex_id for t in tracks])
+    target_plex_ids = [t.plex_id for t in tracks]
+    existing = client.find_playlist(name)
+    if existing is not None:
+        current_ids = [
+            int(i.rating_key) for i in client.get_playlist_tracks(existing.rating_key)
+        ]
+        if current_ids == target_plex_ids:
+            # Retry after a lost response: the playlist already exists with
+            # exactly this selection, so report it as created.
+            return PlaylistTracksResult(playlist=existing, tracks=tracks)
+        raise PlexAPIError(
+            f"A playlist named '{name}' already exists in Plex with different "
+            f"tracks (id={existing.rating_key}). Choose a different name."
+        )
+    playlist = client.create_playlist(name, target_plex_ids)
     return PlaylistTracksResult(playlist=playlist, tracks=tracks)

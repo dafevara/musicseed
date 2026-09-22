@@ -27,6 +27,7 @@ class PopulateApplyResult(PopulateResult):
     """Result of a populate request that was written to Plex."""
 
     added_count: int
+    already_present_count: int = 0
 
 
 def _plex_client(context: MusicSeedContext | None = None) -> PlexClient:
@@ -57,6 +58,11 @@ def list_plex_playlists(context: MusicSeedContext | None = None) -> list[Playlis
 def _plex_ids_for_track_ids(session, track_ids: list[int]) -> list[int]:
     """Map all approved IDs in order; stale/unmapped IDs reject the whole write."""
     return [track.plex_id for track in resolve_track_selection(session, track_ids)]
+
+
+def _existing_plex_ids(client: PlexClient, rating_key: str) -> set[int]:
+    """Return the Plex track ratingKeys currently in a playlist."""
+    return {int(i.rating_key) for i in client.get_playlist_tracks(str(rating_key))}
 
 
 def _resolve_playlist_local_tracks(
@@ -231,8 +237,14 @@ def populate_playlist(
                 if rec.track.plex_id is not None
             ]
 
+        added_plex_ids: list[int] = []
+        already_present: int = 0
         if plex_ids:
-            client.add_to_playlist(playlist.rating_key, plex_ids)
+            existing_ids = _existing_plex_ids(client, playlist.rating_key)
+            added_plex_ids = [pid for pid in plex_ids if pid not in existing_ids]
+            already_present = len(plex_ids) - len(added_plex_ids)
+            if added_plex_ids:
+                client.add_to_playlist(playlist.rating_key, added_plex_ids)
 
         return PopulateApplyResult(
             playlist_id=playlist.rating_key,
@@ -242,5 +254,6 @@ def populate_playlist(
             recommendations=[
                 to_service_recommendation(r) for r in recommendations
             ],
-            added_count=len(plex_ids),
+            added_count=len(added_plex_ids),
+            already_present_count=already_present,
         )
