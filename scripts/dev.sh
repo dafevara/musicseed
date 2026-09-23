@@ -14,12 +14,14 @@ export MUSICSEED_LOG_LEVEL="${MUSICSEED_LOG_LEVEL:-DEBUG}"
 API_PID=""
 WEB_PID=""
 MCP_PID=""
+MCP_TAIL_PID=""
 
 cleanup() {
   trap - INT TERM EXIT
   [[ -n "$API_PID" ]] && kill "$API_PID" 2>/dev/null || true
   [[ -n "$WEB_PID" ]] && kill "$WEB_PID" 2>/dev/null || true
   [[ -n "$MCP_PID" ]] && kill "$MCP_PID" 2>/dev/null || true
+  [[ -n "$MCP_TAIL_PID" ]] && kill "$MCP_TAIL_PID" 2>/dev/null || true
   wait 2>/dev/null || true
 }
 trap cleanup INT TERM EXIT
@@ -32,8 +34,14 @@ echo "[dev] starting Next.js web UI on 127.0.0.1:${WEB_PORT} (proxying /api -> $
 (cd "$ROOT/web" && API_URL="$API_URL" exec npm run dev -- --port "$WEB_PORT") &
 WEB_PID=$!
 
-echo "[dev] starting MCP server on 127.0.0.1:${MCP_PORT} (streamable-http) ..."
-(cd "$ROOT/mcp" && exec uv run musicseed-mcp --transport streamable-http --host 127.0.0.1 --port "$MCP_PORT") &
+mkdir -p "$ROOT/logs"
+MCP_LOG="${MCP_LOG:-$ROOT/logs/mcp.log}"
+echo "[dev] starting MCP server on 127.0.0.1:${MCP_PORT} (streamable-http; logs -> ${MCP_LOG}) ..."
+: > "$MCP_LOG"
+(cd "$ROOT/mcp" && exec uv run musicseed-mcp --transport streamable-http --host 127.0.0.1 --port "$MCP_PORT" >> "$MCP_LOG" 2>&1) &
 MCP_PID=$!
+# Follow the log with a label so MCP output stands out among API/web output.
+tail -n +1 -f "$MCP_LOG" | awk '{ print "[mcp] " $0; fflush() }' &
+MCP_TAIL_PID=$!
 
 wait

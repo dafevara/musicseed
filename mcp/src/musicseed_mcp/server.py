@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from anyio import to_thread
 from mcp.server.mcpserver import MCPServer
+from musicseed.logging_config import get_logger, resolve_log_level, setup_logging
 
 from musicseed_mcp import tools
 
@@ -165,6 +166,18 @@ def main() -> None:
     parser.add_argument("--host", default="127.0.0.1", help="bind host for HTTP transports")
     parser.add_argument("--port", type=int, default=8790, help="bind port for HTTP transports")
     args = parser.parse_args()
+
+    # Configure MusicSeed's own loggers (core services log via get_logger) so
+    # tool-call errors are captured to the standard log file and stderr. The
+    # MCP stdio protocol uses stdout for JSON-RPC, so stderr is safe for logs.
+    setup_logging(
+        level=resolve_log_level(default="INFO"),
+        console=True,
+        console_level=resolve_log_level(default="WARNING"),
+    )
+    get_logger("mcp").info(
+        "starting transport=%s host=%s port=%s", args.transport, args.host, args.port
+    )
 
     if args.transport == "stdio":
         mcp.run()
