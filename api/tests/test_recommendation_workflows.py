@@ -33,6 +33,9 @@ def workflow(monkeypatch):
         def get_playlist(self, playlist_id):
             return Playlist(rating_key=playlist_id, title="Fixture", leaf_count=2)
 
+        def find_playlist(self, _name):
+            return None
+
         def get_playlist_tracks(self, _playlist_id):
             return [MediaItem(rating_key="101"), MediaItem(rating_key="102")]
 
