@@ -79,6 +79,7 @@ def preview(
     w_era: str = Query(default=""),
     w_novelty: str = Query(default=""),
 ) -> dict:
+    """Preview complementary recommendations for an existing playlist."""
     y_min = int(year_min) if year_min else None
     y_max = int(year_max) if year_max else None
 

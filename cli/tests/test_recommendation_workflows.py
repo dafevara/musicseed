@@ -43,6 +43,9 @@ def workflow(tmp_path, monkeypatch):
         def get_playlist(self, _id):
             return self.list_playlists()[0]
 
+        def find_playlist(self, _name):
+            return None
+
         def get_playlist_tracks(self, _id):
             return [MediaItem(rating_key="101"), MediaItem(rating_key="102")]
 

@@ -17,5 +17,6 @@ def library_status() -> dict:
 
 @router.post("/library/import")
 def start_import() -> dict:
+    """Start the import story line as a background job."""
     job_id = submit_job(IMPORT_KIND, run_import_job)
     return {"job_id": job_id}

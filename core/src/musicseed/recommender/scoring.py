@@ -238,8 +238,10 @@ def build_seed_profile(seed_tracks: Sequence[Track], vectors: SonicVectors) -> S
         for vector in (vectors.get(track.plex_id) for track in seed_tracks)
         if vector is not None
     ]
+    # Element-wise mean of the seed vectors; None when none exist, so sonic stays neutral.
     embedding = np.mean(embeddings, axis=0) if embeddings else None
 
+    # Tags union across seeds; year and popularity average over the seeds that have them.
     styles = {style.name for track in seed_tracks for style in track.styles}
     genres = {genre.name for track in seed_tracks for genre in track.genres}
     year = average_or_none(track.year for track in seed_tracks)
@@ -370,6 +372,7 @@ def score_signals(
     era = era_proximity(seed.year, candidate_year)
     novelty = novelty_score(play_count)
 
+    # Normalize by the weight sum so only relative magnitudes matter.
     total_weight = (
         weights.sonic
         + weights.popularity
@@ -390,6 +393,7 @@ def score_signals(
         + novelty * weights.novelty
     ) / total_weight
 
+    # Availability labels whether each component reflects real evidence or a neutral fallback.
     availability: dict[str, SignalStatus] = {
         "sonic": (
             "observed"

@@ -68,6 +68,7 @@ def import_plex_sonic(
         return SonicVectorImportResult(total=0, imported=0, updated=0)
     if progress_callback is not None:
         progress_callback(0, 0, "reading Plex snapshot")
+    # Read Plex's blobs DB once; vectors come back L2-normalized in memory, keyed by plex_id.
     dbs = resolve_plex_dbs(ctx.config, refresh=True)
     vectors = load_sonic_vectors(
         plex_db_path=dbs.library_db,
@@ -87,6 +88,7 @@ def import_plex_sonic(
             break
         ids = plex_ids[start:start + batch_size]
         with ctx.session() as session:
+            # Upsert per batch: existing rows refresh in place, new rows insert.
             existing = set(session.scalars(select(TrackVector.plex_id).where(
                 TrackVector.plex_id.in_(ids)
             )))
@@ -97,6 +99,7 @@ def import_plex_sonic(
                 index_elements=[TrackVector.plex_id],
                 set_={"vector": statement.excluded.vector, "updated_at": func.now()},
             ))
+            # Bump the persisted generation so cached vectors (any process) reload.
             revision = insert(RuntimeState).values(key="sonic_generation", value=1)
             session.execute(revision.on_conflict_do_update(
                 index_elements=[RuntimeState.key], set_={"value": RuntimeState.value + 1},
@@ -108,6 +111,7 @@ def import_plex_sonic(
         if progress_callback is not None:
             progress_callback(processed, total, "sonic vectors")
 
+    # Drop this context's cache so the next scoring run reads the fresh matrix.
     ctx.reset_sonic_vectors()
 
     return SonicVectorImportResult(total=total, imported=imported, updated=updated)

@@ -37,7 +37,21 @@ def save_listenbrainz_token(token: str) -> None:
 
 
 def run_enrich_job(job_id: int, source: str = "spotify") -> None:
-    """Job target: enrich tracks via the given source and update job progress."""
+    """Job target for the enrichment story line (runs in a ``JobManager`` thread).
+
+    Mirrors the import target: ``routes.enrichment`` submits this callable
+    under a source-specific job kind (``enrich:spotify`` / ``enrich:listenbrainz``);
+    the manager runs it in a daemon thread; this function drives core's
+    ``enrich_tracks`` while forwarding its ``(current, total, message)``
+    progress to ``update_progress``, then records a ``complete_job`` result
+    summary on success. Cancellation is cooperative via ``should_cancel``; a
+    cancelled run emits a ``cancelled`` checkpoint and returns.
+
+    Args:
+        job_id: the job row id assigned by the job manager.
+        source: enrichment source passed to core's ``enrich_tracks``
+            (``"spotify"`` or ``"listenbrainz"``); defaults to Spotify.
+    """
     update_progress(job_id, 0, 1, f"enriching via {source}…")
 
     cancelled = [False]

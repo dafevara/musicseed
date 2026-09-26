@@ -54,10 +54,12 @@ def create_playlist_from_tracks(
         raise ConfigurationError("A playlist name and approved tracks are required.")
     if not ctx.config.plex.token:
         raise ConfigurationError("plex.token is not configured. Add it to your config file.")
+    # Validate every id (and map to Plex) before any write; a stale id rejects the whole selection.
     with ctx.session() as session:
         tracks = resolve_track_selection(session, track_ids)
     client = PlexClient(base_url=ctx.config.plex.url, token=ctx.config.plex.token)
     target_plex_ids = [t.plex_id for t in tracks]
+    # Reuse-or-conflict: only an exact match is safe to treat as already created.
     existing = client.find_playlist(name)
     if existing is not None:
         current_ids = [

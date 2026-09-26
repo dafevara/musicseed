@@ -20,7 +20,23 @@ def get_library_status() -> LibraryStatus:
 
 
 def run_import_job(job_id: int) -> None:
-    """Job target: import the Plex library and update job progress."""
+    """Job target for the import story line (runs in a ``JobManager`` thread).
+
+    ``routes.library.start_import`` submits this callable; the manager runs it
+    in a daemon thread with a persisted job row. This function drives core's
+    ``import_library``, translating its ``(current, total, phase)`` progress
+    into ``update_progress`` checkpoints for the UI, then records a
+    ``complete_job`` result summary on success (the manager finalizes the row
+    once the target returns).
+
+    Cancellation is cooperative: ``should_cancel`` asks the job manager on
+    every importer poll, and a cancelled run emits a ``cancelled`` checkpoint
+    and returns without recording success.
+
+    Args:
+        job_id: the job row id assigned by the job manager (always the first
+            positional argument, per the manager convention).
+    """
     update_progress(job_id, 0, 1, "importing library…")
 
     cancelled = [False]

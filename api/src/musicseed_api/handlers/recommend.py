@@ -34,7 +34,31 @@ def run_recommendations(
     min_score: float | None = None,
     weights: Weights | None = None,
 ) -> RecommendationResult:
-    """Run the full recommendation pipeline for a set of seed track ids."""
+    """Run the recommendation story line for a set of seed track ids.
+
+    Delegates to core's ``get_recommendations`` unchanged. This handler exists
+    to (a) validate that at least one seed is present before a confusing
+    ValueError reaches the caller, and (b) give the CLI and web surfaces a
+    framework-free callable that doesn't reach into core directly.
+
+    Args:
+        seed_ids: local seed track ids.
+        limit: maximum number of recommendations to return.
+        method: ``"average"`` or ``"frequency"``.
+        per_seed_limit: candidates gathered per seed ("frequency" only).
+        year_min: only recommend tracks released in this year or later.
+        year_max: only recommend tracks released in this year or earlier.
+        max_tracks_per_artist: artist diversity cap during selection.
+        min_score: drop recommendations below this total score.
+        weights: signal weights; defaults to the "balanced" preset.
+
+    Returns:
+        The core ``RecommendationResult`` (resolved seeds, scored
+        recommendations, and sonic coverage).
+
+    Raises:
+        ValueError: if ``seed_ids`` is empty.
+    """
     if not seed_ids:
         raise ValueError("At least one seed track is required.")
     return get_recommendations(
