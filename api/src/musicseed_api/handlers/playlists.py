@@ -38,7 +38,30 @@ def create_playlist_from_seeds(
     max_tracks_per_artist: int = 3,
     track_ids: list[int] | None = None,
 ) -> dict:
-    """Create from approved IDs when supplied; otherwise generate a new selection."""
+    """Run the playlist-create story line, from approved IDs or a fresh selection.
+
+    When ``track_ids`` is provided, the approved selection (seeds + chosen
+    recommendations) is written verbatim in order via core's
+    ``create_playlist_from_tracks`` — no re-scoring, no re-filtering.
+    Otherwise a selection is generated from the seeds via core's
+    ``create_playlist`` (generate-and-write) and the resulting playlist is
+    reported.
+
+    Args:
+        name: playlist title.
+        seed_ids: local seed track ids.
+        limit: maximum recommendations when generating a selection.
+        weights: signal weights; defaults to the "balanced" preset.
+        year_min: only recommend tracks released in this year or later.
+        year_max: only recommend tracks released in this year or earlier.
+        max_tracks_per_artist: artist diversity cap during selection.
+        track_ids: approved local track ids to write verbatim; when set, the
+            recommendation step is skipped.
+
+    Returns:
+        A wire-ready dict with the playlist name, track count, seed count,
+        and recommendation count.
+    """
     if track_ids is not None:
         seeds = list(dict.fromkeys(seed_ids))
         written = create_playlist_from_tracks(name, seeds + track_ids)
@@ -118,10 +141,27 @@ def apply_populate(
     max_tracks_per_artist: int = 3,
     track_ids: list[int] | None = None,
 ) -> dict:
-    """Generate recommendations and add them to an existing Plex playlist.
+    """Run the playlist-populate story line and write to Plex.
 
-    When ``track_ids`` is provided, only those tracks are added and the
-    recommendation step is skipped.
+    When ``track_ids`` is provided, only that approved selection is appended
+    (generation is skipped); otherwise recommendations are generated from the
+    playlist's matched tracks. Core's ``populate_playlist`` validates the
+    whole selection before any Plex write and reports how many tracks were
+    actually added.
+
+    Args:
+        playlist_id: Plex rating key of the playlist to populate.
+        limit: maximum recommendations to add (generation path only).
+        method: ``"average"`` or ``"frequency"`` (generation path only).
+        weights: signal weights (generation path only).
+        year_min: only recommend tracks released in this year or later.
+        year_max: only recommend tracks released in this year or earlier.
+        max_tracks_per_artist: artist diversity cap (generation path only).
+        track_ids: approved local track ids to append verbatim.
+
+    Returns:
+        A wire-ready dict with the playlist identity, match counts, and how
+        many tracks were added.
     """
     result: PopulateApplyResult = populate_playlist(
         playlist_id=playlist_id,

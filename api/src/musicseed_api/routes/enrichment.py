@@ -22,6 +22,7 @@ def start_spotify_enrich(
     spotify_client_id: Annotated[str, Form()] = "",
     spotify_client_secret: Annotated[str, Form()] = "",
 ) -> dict:
+    """Save Spotify credentials and start the Spotify enrichment job."""
     save_spotify_creds(
         spotify_client_id.strip(), spotify_client_secret.strip(),
     )
@@ -33,6 +34,7 @@ def start_spotify_enrich(
 def start_listenbrainz_enrich(
     listenbrainz_token: Annotated[str, Form()] = "",
 ) -> dict:
+    """Save the ListenBrainz token and start the ListenBrainz enrichment job."""
     save_listenbrainz_token(listenbrainz_token.strip())
     job_id = submit_job(enrich_kind("listenbrainz"), run_enrich_job, "listenbrainz")
     return {"job_id": job_id}

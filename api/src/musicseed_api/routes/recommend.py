@@ -49,6 +49,7 @@ def recommend(
     w_era: Annotated[str, Form()] = "",
     w_novelty: Annotated[str, Form()] = "",
 ) -> dict:
+    """Parse seeds/weights from the form, score, and reshape to the wire contract."""
     ids = parse_seed_ids(seed_ids)
     y_min = int(year_min) if year_min.strip() else None
     y_max = int(year_max) if year_max.strip() else None

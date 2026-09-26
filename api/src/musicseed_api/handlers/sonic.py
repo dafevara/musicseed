@@ -62,7 +62,17 @@ def trigger_sonic_refresh(
 
 
 def run_sonic_import_job(job_id: int) -> None:
-    """Job target: import Plex sonic vectors into the local store."""
+    """Job target for the sonic-vector import story line (runs in a manager thread).
+
+    Drives core's ``import_plex_sonic`` — which reads Plex's blobs database
+    once and upserts vectors into the local ``track_vectors`` table — while
+    forwarding batch progress to ``update_progress``. On success it records a
+    ``complete_job`` result summary; a cooperatively cancelled run emits a
+    ``cancelled`` checkpoint and returns.
+
+    Args:
+        job_id: the job row id assigned by the job manager.
+    """
     update_progress(job_id, 0, 1, "importing Plex sonic vectors…")
 
     cancelled = [False]

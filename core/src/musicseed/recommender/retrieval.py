@@ -62,9 +62,11 @@ class ConstrainedTopK:
         """Consider one distinct candidate; evicted score objects are not retained."""
         group = self.by_artist.get(record.artist_id, set())
         victim = None
+        # Exchange rule: beat the worst of this artist's group if it's full, else the global worst.
         if len(group) >= self.artist_max:
             victim = min((self.selected[i] for i in group), key=lambda r: r.rank)
         elif len(self.selected) >= self.limit:
+            # Lazily skip heap entries whose id was already evicted.
             while self.heap[0][1] not in self.selected:
                 heapq.heappop(self.heap)
             victim = self.selected[self.heap[0][1]]
@@ -110,6 +112,7 @@ def score_eligible_tracks(
     only the final selected tracks. No artist/album/mood/history graphs are read.
     """
     selected = ConstrainedTopK(limit, max_tracks_per_artist)
+    # Seeds are excluded by set membership, not an unbounded SQL IN list.
     excluded = seed.track_ids | (exclude_ids or set())
     query = (
         select(
@@ -136,6 +139,7 @@ def score_eligible_tracks(
         if not rows:
             continue
         ids = [row.id for row in rows]
+        # Fetch tag names for the whole batch in two joins, then map them back per track.
         styles: dict[int, set[str]] = defaultdict(set)
         genres: dict[int, set[str]] = defaultdict(set)
         for track_id, name in session.execute(
@@ -147,6 +151,7 @@ def score_eligible_tracks(
         ):
             genres[track_id].add(name)
         for row in rows:
+            # Score from scalar facts; the top-k keeps only the best under the artist cap.
             vector = vectors.get(row.plex_id)
             count += 1
             with_vector += has_usable_vector(vector)

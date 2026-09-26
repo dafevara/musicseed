@@ -143,6 +143,7 @@ def resolve_seed_tracks(
     seeds: list[Track] = []
     seen: set[int] = set()
 
+    # Fetch ids in bounded batches (SQLite bind-var limit), then replay in request order.
     requested = list(dict.fromkeys(seed_ids or []))
     by_id: dict[int, Track] = {}
     for start in range(0, len(requested), FEATURE_BATCH_SIZE):
@@ -160,6 +161,7 @@ def resolve_seed_tracks(
         seeds.append(track)
         seen.add(track.id)
 
+    # Text seeds resolve one at a time; dedupe against ids already accepted.
     for seed_text in seed_texts or []:
         track = _resolve_seed_text(session, seed_text)
         if track.id not in seen:
@@ -198,6 +200,7 @@ def recommend_from_profile(
         min_score=min_score,
         exclude_ids=exclude_ids,
     )
+    # Scalar scan done; now materialize full ORM graphs only for the selected ids.
     ids = [record.id for record in selected]
     tracks: dict[int, Track] = {}
     for start in range(0, len(ids), FEATURE_BATCH_SIZE):
@@ -260,11 +263,13 @@ def recommend_frequency(
         raise ValueError("per_seed_limit must be greater than zero")
     if not seed_tracks:
         return [], SonicCoverage(candidates=0, with_vector=0)
+    # Exclude every seed (and caller ids) up front; each scan is a clean single-track profile.
     excluded = set(exclude_ids or set()) | {track.id for track in seed_tracks}
     selected = ConstrainedTopK(limit, max_tracks_per_artist)
     votes: dict[int, list[tuple[int, ScoreBreakdown, Track]]] = defaultdict(list)
     coverage = SonicCoverage(candidates=0, with_vector=0)
 
+    # One scalar scan per seed; the vector snapshot is reused across all of them.
     for seed_track in seed_tracks:
         recs, seed_coverage = recommend_from_profile(
             session,
@@ -284,6 +289,7 @@ def recommend_frequency(
         for rec in recs:
             votes[rec.track.id].append((seed_track.id, rec.score, rec.track))
 
+    # A candidate's score is the mean of its per-seed scores; vote count is the tiebreaker.
     for track_id, entries in votes.items():
         score = _average_score([score for _, score, _ in entries])
         if min_score is None or score.total >= min_score:
@@ -356,6 +362,7 @@ def recommend_tracks(
     weights = weights or Weights()
     if vectors is None:
         vectors = get_sonic_vectors()
+    # Resolve seeds once; both strategies share this step and its dedupe/ambiguity rules.
     seed_tracks = resolve_seed_tracks(session, seed_texts=seed_texts, seed_ids=seed_ids)
     if method == "frequency":
         selected, coverage = recommend_frequency(
@@ -373,6 +380,7 @@ def recommend_tracks(
         return seed_tracks, selected, coverage
     if method != "average":
         raise ValueError(f"Unknown recommendation method: {method}")
+    # "average" collapses the seeds into one profile and scores in a single scan.
     seed_profile = build_seed_profile(seed_tracks, vectors)
     selected, coverage = recommend_from_profile(
         session,

@@ -1,4 +1,25 @@
-"""Plex SQLite database importer."""
+"""Plex SQLite database importer.
+
+This module is the read half of MusicSeed's import story line: it streams
+metadata straight from a Plex ``com.plexapp.plugins.library.db`` file into
+the local SQLite ORM (``musicseed.db.models``). It never talks to the Plex
+HTTP API and never mutates the source database — the connection is opened
+read-only (``mode=ro``).
+
+The flow is ``services.library.import_library`` (entry point) →
+``plex_db_source.resolve_plex_dbs`` → ``PlexImporter`` (this module's
+read-only source adapter) → ``import_from_plex`` (the phase loop below). Data
+moves in one direction:
+
+    Plex ``metadata_items`` rows → ``PlexArtistRow``/``PlexAlbumRow``/``PlexTrackRow``
+    → local ``Artist``/``Album``/``Track`` ORM rows, with Plex ids remapped
+    to local ids as each phase commits.
+
+Import order matters: artists first (albums link to them), then albums
+(tracks link to them), then tracks (play history and tags link to them), then
+play history and the derived track stats. ``import_from_plex`` is idempotent —
+existing Plex ids are reused unless ``full_import`` is set.
+"""
 
 from __future__ import annotations
 
@@ -92,7 +113,15 @@ def extract_mbid(tag_value: str) -> str | None:
 
 
 class PlexImporter:
-    """Import music metadata from Plex SQLite database."""
+    """Read-only adapter over a Plex library database.
+
+    Owns a single read-only ``sqlite3`` connection and exposes the row
+    iterators and counts that ``import_from_plex`` consumes. It maps Plex's
+    raw ``metadata_items`` schema (plus the ``tags``/``taggings`` and
+    ``media_parts`` tables) into the small ``PlexTrackRow``/``PlexAlbumRow``/
+    ``PlexArtistRow`` models above; the importer, not this adapter, decides
+    how those rows become local ORM rows.
+    """
 
     def __init__(self, db_path: Path, library_name: str = "Music"):
         self.db_path = db_path
@@ -387,18 +416,42 @@ def import_from_plex(
     progress_callback: "Callable[[int, int, str], None] | None" = None,
     should_cancel: "Callable[[], bool] | None" = None,
 ) -> dict[str, int]:
-    """Import music library from Plex database.
+    """Import a Plex music library into the local database.
+
+    This is the write half of the import story line: it walks the read-only
+    source adapter's iterators phase by phase, upserting local ORM rows and
+    remapping Plex ids to local ids along the way.
+
+    Phases run in dependency order, each preceded by a cancellation check and
+    committed periodically so the SQLite write lock is released:
+
+    1. **artists** — ``Artist`` rows (albums link to these ids).
+    2. **albums** — ``Album`` rows linked to their parent artist.
+    3. **tracks** — ``Track`` rows linked to album/artist, plus file paths,
+       MBIDs, and genre/mood/style tag associations (styles are inherited
+       from album/artist rows; see ``PlexImporter.get_track_tags``).
+    4. **play history** — ``PlayHistory`` rows deduplicated by Plex view id.
+    5. **stats** — ``TrackStats`` play counts derived from the new history.
+
+    The import is idempotent: existing rows are matched by ``plex_id`` (or
+    ``plex_view_id``) and reused rather than duplicated. With ``full_import``
+    those existing rows are refreshed in place instead of skipped.
 
     Args:
-        session: SQLAlchemy session
-        plex_db_path: Path to Plex SQLite database
-        library_name: Name of the music library in Plex
-        full_import: If True, delete existing data first
-        should_cancel: Optional callback returning True when the job was canceled.
-            Checked between import phases and periodically within the track loop.
+        session: open SQLAlchemy session used for every write.
+        plex_db_path: path to the Plex library SQLite database.
+        library_name: name of the Plex music library section to import.
+        full_import: if True, overwrite existing rows in place instead of
+            skipping them.
+        progress_callback: optional ``(current, total, phase)`` callback
+            invoked after each commit batch.
+        should_cancel: optional callable polled between phases and
+            periodically within the track/history loops; returns True to
+            stop the import early.
 
     Returns:
-        Dictionary with import counts
+        A dict of per-phase row counts: ``{"artists", "albums", "tracks",
+        "play_history"}``.
     """
     logger.info(f"Starting Plex import from {plex_db_path}")
     logger.debug(f"Library: {library_name}, full_import: {full_import}")
@@ -437,6 +490,7 @@ def import_from_plex(
             TaskProgressColumn(),
             console=console,
         ) as progress:
+            # Phases run in dependency order: artists → albums → tracks → history → stats.
             # Import artists
             artist_task = progress.add_task("Importing artists...", total=counts["artists"])
             if _cancelled():
@@ -577,6 +631,7 @@ def import_from_plex(
                     session.flush()
                     imported["tracks"] += 1
 
+                # Remember both keys: history joins by guid, stats by local id.
                 track_map[plex_track.id] = track.id
                 guid_to_track[plex_track.guid] = track.id
 
@@ -640,6 +695,7 @@ def import_from_plex(
             play_counts: dict[int, int] = {}  # track_id -> count
             last_played: dict[int, datetime] = {}  # track_id -> last played
 
+            # History rows are keyed by Plex guid; drop entries for tracks we didn't import.
             for entry in importer.get_play_history():
                 plex_guid = entry["plex_guid"]
                 if plex_guid not in guid_to_track:
@@ -686,7 +742,7 @@ def import_from_plex(
                 session.commit()
                 progress_callback(history_seen, counts["play_history"], "play history")
 
-            # Update track stats
+            # Update stats from only this run's new history (incremental, not a full recount).
             stats_task = progress.add_task("Updating track stats...", total=len(play_counts))
             for track_id, count in play_counts.items():
                 stats = session.query(TrackStats).filter_by(track_id=track_id).first()

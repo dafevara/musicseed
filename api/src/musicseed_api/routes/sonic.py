@@ -28,11 +28,13 @@ def sonic_refresh(
     library_name: str | None = Query(default=None),
     days: int = Query(default=7),
 ) -> dict:
+    """Trigger a Plex sonic analysis refresh for recently added music."""
     result = trigger_sonic_refresh(library_name, days=days)
     return result.model_dump()
 
 
 @router.post("/sonic/import")
 def sonic_import() -> dict:
+    """Start the sonic-vector import job."""
     job_id = submit_job(SONIC_IMPORT_KIND, run_sonic_import_job)
     return {"job_id": job_id}

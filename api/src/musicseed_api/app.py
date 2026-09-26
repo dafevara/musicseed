@@ -30,6 +30,22 @@ from musicseed_api.routes import (
 
 
 def create_app() -> FastAPI:
+    """Assemble the JSON API: mount every route module and register the error contract.
+
+    Every route parses HTTP, calls a framework-free handler, and returns JSON.
+    The exception handlers registered here map core's typed exceptions to HTTP
+    status codes once, so no route translates an error itself:
+
+    * ``NotFoundError`` → 404
+    * ``ConfigurationError`` → 400
+    * ``JobConflictError`` → 409
+    * ``PlexAPIError`` → 502
+    * any other ``MusicSeedError`` → 500
+
+    Returns:
+        A FastAPI app with no URL prefix. ``server.create_ui_app`` mounts it
+        at ``/api`` when a web UI is served alongside the JSON API.
+    """
     app = FastAPI(title="MusicSeed API", version="0.1.0")
 
     # Single error contract: typed core exceptions map to HTTP status codes

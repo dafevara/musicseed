@@ -106,12 +106,14 @@ def exclusive_writer(kind: str):
             bound = parameters.bind(*args, **kwargs)
             context = bound.arguments.get("context") or get_context()
             owned = _worker_job.get()
+            # Reuse a managed worker's claim; otherwise acquire the persisted writer claim.
             if owned is not None:
                 if owned[0] != context.config.database.url:
                     raise JobConflictError("A worker cannot change its database.")
                 job_id = owned[1]
             else:
                 with _configuration_lock:
+                    # Deep-copy so callbacks stay bound to this database, not a later one.
                     context = MusicSeedContext(context.config.model_copy(deep=True))
                     with use_context(context):
                         job_id = _claim_job(kind, context)
@@ -120,6 +122,7 @@ def exclusive_writer(kind: str):
                 original_cancel = bound.arguments.get("should_cancel")
                 saw_cancel = False
 
+                # Wrap the target's cancel hook so a DB cancel_requested also stops the work.
                 def should_cancel():
                     nonlocal saw_cancel
                     saw_cancel = bool(saw_cancel or (original_cancel and original_cancel())
@@ -132,6 +135,7 @@ def exclusive_writer(kind: str):
                     if owned is None:
                         start_job(job_id)
                     result = function(*bound.args, **bound.kwargs)
+                    # Terminal state is written here, not inside the target.
                     if saw_cancel or get_job(job_id)["state"] == JobState.CANCEL_REQUESTED:
                         cancel_job(job_id)
                     elif owned is None:
@@ -518,12 +522,14 @@ class JobManager:
             token = _worker_job.set(key)
             try:
                 start_job(job_id)
+                # Defer terminal writes from inside the target until it has fully returned.
                 managed = _managed_worker.set(True)
                 try:
                     if not self.should_cancel(job_id):
                         target(job_id, *args, **kwargs)
                 finally:
                     _managed_worker.reset(managed)
+                # Publish the deferred result (or honor a late cancel) now that the target returned.
                 job = get_job(job_id)
                 if job and job["state"] == JobState.CANCEL_REQUESTED:
                     cancel_job(job_id)

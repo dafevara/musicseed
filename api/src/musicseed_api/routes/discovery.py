@@ -36,6 +36,7 @@ router = APIRouter(tags=["discovery"])
 
 @router.get("/discovery/plex-servers")
 def get_plex_servers() -> dict:
+    """List Plex servers on the local network and the Plex account."""
     servers = run_plex_discovery()
     return {"servers": [s.model_dump() for s in servers]}
 
@@ -48,6 +49,7 @@ def get_discovery(
     plex_url: str = Query(default=""),
     plex_library: str = Query(default=""),
 ) -> dict:
+    """Probe the local environment (read-only) with optional path/URL overrides."""
     result = run_discovery(
         musicseed_db_path=musicseed_db_path,
         plex_db_path=plex_db_path,
@@ -67,6 +69,7 @@ def check_discovery(
     plex_token: Annotated[str, Form()] = "",
     plex_library: Annotated[str, Form()] = "",
 ) -> dict:
+    """Probe the environment with a submitted setup form; secrets are not echoed."""
     overrides, _form = extract_overrides(
         musicseed_db_path=musicseed_db_path,
         plex_db_path=plex_db_path,
@@ -93,6 +96,7 @@ def init_database(
     plex_db_ssh_password: Annotated[str, Form()] = "",
     plex_db_ssh_port: Annotated[str, Form()] = "",
 ) -> dict:
+    """Persist the submitted setup overrides and create the MusicSeed database."""
     overrides, _form = extract_overrides(
         musicseed_db_path=musicseed_db_path,
         spotify_client_id=spotify_client_id,
@@ -126,6 +130,7 @@ def save_config(
     plex_db_ssh_password: Annotated[str, Form()] = "",
     plex_db_ssh_port: Annotated[str, Form()] = "",
 ) -> dict:
+    """Persist setup overrides without creating the database or starting work."""
     overrides, _form = extract_overrides(
         musicseed_db_path=musicseed_db_path,
         spotify_client_id=spotify_client_id,

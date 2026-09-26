@@ -1,4 +1,28 @@
-"""Enrichment pipeline for batch processing tracks."""
+"""Async enrichment pipelines for Spotify metadata and ListenBrainz popularity.
+
+The public entry point is ``services.enrichment.enrich_tracks`` — a
+synchronous wrapper that runs these coroutines via ``asyncio.run``. This
+module holds the async internals of the enrichment story line:
+
+    select → batch-fetch → write → normalize
+
+Each source has its own runner that shares that shape:
+
+* **Spotify** (``run_spotify_enrichment``) — searches for tracks by title/
+  artist/album and writes ``spotify_id``, ``spotify_popularity``, and a
+  normalized ``popularity_score`` onto each ``Track``.
+* **ListenBrainz** (``run_listenbrainz_enrichment``) — fetches listen/user
+  counts for tracks that already have a recording MBID, then
+  ``normalize_listenbrainz_popularity`` rescales those counts into
+  ``popularity_score``.
+
+Both runners select their work queue with the read-only
+``get_tracks_to_enrich`` / ``get_tracks_for_listenbrainz`` helpers, then
+stream batches. Each batch opens and closes its own session so the SQLite
+write lock is held only for the duration of one batch, never the whole run.
+Cancellation is cooperative: the ``should_cancel`` callback is polled between
+batches.
+"""
 
 import math
 from collections.abc import Callable
@@ -79,15 +103,23 @@ def get_tracks_to_enrich(
     artist: str | None = None,
     album: str | None = None,
 ) -> list[dict]:
-    """Get tracks that need Spotify enrichment.
+    """Select the Spotify enrichment work queue.
+
+    Returns tracks joined to their artist/album names so the search client has
+    the fields it needs. Rows are plain dicts, so they survive the opening
+    session closing before the async fetch begins.
 
     Args:
-        session: Database session
-        limit: Max tracks to return
-        unattempted_only: Only get tracks not yet attempted
+        session: open database session.
+        limit: maximum number of tracks to return (None for all).
+        unattempted_only: when True, only tracks whose ``spotify_matched`` is
+            false/null (i.e. not yet attempted).
+        artist: optional artist-name filter (ILIKE pattern).
+        album: optional album-title filter (ILIKE pattern).
 
     Returns:
-        List of track dicts
+        A list of ``{"id", "title", "artist", "album", "duration_ms"}``
+        dicts, one per selected track.
     """
     query = session.query(
         Track.id,
@@ -128,7 +160,23 @@ def get_tracks_for_listenbrainz(
     artist: str | None = None,
     album: str | None = None,
 ) -> list[dict]:
-    """Get tracks with recording MBIDs for ListenBrainz popularity enrichment."""
+    """Select the ListenBrainz enrichment work queue.
+
+    Only tracks with a recording MBID are eligible, because ListenBrainz
+    popularity is keyed by MusicBrainz recording id. Rows are
+    ``{"id", "mbid"}`` dicts.
+
+    Args:
+        session: open database session.
+        limit: maximum number of tracks to return (None for all).
+        unattempted_only: when True, only tracks whose
+            ``listenbrainz_matched`` is false/null (not yet attempted).
+        artist: optional artist-name filter (ILIKE pattern).
+        album: optional album-title filter (ILIKE pattern).
+
+    Returns:
+        A list of ``{"id", "mbid"}`` dicts, one per selected track.
+    """
     query = (
         session.query(Track.id, Track.mbid)
         .outerjoin(Artist, Track.artist_id == Artist.id)
@@ -161,6 +209,7 @@ def normalize_listenbrainz_popularity(session: Session) -> None:
     if max_count <= 0:
         return
 
+    # Log-scale against the library max; the +1 keeps a zero count defined (maps to 0.0).
     max_log = math.log10(max_count + 1)
     for track in tracks:
         listen_count = track.listenbrainz_listen_count or 0
@@ -206,6 +255,7 @@ async def enrich_tracks_with_listenbrainz(
         id_by_mbid = {track["mbid"]: track["id"] for track in batch}
 
         try:
+            # Fetch outside any session; the write lock is taken only for the short write below.
             results = await listenbrainz_client.get_recording_popularity(mbids)
             with scope() as session:
                 for result in results:
@@ -233,6 +283,7 @@ async def enrich_tracks_with_listenbrainz(
             progress.advance(task, advance=len(batch))
 
     if not cancelled:
+        # Normalize once at the end over the full set, so the max is stable.
         with scope() as session:
             normalize_listenbrainz_popularity(session)
     return matched, unmatched, errors
@@ -280,6 +331,7 @@ async def enrich_tracks(
             logger.info("Cancellation requested — stopping Spotify enrichment")
             break
         chunk = tracks[start : start + batch_size]
+        # Write each batch in its own session; the await happens before the write lock is taken.
         with scope() as session:
             for track_data in chunk:
                 try:
@@ -292,7 +344,7 @@ async def enrich_tracks(
 
                     track = session.get(Track, track_data["id"])
                     if track:
-                        track.spotify_matched = True  # Mark as attempted
+                        track.spotify_matched = True  # Attempted even on a miss.
 
                         if result.matched and result.spotify_track:
                             track.spotify_id = result.spotify_track.spotify_id
@@ -340,10 +392,17 @@ async def run_spotify_enrichment(
     should_cancel: Callable[[], bool] | None = None,
     session_scope: SessionScope | None = None,
 ) -> EnrichmentStats:
-    """Run the enrichment pipeline via Spotify search."""
+    """Run the Spotify enrichment story line end to end.
+
+    Selects the work queue, estimates runtime, opens one rate-limited Spotify
+    client, and streams the queue through ``enrich_tracks`` in committed
+    batches. Returns aggregate stats; per-track failures are counted in
+    ``errors`` rather than raised.
+    """
     logger.info("Starting Spotify enrichment pipeline")
     logger.info(f"Rate limit: {requests_per_second} requests/second")
 
+    # Snapshot the work queue up front; the session closes before any network call.
     with (session_scope or get_session)() as session:
         tracks = get_tracks_to_enrich(
             session,
@@ -412,10 +471,17 @@ async def run_listenbrainz_enrichment(
     should_cancel: Callable[[], bool] | None = None,
     session_scope: SessionScope | None = None,
 ) -> EnrichmentStats:
-    """Run ListenBrainz popularity enrichment for tracks with MBIDs."""
+    """Run the ListenBrainz enrichment story line end to end.
+
+    Selects the MBID-keyed work queue, opens one rate-limited ListenBrainz
+    client, and streams the queue through ``enrich_tracks_with_listenbrainz``.
+    On completion, raw listen counts are normalized into ``popularity_score``.
+    Returns aggregate stats.
+    """
     logger.info("Starting ListenBrainz enrichment pipeline")
     logger.info(f"Rate limit: {requests_per_second} requests/second")
 
+    # Snapshot the work queue up front; the session closes before any network call.
     with (session_scope or get_session)() as session:
         tracks = get_tracks_for_listenbrainz(
             session,
@@ -483,7 +549,13 @@ async def run_enrichment(
     should_cancel: Callable[[], bool] | None = None,
     session_scope: SessionScope | None = None,
 ) -> EnrichmentStats:
-    """Run enrichment for the selected source."""
+    """Dispatch to the selected source's enrichment runner.
+
+    This is the coroutine that ``services.enrichment.enrich_tracks`` wraps with
+    ``asyncio.run``. It does no credential checks — the service layer performs
+    those — and only routes to ``run_spotify_enrichment`` or
+    ``run_listenbrainz_enrichment``.
+    """
     if source == "spotify":
         return await run_spotify_enrichment(
             client_id=client_id,

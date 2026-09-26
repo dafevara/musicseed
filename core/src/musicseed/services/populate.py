@@ -214,6 +214,7 @@ def populate_playlist(
             client, session, playlist_id
         )
 
+        # Explicit approved ids bypass generation; the whole selection must map to Plex.
         if track_ids is not None:
             recommendations: list[Recommendation] = []
             plex_ids = _plex_ids_for_track_ids(session, track_ids)
@@ -240,6 +241,7 @@ def populate_playlist(
         added_plex_ids: list[int] = []
         already_present: int = 0
         if plex_ids:
+            # Diff against what's already in the playlist so we never duplicate existing tracks.
             existing_ids = _existing_plex_ids(client, playlist.rating_key)
             added_plex_ids = [pid for pid in plex_ids if pid not in existing_ids]
             already_present = len(plex_ids) - len(added_plex_ids)

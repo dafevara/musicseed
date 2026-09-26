@@ -146,6 +146,7 @@ def create_playlist(
             "plex.token is not configured. Add it to your config file."
         )
 
+    # Score the full selection first; this is the same call a preview makes.
     result = get_recommendations(
         seed_texts=seed_texts,
         seed_ids=seed_ids,
@@ -158,10 +159,12 @@ def create_playlist(
         context=ctx,
     )
 
+    # Flatten seeds + recommendations into one ordered Plex id list (unmapped tracks are dropped).
     plex_ids = [t.plex_id for t in result.seed_tracks if t.plex_id is not None] + [
         rec.track.plex_id for rec in result.recommendations if rec.track.plex_id is not None
     ]
 
+    # Write the ordered selection to Plex in a single call.
     client = PlexClient(base_url=config.plex.url, token=config.plex.token)
     playlist = client.create_playlist(name, plex_ids)
 

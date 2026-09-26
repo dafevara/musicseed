@@ -153,6 +153,7 @@ def import_library(
         NotFoundError: if the Plex database file does not exist.
     """
     ctx = context or get_context()
+    # Per-call overrides get a deep-copied context so the import never mutates global config.
     if plex_db_path is not None or plex_db_ssh is not None or library_name is not None:
         cfg = ctx.config.model_copy(deep=True)
         if plex_db_path is not None:
@@ -183,12 +184,15 @@ def import_library(
             return ImportResult(artists=0, albums=0, tracks=0, play_history=0)
         if ctx.config.plex.db_ssh_target:
             on_progress(0, 0, "downloading Plex database")
+        # Resolve the source (local file or SSH snapshot) and read its expected counts.
         db_path = resolve_plex_dbs(ctx.config, refresh=True).library_db
         if not db_path.exists():
             raise NotFoundError(f"Plex database not found at {db_path}")
         with closing(PlexImporter(db_path, ctx.config.plex.library)) as importer:
             expected = importer.get_counts()
+        # Pin the observed source generation so coverage can verify this import later.
         checkpoint(ctx, "running", snapshot=snapshot_id(db_path), expected=expected)
+        # The importer writes inside one session; checkpoints are written outside that transaction.
         with ctx.session() as session:
             result = import_from_plex(
                 session=session, plex_db_path=db_path, library_name=ctx.config.plex.library,
