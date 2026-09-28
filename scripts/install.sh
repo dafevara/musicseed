@@ -38,6 +38,16 @@ else
 fi
 
 echo "[install] installing core + api + cli ..."
+# Some Python installs create a virtualenv without pip (or with an old one).
+# Bootstrap pip with ensurepip when it is missing, then upgrade to the latest.
+if ! "$VENV/bin/python" -m pip --version >/dev/null 2>&1; then
+  echo "[install] pip is not available in the virtualenv; bootstrapping it ..."
+  if ! "$VENV/bin/python" -m ensurepip --upgrade >/dev/null 2>&1; then
+    echo "Could not bootstrap pip in the virtualenv." >&2
+    echo "On Debian/Ubuntu, install venv/pip support first: sudo apt install python3-venv python3-pip" >&2
+    exit 1
+  fi
+fi
 "$VENV/bin/python" -m pip install --quiet --upgrade pip
 "$VENV/bin/python" -m pip install --quiet -e "$ROOT/core" -e "$ROOT/api" -e "$ROOT/cli"
 

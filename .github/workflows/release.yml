@@ -41,18 +41,31 @@ jobs:
           echo "prev=${prev}" >> "$GITHUB_OUTPUT"
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
           echo "skip=false" >> "$GITHUB_OUTPUT"
+      - name: Package source archive
+        id: pkg
+        if: steps.ver.outputs.skip != 'true'
+        run: |
+          version="${{ steps.ver.outputs.tag }}"
+          version="${version#v}"
+          archive="musicseed-${version}.tar.gz"
+          mkdir -p dist
+          git archive --format=tar --prefix="musicseed-${version}/" HEAD \
+            | gzip -9 > "dist/${archive}"
+          (cd dist && sha256sum "${archive}" > "${archive}.sha256")
+          echo "archive=${archive}" >> "$GITHUB_OUTPUT"
       - name: Release notes
         if: steps.ver.outputs.skip != 'true'
         run: |
           {
-            echo "Unpack the source archive, then:"
+            echo "Download \`${{ steps.pkg.outputs.archive }}\`, unpack it, then:"
             echo ""
             echo "\`\`\`bash"
+            echo "cd musicseed-*"
             echo "./scripts/install.sh"
             echo "musicseed"
             echo "\`\`\`"
             echo ""
-            echo "Python 3.12+, uv, and Node/npm are required to install. Runtime is Python only."
+            echo "Python 3.12+ and Node.js/npm are required to install. uv is only needed for development; runtime is Python only."
             echo ""
             echo "## Changes"
             echo ""
@@ -69,3 +82,6 @@ jobs:
           target_commitish: ${{ github.sha }}
           generate_release_notes: false
           body_path: notes.md
+          files: |
+            dist/*.tar.gz
+            dist/*.sha256
