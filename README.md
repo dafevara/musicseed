@@ -29,7 +29,7 @@ runs from source on the owner's machine against the owner's Plex library.
 
 ## Requirements
 
-- Python 3.12+ (with `venv` and `pip`, both included in standard Python installs)
+- Python 3.12+ (with `venv`; `install.sh` bootstraps and upgrades `pip` inside the virtualenv)
 - SQLite 3 — MusicSeed reads the Plex database and stores its own database as SQLite files; no
   database server required.
 - Node.js and npm (needed to **install** / rebuild the web UI, not to run it)
@@ -42,11 +42,11 @@ macOS and Linux are supported. Windows is untested.
 
 ### Release archive
 
-Download the source zip or tar.gz from
+Download `musicseed-<version>.tar.gz` (and its `.sha256` checksum) from
 [Releases](https://github.com/dafevara/musicseed/releases), unpack it, then:
 
 ```bash
-cd MusicSeed-*
+cd musicseed-*
 ./scripts/install.sh
 musicseed
 ```

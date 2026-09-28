@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { DiscoveryResult } from "@/lib/types";
 
 // Maps a machine-readable missing-input key to the form fields it needs.
@@ -14,6 +14,26 @@ const FIELD_FOR_MISSING: Record<string, string[]> = {
   db_location: ["musicseedDbPath"],
   enrichment_credentials: ["listenbrainzToken", "spotifyId", "spotifySecret"],
 };
+
+function Group({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="grid gap-3">
+      <div>
+        <h3 className="m-0 text-base font-semibold">{title}</h3>
+        {description && <p className="muted text-sm m-0 mt-1">{description}</p>}
+      </div>
+      {children}
+    </div>
+  );
+}
 
 export function SetupForm({
   result,
@@ -42,6 +62,9 @@ export function SetupForm({
       ? new Set(missing.flatMap((key) => FIELD_FOR_MISSING[key] ?? []))
       : null;
 
+  // Show a group only when at least one of its fields is currently needed.
+  const shows = (...keys: string[]) => !visible || keys.some((key) => visible.has(key));
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const vals: Record<string, string> = {};
@@ -64,159 +87,182 @@ export function SetupForm({
 
   return (
     <section className="panel">
-      <h2 className="mt-0 text-lg font-semibold">Provide the missing values</h2>
+      <h2 className="mt-0 text-lg font-semibold">Finish your setup</h2>
       <p className="muted text-sm">
-        Fill in what needs attention and re-run the checks. Leave a field blank to
-        keep the saved or automatic value. Secrets are saved locally in your configuration
-        but never echoed in discovery results.
+        A few details still need your attention. Fill them in below, then choose{" "}
+        <strong>Save &amp; re-check</strong>. Anything you leave blank keeps the value
+        already saved on this computer. Passwords and tokens are stored locally and are
+        never shown again.
       </p>
-      <form onSubmit={handleSubmit} className="grid gap-3 max-w-md">
-        {(!visible || visible.has("plexUrl")) && (
-          <label className="grid gap-1 text-sm">
-            Plex server URL
-            <input
-              type="text"
-              value={plexUrl}
-              onChange={(e) => setPlexUrl(e.target.value)}
-              placeholder={result.plex_server.url}
-            />
-          </label>
-        )}
-        {(!visible || visible.has("plexToken")) && (
-          <label className="grid gap-1 text-sm">
-            Plex token
-            <input
-              type="password"
-              value={plexToken}
-              onChange={(e) => setPlexToken(e.target.value)}
-              autoComplete="off"
-              placeholder={result.plex_server.token_configured ? "configured" : "not set"}
-            />
-          </label>
-        )}
-        {(!visible || visible.has("plexLibrary")) && (
-          <label className="grid gap-1 text-sm">
-            Music library name
-            <input
-              type="text"
-              value={plexLibrary}
-              onChange={(e) => setPlexLibrary(e.target.value)}
-              placeholder={result.plex_server.library || ""}
-            />
-          </label>
-        )}
-        {(!visible || visible.has("plexDbPath") || visible.has("plexDbSsh")) && (
-          <div className="grid gap-2">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={remotePlex}
-                onChange={(e) => setRemotePlex(e.target.checked)}
-              />
-              Plex is on another machine (fetch the database over SSH)
-            </label>
-            {!remotePlex ? (
+      <form onSubmit={handleSubmit} className="grid gap-6 max-w-md">
+        {shows("plexUrl", "plexToken", "plexLibrary", "plexDbPath", "plexDbSsh") && (
+          <Group
+            title="Plex"
+            description="How MusicSeed reaches your Plex Media Server and reads your library."
+          >
+            {shows("plexUrl") && (
               <label className="grid gap-1 text-sm">
-                Plex database path{" "}
-                <span className="text-[var(--muted)]">
-                  (local path, or a copied/mounted copy)
-                </span>
+                Plex server URL
                 <input
                   type="text"
-                  value={plexDbPath}
-                  onChange={(e) => setPlexDbPath(e.target.value)}
-                  placeholder="…/com.plexapp.plugins.library.db"
+                  value={plexUrl}
+                  onChange={(e) => setPlexUrl(e.target.value)}
+                  placeholder={result.plex_server.url}
                 />
               </label>
-            ) : (
+            )}
+            {shows("plexToken") && (
+              <label className="grid gap-1 text-sm">
+                Plex token
+                <input
+                  type="password"
+                  value={plexToken}
+                  onChange={(e) => setPlexToken(e.target.value)}
+                  autoComplete="off"
+                  placeholder={result.plex_server.token_configured ? "configured" : "not set"}
+                />
+              </label>
+            )}
+            {shows("plexLibrary") && (
+              <label className="grid gap-1 text-sm">
+                Music library name
+                <input
+                  type="text"
+                  value={plexLibrary}
+                  onChange={(e) => setPlexLibrary(e.target.value)}
+                  placeholder={result.plex_server.library || ""}
+                />
+              </label>
+            )}
+            {shows("plexDbPath", "plexDbSsh") && (
               <div className="grid gap-2">
-                <label className="grid gap-1 text-sm">
-                  SSH target{" "}
-                  <span className="text-[var(--muted)]">(scp-style)</span>
+                <label className="flex items-center gap-2 text-sm">
                   <input
-                    type="text"
-                    value={plexDbSsh}
-                    onChange={(e) => setPlexDbSsh(e.target.value)}
-                    placeholder="user@nas.local:/volume1/Plex/…/Databases"
+                    type="checkbox"
+                    checked={remotePlex}
+                    onChange={(e) => setRemotePlex(e.target.checked)}
                   />
+                  Plex is on another machine (fetch the database over SSH)
                 </label>
-                <label className="grid gap-1 text-sm">
-                  SSH password{" "}
-                  <span className="text-[var(--muted)]">
-                    (blank keeps the saved password; keys are used if none is saved)
-                  </span>
-                  <input
-                    type="password"
-                    value={plexDbSshPassword}
-                    onChange={(e) => setPlexDbSshPassword(e.target.value)}
-                    autoComplete="off"
-                    placeholder="optional"
-                  />
-                </label>
-                <label className="grid gap-1 text-sm">
-                  SSH port{" "}
-                  <span className="text-[var(--muted)]">(default 22)</span>
-                  <input
-                    type="text"
-                    value={plexDbSshPort}
-                    onChange={(e) => setPlexDbSshPort(e.target.value)}
-                    placeholder="22"
-                  />
-                </label>
+                {!remotePlex ? (
+                  <label className="grid gap-1 text-sm">
+                    Plex database path{" "}
+                    <span className="text-[var(--muted)]">
+                      (local path, or a copied/mounted copy)
+                    </span>
+                    <input
+                      type="text"
+                      value={plexDbPath}
+                      onChange={(e) => setPlexDbPath(e.target.value)}
+                      placeholder="…/com.plexapp.plugins.library.db"
+                    />
+                  </label>
+                ) : (
+                  <div className="grid gap-2">
+                    <label className="grid gap-1 text-sm">
+                      SSH target{" "}
+                      <span className="text-[var(--muted)]">(scp-style)</span>
+                      <input
+                        type="text"
+                        value={plexDbSsh}
+                        onChange={(e) => setPlexDbSsh(e.target.value)}
+                        placeholder="user@nas.local:/volume1/Plex/…/Databases"
+                      />
+                    </label>
+                    <label className="grid gap-1 text-sm">
+                      SSH password{" "}
+                      <span className="text-[var(--muted)]">
+                        (blank keeps the saved password; keys are used if none is saved)
+                      </span>
+                      <input
+                        type="password"
+                        value={plexDbSshPassword}
+                        onChange={(e) => setPlexDbSshPassword(e.target.value)}
+                        autoComplete="off"
+                        placeholder="optional"
+                      />
+                    </label>
+                    <label className="grid gap-1 text-sm">
+                      SSH port{" "}
+                      <span className="text-[var(--muted)]">(default 22)</span>
+                      <input
+                        type="text"
+                        value={plexDbSshPort}
+                        onChange={(e) => setPlexDbSshPort(e.target.value)}
+                        placeholder="22"
+                      />
+                    </label>
+                  </div>
+                )}
               </div>
             )}
-          </div>
+          </Group>
         )}
-        {(!visible || visible.has("musicseedDbPath")) && (
-          <label className="grid gap-1 text-sm">
-            MusicSeed database path
-            <input
-              type="text"
-              value={musicseedDbPath}
-              onChange={(e) => setMusicseedDbPath(e.target.value)}
-              placeholder={result.musicseed_db.path}
-            />
-          </label>
+
+        {shows("musicseedDbPath") && (
+          <Group
+            title="MusicSeed database"
+            description="Where MusicSeed keeps its local copy of your library."
+          >
+            <label className="grid gap-1 text-sm">
+              MusicSeed database path
+              <input
+                type="text"
+                value={musicseedDbPath}
+                onChange={(e) => setMusicseedDbPath(e.target.value)}
+                placeholder={result.musicseed_db.path}
+              />
+            </label>
+          </Group>
         )}
-        {(!visible || visible.has("listenbrainzToken")) && (
-          <label className="grid gap-1 text-sm">
-            ListenBrainz user token{" "}
-            <span className="text-[var(--muted)]">
-              (free — listenbrainz.org/settings; either this or Spotify enables enrichment)
-            </span>
-            <input
-              type="password"
-              value={listenbrainzToken}
-              onChange={(e) => setListenbrainzToken(e.target.value)}
-              autoComplete="off"
-              placeholder={result.enrichers.listenbrainz.configured ? "configured" : "not set"}
-            />
-          </label>
+
+        {shows("listenbrainzToken", "spotifyId", "spotifySecret") && (
+          <Group
+            title="Enrichment (optional)"
+            description="Adds popularity and listening data to your recommendations. You can skip this for now and set it up later in Settings."
+          >
+            {shows("listenbrainzToken") && (
+              <label className="grid gap-1 text-sm">
+                ListenBrainz user token{" "}
+                <span className="text-[var(--muted)]">
+                  (free — listenbrainz.org/settings; either this or Spotify enables enrichment)
+                </span>
+                <input
+                  type="password"
+                  value={listenbrainzToken}
+                  onChange={(e) => setListenbrainzToken(e.target.value)}
+                  autoComplete="off"
+                  placeholder={result.enrichers.listenbrainz.configured ? "configured" : "not set"}
+                />
+              </label>
+            )}
+            {shows("spotifyId") && (
+              <label className="grid gap-1 text-sm">
+                Spotify client ID{" "}
+                <span className="text-[var(--muted)]">(optional — for enrichment)</span>
+                <input
+                  type="text"
+                  value={spotifyId}
+                  onChange={(e) => setSpotifyId(e.target.value)}
+                  placeholder="Spotify Web API client ID"
+                />
+              </label>
+            )}
+            {shows("spotifySecret") && (
+              <label className="grid gap-1 text-sm">
+                Spotify client secret
+                <input
+                  type="password"
+                  value={spotifySecret}
+                  onChange={(e) => setSpotifySecret(e.target.value)}
+                  autoComplete="off"
+                  placeholder={spotifyId ? "configured" : "not set"}
+                />
+              </label>
+            )}
+          </Group>
         )}
-        {(!visible || visible.has("spotifyId")) && (
-          <label className="grid gap-1 text-sm">
-            Spotify client ID{" "}
-            <span className="text-[var(--muted)]">(optional — for enrichment)</span>
-            <input
-              type="text"
-              value={spotifyId}
-              onChange={(e) => setSpotifyId(e.target.value)}
-              placeholder="Spotify Web API client ID"
-            />
-          </label>
-        )}
-        {(!visible || visible.has("spotifySecret")) && (
-          <label className="grid gap-1 text-sm">
-            Spotify client secret
-            <input
-              type="password"
-              value={spotifySecret}
-              onChange={(e) => setSpotifySecret(e.target.value)}
-              autoComplete="off"
-              placeholder={spotifyId ? "configured" : "not set"}
-            />
-          </label>
-        )}
+
         <button type="submit" className="btn btn-primary justify-self-start">
           Save &amp; re-check
         </button>

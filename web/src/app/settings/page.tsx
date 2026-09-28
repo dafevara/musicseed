@@ -7,6 +7,26 @@ import { DiscoveryChecks } from "@/components/discovery-checks";
 import { JobProgress } from "@/components/job-progress";
 import { PageHeader } from "@/components/page-header";
 
+function Group({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="grid gap-3 border-t border-[var(--border)] pt-4 first:border-t-0 first:pt-0">
+      <div>
+        <h3 className="m-0 text-base font-semibold">{title}</h3>
+        {description && <p className="muted text-sm m-0 mt-1">{description}</p>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const [data, setData] = useState<DiscoveryResponse | null>(null);
   const [saving, setSaving] = useState(false);
@@ -148,88 +168,106 @@ export default function SettingsPage() {
           </div>
         )}
 
-        <form onSubmit={handleSave} className="grid gap-3 max-w-md">
-          <label className="grid gap-1 text-sm">
-            Plex server URL
-            <input
-              type="text"
-              value={plexUrl}
-              onChange={(e) => setPlexUrl(e.target.value)}
-              placeholder={plex?.url || "http://localhost:32400"}
-            />
-          </label>
-          <label className="grid gap-1 text-sm">
-            Plex token{" "}
-            <span className="text-[var(--muted)]">
-              ({plex?.token_configured ? "configured" : "not set"} — paste a new one to replace)
-            </span>
-            <input
-              type="password"
-              value={plexToken}
-              onChange={(e) => setPlexToken(e.target.value)}
-              autoComplete="off"
-              placeholder={plex?.token_configured ? "••••••••" : "not set"}
-            />
-          </label>
-          <label className="grid gap-1 text-sm">
-            Music library name
-            <input
-              type="text"
-              value={plexLibrary}
-              onChange={(e) => setPlexLibrary(e.target.value)}
-              placeholder={plex?.library || "Music"}
-            />
-          </label>
-          <label className="grid gap-1 text-sm">
-            MusicSeed database path
-            <input
-              type="text"
-              value={musicseedDbPath}
-              onChange={(e) => setMusicseedDbPath(e.target.value)}
-              placeholder={data?.result.musicseed_db.path || ""}
-            />
-          </label>
-          <label className="grid gap-1 text-sm">
-            Spotify client ID{" "}
-            <span className="text-[var(--muted)]">
-              ({spotify?.client_id_set ? "configured" : "not set"} — optional)
-            </span>
-            <input
-              type="text"
-              value={spotifyId}
-              onChange={(e) => setSpotifyId(e.target.value)}
-              placeholder={spotify?.client_id_set ? "configured" : "Spotify Web API client ID"}
-            />
-          </label>
-          <label className="grid gap-1 text-sm">
-            Spotify client secret{" "}
-            <span className="text-[var(--muted)]">
-              ({spotify?.client_secret_set ? "configured" : "not set"} — optional)
-            </span>
-            <input
-              type="password"
-              value={spotifySecret}
-              onChange={(e) => setSpotifySecret(e.target.value)}
-              autoComplete="off"
-              placeholder={spotify?.client_secret_set ? "••••••••" : "not set"}
-            />
-          </label>
-          <label className="grid gap-1 text-sm">
-            ListenBrainz user token{" "}
-            <span className="text-[var(--muted)]">
-              ({listenbrainz?.configured ? "configured" : "not set"} — free at listenbrainz.org/settings)
-            </span>
-            <input
-              type="password"
-              value={listenbrainzToken}
-              onChange={(e) => setListenbrainzToken(e.target.value)}
-              autoComplete="off"
-              placeholder={listenbrainz?.configured ? "••••••••" : "not set"}
-            />
-          </label>
+        <form onSubmit={handleSave} className="grid gap-6 max-w-md">
+          <Group
+            title="Plex"
+            description="How MusicSeed reaches your Plex Media Server and reads your library."
+          >
+            <label className="grid gap-1 text-sm">
+              Plex server URL
+              <input
+                type="text"
+                value={plexUrl}
+                onChange={(e) => setPlexUrl(e.target.value)}
+                placeholder={plex?.url || "http://localhost:32400"}
+              />
+            </label>
+            <label className="grid gap-1 text-sm">
+              Plex token{" "}
+              <span className="text-[var(--muted)]">
+                ({plex?.token_configured ? "configured" : "not set"} — paste a new one to replace)
+              </span>
+              <input
+                type="password"
+                value={plexToken}
+                onChange={(e) => setPlexToken(e.target.value)}
+                autoComplete="off"
+                placeholder={plex?.token_configured ? "••••••••" : "not set"}
+              />
+            </label>
+            <label className="grid gap-1 text-sm">
+              Music library name
+              <input
+                type="text"
+                value={plexLibrary}
+                onChange={(e) => setPlexLibrary(e.target.value)}
+                placeholder={plex?.library || "Music"}
+              />
+            </label>
+          </Group>
+
+          <Group
+            title="MusicSeed database"
+            description="Where MusicSeed keeps its local copy of your library."
+          >
+            <label className="grid gap-1 text-sm">
+              MusicSeed database path
+              <input
+                type="text"
+                value={musicseedDbPath}
+                onChange={(e) => setMusicseedDbPath(e.target.value)}
+                placeholder={data?.result.musicseed_db.path || ""}
+              />
+            </label>
+          </Group>
+
+          <Group
+            title="Enrichment (optional)"
+            description="Adds popularity and listening data to your recommendations. Either a ListenBrainz token or Spotify credentials is enough — you can also skip this."
+          >
+            <label className="grid gap-1 text-sm">
+              ListenBrainz user token{" "}
+              <span className="text-[var(--muted)]">
+                ({listenbrainz?.configured ? "configured" : "not set"} — free at listenbrainz.org/settings)
+              </span>
+              <input
+                type="password"
+                value={listenbrainzToken}
+                onChange={(e) => setListenbrainzToken(e.target.value)}
+                autoComplete="off"
+                placeholder={listenbrainz?.configured ? "••••••••" : "not set"}
+              />
+            </label>
+            <label className="grid gap-1 text-sm">
+              Spotify client ID{" "}
+              <span className="text-[var(--muted)]">
+                ({spotify?.client_id_set ? "configured" : "not set"} — optional)
+              </span>
+              <input
+                type="text"
+                value={spotifyId}
+                onChange={(e) => setSpotifyId(e.target.value)}
+                placeholder={spotify?.client_id_set ? "configured" : "Spotify Web API client ID"}
+              />
+            </label>
+            <label className="grid gap-1 text-sm">
+              Spotify client secret{" "}
+              <span className="text-[var(--muted)]">
+                ({spotify?.client_secret_set ? "configured" : "not set"} — optional)
+              </span>
+              <input
+                type="password"
+                value={spotifySecret}
+                onChange={(e) => setSpotifySecret(e.target.value)}
+                autoComplete="off"
+                placeholder={spotify?.client_secret_set ? "••••••••" : "not set"}
+              />
+            </label>
+          </Group>
+
           <p className="muted text-sm m-0">
-            Leave a field blank to keep its current value. Enrichment needs either a
-            ListenBrainz token or Spotify credentials.
+            Anything you leave blank keeps its current value. Passwords and tokens are
+            stored locally and are never shown again.
           </p>
           <button type="submit" className="btn btn-primary justify-self-start" disabled={saving}>
             {saving ? "Saving…" : "Save"}
