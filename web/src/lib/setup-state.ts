@@ -6,8 +6,8 @@ export function resolveSetupStep(d: DiscoveryResponse, status: LibraryStatus | n
   const incomplete = d.result.first_run.import_incomplete
     || (status?.import_coverage && !status.import_coverage.ever_succeeded);
   if (status && status.track_count > 0 && !incomplete) return "done";
-  if (d.result.can_import || d.result.plex_server.ok || d.result.musicseed_db.exists) return "review";
-  return "detect";
+  // Local database access does not authenticate the Plex API connection.
+  return d.result.plex_server.ok ? "review" : "detect";
 }
 
 /** Refresh both state sources after jobs/recovery; never reuse a stale first-run flag. */

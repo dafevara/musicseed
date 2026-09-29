@@ -97,7 +97,6 @@ export default function SetupPage() {
       setSaved(true);
     } catch (e) {
       setSaveError(String(e).replace("Error: ", ""));
-      setStep("review");
     }
   }
 
@@ -184,49 +183,73 @@ export default function SetupPage() {
       <SetupIntro />
       <StepIndicator current={step} />
 
+      {saveError && (
+        <div className="flash flash-error" role="alert">
+          <p className="m-0">{saveError}</p>
+        </div>
+      )}
+
       {step === "detect" && (
-        <section className="panel">
-          <h2 className="mt-0 text-lg font-semibold">Connect to Plex</h2>
-          <p>
-            MusicSeed looks for your Plex Media Server on the local network. Pick a
-            server below, or enter its address manually.
-          </p>
-          <PlexServerPicker onSelect={handleSelectServer} defaultUrl={plex.url} />
+        <>
+          <section className="panel">
+            <h2 className="mt-0 text-lg font-semibold">Connect to Plex</h2>
+            <p>
+              MusicSeed looks for your Plex Media Server on the local network. Pick a
+              server below, or enter its address manually.
+            </p>
+            <PlexServerPicker onSelect={handleSelectServer} defaultUrl={plex.url} />
 
-          {plex.ok ? (
-            <div className="flash flash-ok mt-3">
-              Connected to Plex {plex.server_version} — music library &ldquo;{plex.library}
-              &rdquo; found.
-            </div>
-          ) : (
-            <div className="flash flash-warn mt-3">
-              {plex.reason === "unreachable" &&
-                "Plex isn't responding. Make sure Plex Media Server is running, then scan again."}
-              {plex.reason === "missing_token" && (
-                <>
-                  Plex requires a token and none was found on this machine.{" "}
-                  <HelpIcon>
-                    Sign in at app.plex.tv/desktop, open your browser&apos;s developer tools
-                    (Network tab), load any library, find a request with an X-Plex-Token
-                    header, and copy its value — then paste it in Settings.
-                  </HelpIcon>
-                </>
+            <p className="text-sm muted">
+              {data.result.plex_library_db.ok
+                ? "Plex database files were found. These let MusicSeed read library data, but do not authenticate the connection to Plex. "
+                : "Database access and the Plex server connection are checked separately. "}
+              A valid Plex token is required to save playlists to Plex. Enter it below,
+              then choose Save &amp; re-check. You can also continue with local import
+              and recommendations, and connect Plex later.
+            </p>
+
+            {plex.ok ? (
+              <div className="flash flash-ok mt-3">
+                Connected to Plex {plex.server_version} — music library &ldquo;{plex.library}
+                &rdquo; found.
+              </div>
+            ) : (
+              <div className="flash flash-warn mt-3">
+                {plex.reason === "unreachable" &&
+                  "Plex isn't responding. Make sure Plex Media Server is running, then scan again."}
+                {plex.reason === "missing_token" && (
+                  <>
+                    Plex requires a token and none was found on this machine.{" "}
+                    <HelpIcon>
+                      Sign in at app.plex.tv/desktop, open your browser&apos;s developer tools
+                      (Network tab), load any library, find a request with an X-Plex-Token
+                      header, and copy its value — then paste it in the Plex token field below.
+                    </HelpIcon>
+                  </>
+                )}
+                {plex.reason !== "unreachable" &&
+                  plex.reason !== "missing_token" &&
+                  (plex.detail || "Plex needs attention before continuing.")}
+              </div>
+            )}
+
+            <div className="flex flex-wrap gap-2 mt-3 items-baseline">
+              {(plex.ok || data.result.can_import) && (
+                <button className="btn btn-secondary" onClick={() => setStep("review")}>
+                  {plex.ok ? "Continue" : "Continue without Plex connection"}
+                </button>
               )}
-              {plex.reason !== "unreachable" &&
-                plex.reason !== "missing_token" &&
-                (plex.detail || "Plex needs attention before continuing.")}
+              <a href="/settings" className="text-sm text-[var(--muted)] underline">
+                Open Settings to configure manually
+              </a>
             </div>
-          )}
-
-          <div className="flex flex-wrap gap-2 mt-3 items-baseline">
-            <button className="btn btn-primary" onClick={() => setStep("review")}>
-              Continue
-            </button>
-            <a href="/settings" className="text-sm text-[var(--muted)] underline">
-              Open Settings to configure manually
-            </a>
-          </div>
-        </section>
+          </section>
+          <SetupForm
+            result={data.result}
+            onSubmit={handleRecheck}
+            missing={["plex_server", "plex_token", "plex_library"]}
+          />
+        </>
       )}
 
       {step === "review" && (
@@ -238,7 +261,7 @@ export default function SetupPage() {
               <p className="m-0">
                 Saved &amp; re-checked.{" "}
                 {data.ready
-                  ? "All checks passed — continue below."
+                  ? "Local import is ready — continue below."
                   : `Still need: ${(data.result.missing_inputs || [])
                       .map((k) => MISSING_LABELS[k] || k)
                       .join(", ")}.`}
@@ -280,13 +303,7 @@ export default function SetupPage() {
             </div>
           )}
 
-          {saveError && (
-            <div className="flash flash-error">
-              <p className="m-0">{saveError}</p>
-            </div>
-          )}
-
-          {!data.ready && (
+          {(!data.ready || !plex.ok) && (
             <>
               <SetupForm
                 result={data.result}

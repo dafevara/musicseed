@@ -4,10 +4,10 @@ import {
   discoveredLocalPlexPath, refreshSetupState, resolveSetupStep,
 } from "../src/lib/setup-state.ts";
 
-function discovery(incomplete, exists = true) {
-  return { result: {
+function discovery(incomplete, exists = true, connected = true) {
+  return { ready: true, result: {
     first_run: { import_incomplete: incomplete }, musicseed_db: { exists },
-    can_import: true, plex_server: { ok: false },
+    can_import: true, plex_server: { ok: connected },
   } };
 }
 
@@ -42,7 +42,7 @@ test("database absence skips status, and status failure stays recoverable", asyn
     async () => assert.fail("must not query a missing database"),
   );
   assert.equal(noDatabase.status, null);
-  assert.equal(noDatabase.step, "review"); // can import locally without Plex HTTP
+  assert.equal(noDatabase.step, "review");
   const unavailable = await refreshSetupState(async () => discovery(false), async () => {
     throw new Error("fixture database failure");
   });
@@ -50,6 +50,24 @@ test("database absence skips status, and status failure stays recoverable", asyn
   await assert.rejects(refreshSetupState(async () => {
     throw new Error("fixture discovery failure");
   }, async () => complete), /discovery failure/);
+});
+
+test("local Plex databases do not skip connection setup without a working token", () => {
+  for (const exists of [false, true]) {
+    for (const reason of ["missing_token", "unauthorized", "unreachable", "library_not_found"]) {
+      const d = discovery(false, exists, false);
+      d.result.plex_server.reason = reason;
+      d.result.plex_library_db = { ok: true };
+      d.result.plex_blobs_db = { ok: true };
+      assert.equal(resolveSetupStep(d, exists ? { track_count: 0 } : null), "detect");
+      assert.equal(resolveSetupStep(d, partial), "detect");
+    }
+  }
+});
+
+test("a verified connection advances setup; completed local libraries stay usable offline", () => {
+  assert.equal(resolveSetupStep(discovery(false, false), null), "review");
+  assert.equal(resolveSetupStep(discovery(false, true, false), complete), "done");
 });
 
 test("SSH display paths are never persisted as local initialization paths", () => {
