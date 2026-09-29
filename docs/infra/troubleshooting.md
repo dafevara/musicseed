@@ -53,7 +53,12 @@ Checks and recovery:
    installed locally), paste a token manually.
 2. **Get a token.** From a signed-in session at app.plex.tv, view any Plex XML resource and copy
    the `X-Plex-Token` query parameter. The wizard/Settings shows this guidance when no token is
-   found.
+   found. In the wizard's **Connect Plex** step, enter it in **Plex token** and choose
+   **Save & re-check**. Setup advances to **Review & initialize** once the connection succeeds.
+   Finding the local Plex library and blobs databases does not authenticate the Plex connection.
+   A token is needed to write playlists to Plex; local import and recommendations can work
+   without it. Choose **Continue without Plex connection** to set those up first, then enter
+   the token in the review step or Settings when you're ready to connect.
 3. **Scope.** `.LocalAdminToken` works only for localhost requests. If you access Plex over the
    network, use `PlexOnlineToken` (a full token) instead.
 4. **Where tokens live.** Tokens are stored in `config.yaml`, not in the database. They are sent in
