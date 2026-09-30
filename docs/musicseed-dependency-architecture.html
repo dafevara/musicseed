@@ -103,7 +103,7 @@
 
 <h1>MusicSeed — Dependency &amp; Workflow Architecture</h1>
 <p class="subtitle">
-  React web surface + standalone REST API · August 2026 ·
+  Web, CLI, REST API, and MCP · September 2026 ·
   <span class="badge green">SQLite only</span>
   <span class="badge green">No Docker</span>
   <span class="badge green">No ML runtime</span>
@@ -113,19 +113,19 @@
 
 <p>This document explains <strong>every dependency MusicSeed relies on today</strong> — Python
 packages, data stores, network services — and <strong>how data flows</strong> through the four
-main workflows (import, enrich, sonic import, recommend) and the two surfaces (CLI, and the
+main workflows (import, enrich, sonic import, recommend) and the user surfaces (CLI, MCP agent tools, and the
 Next.js web UI via the REST API). It exists to track how small the install surface has become,
 so publishing MusicSeed as open source means a new user needs as little as possible.</p>
 
 <div class="note">
   <strong>TL;DR install surface:</strong> Python 3.12+ and SQLite 3, plus Node for building the
-  web UI during install; seven core packages, two CLI packages, three API packages, and a Next.js +
+  web UI during install; seven core packages, two CLI packages, three API packages, two MCP packages, and a Next.js +
   React web app — one SQLite file (created automatically), and read access to two Plex SQLite
   databases. Local-network Plex discovery (GDM + SSDP) is stdlib <code>socket</code> only;
   servers on other subnets are found through the optional <code>plex.tv/api/resources</code>
   account lookup (httpx, needs a Plex token). <code>uv</code> is development-only tooling — the
   end-user install is plain <code>python3 -m venv</code> + <code>pip</code>. That's the whole
-  thing — no server, no containers, no native ML libraries.
+  thing — no database server, no containers, no native ML libraries.
 </div>
 
 <!-- ============================ BIG PICTURE ============================ -->
@@ -158,20 +158,20 @@ so publishing MusicSeed as open source means a new user needs as little as possi
   <!-- MCP -->
   <rect x="490" y="16" rx="8" width="200" height="58" fill="#1d212b" stroke="#56b6c2"/>
   <text x="590" y="40" text-anchor="middle" class="box-label">musicseed-mcp</text>
-  <text x="590" y="58" text-anchor="middle" class="box-sub">MCP tools · stdio</text>
+  <text x="590" y="58" text-anchor="middle" class="box-sub">MCP tools · stdio / HTTP</text>
 
   <!-- API -->
   <rect x="170" y="116" rx="8" width="250" height="72" fill="#1d212b" stroke="#c678dd" stroke-width="1.5"/>
   <text x="295" y="138" text-anchor="middle" class="box-label">musicseed-api</text>
-  <text x="295" y="155" text-anchor="middle" class="box-sub">handlers/ · orchestration · no UI</text>
-  <text x="295" y="172" text-anchor="middle" class="box-sub">FastAPI JSON routes at /api/</text>
+  <text x="295" y="155" text-anchor="middle" class="box-sub">handlers/ · orchestration</text>
+  <text x="295" y="172" text-anchor="middle" class="box-sub">JSON + optional static web export</text>
 
   <!-- Core -->
   <rect x="300" y="230" rx="8" width="410" height="120" fill="#1d212b" stroke="#6ea8fe" stroke-width="1.5"/>
   <text x="505" y="254" text-anchor="middle" class="box-label">musicseed-core (import name: musicseed)</text>
   <text x="505" y="271" text-anchor="middle" class="box-sub">services/ · importers/ · enrichers/ · recommender/ · sonic.py · plex_discovery.py</text>
   <text x="505" y="299" text-anchor="middle" class="box-sub">deps: sqlalchemy · pyyaml · httpx · numpy · pydantic · rich · paramiko</text>
-  <text x="505" y="319" text-anchor="middle" class="box-sub">all business logic lives here — no UI, no Typer, no HTTP</text>
+  <text x="505" y="319" text-anchor="middle" class="box-sub">business logic · no Typer or HTTP framework</text>
 
   <!-- MusicSeed SQLite -->
   <rect x="30" y="388" rx="8" width="220" height="66" fill="#1d212b" stroke="#6ea8fe"/>
@@ -201,7 +201,7 @@ so publishing MusicSeed as open source means a new user needs as little as possi
   <rect x="810" y="230" rx="8" width="190" height="120" fill="#1d212b" stroke="#e5b567"/>
   <text x="905" y="254" text-anchor="middle" class="box-label">External APIs</text>
   <text x="905" y="274" text-anchor="middle" class="box-sub">ListenBrainz (preferred)</text>
-  <text x="905" y="292" text-anchor="middle" class="box-sub">MusicBrainz (MBIDs)</text>
+  <text x="905" y="292" text-anchor="middle" class="box-sub">MBIDs imported from Plex</text>
   <text x="905" y="310" text-anchor="middle" class="box-sub">Spotify (optional fallback)</text>
   <text x="905" y="334" text-anchor="middle" class="box-sub">rate-limited · enrichment only</text>
 
@@ -239,8 +239,8 @@ so publishing MusicSeed as open source means a new user needs as little as possi
 <figcaption>
   Everything MusicSeed touches. Green borders are read-only SQLite files owned by Plex;
   the blue-bordered file is the only writable store. Amber is network I/O. Purple is the
-  API orchestration layer — the browser UI reaches it over HTTP (Next.js proxy), while the
-  CLI and the MCP server call core services directly (MCP is a thin stdio agent surface for
+  API orchestration layer — the browser UI reaches it over HTTP (directly, or through the development proxy), while the
+  CLI and the MCP server call core services directly (MCP is an agent surface for
   playlist create/populate). Removed in the dependency reduction: PostgreSQL server,
   Docker, pgvector, psycopg, essentia-tensorflow, Jinja/HTMX server rendering, and all
   audio-file reads.
@@ -261,9 +261,9 @@ so publishing MusicSeed as open source means a new user needs as little as possi
     editable paths.</p>
   </div>
   <div class="card">
-    <h4>External processes</h4>
+    <h4>Extra database processes</h4>
     <p class="num">0</p>
-    <p>No database server, no container runtime, no daemon. Plex itself is the only assumed service.</p>
+    <p>No database server or container runtime. The product runs a local API/UI server; MCP can run as a subprocess or HTTP server.</p>
   </div>
 </div>
 
@@ -275,12 +275,12 @@ so publishing MusicSeed as open source means a new user needs as little as possi
   <thead><tr><th>Package</th><th>Role</th><th>Status</th></tr></thead>
   <tbody>
     <tr><td>sqlalchemy</td><td>ORM over the SQLite state file</td><td><span class="tag kept">kept</span> <span class="tag core">core</span></td></tr>
-    <tr><td>httpx</td><td>HTTP to Plex API + ListenBrainz/MusicBrainz/Spotify</td><td><span class="tag kept">kept</span> <span class="tag core">core</span></td></tr>
+    <tr><td>httpx</td><td>HTTP to Plex API + ListenBrainz/Spotify</td><td><span class="tag kept">kept</span> <span class="tag core">core</span></td></tr>
     <tr><td>numpy</td><td>Sonic vector math (matmul, cosine) over the local vector store</td><td><span class="tag kept">kept</span> <span class="tag core">core</span></td></tr>
     <tr><td>pydantic</td><td>Config + service result models</td><td><span class="tag kept">kept</span> <span class="tag core">core</span></td></tr>
     <tr><td>pyyaml</td><td>config.yaml loading</td><td><span class="tag kept">kept</span> <span class="tag core">core</span></td></tr>
     <tr><td>rich</td><td>Progress rendering inside import/enrich pipelines</td><td><span class="tag kept">kept</span> <span class="tag core">core</span></td></tr>
-    <tr><td>paramiko</td><td>SFTP fetch of remote Plex databases (SSH)</td><td><span class="tag kept">kept</span> <span class="tag core">core</span></td></tr>
+    <tr><td>paramiko</td><td>Verified SSH execution and streaming of consistent SQLite backups</td><td><span class="tag kept">kept</span> <span class="tag core">core</span></td></tr>
     <tr><td>typer</td><td>CLI framework</td><td><span class="tag kept">kept</span> <span class="tag cli">cli</span></td></tr>
     <tr><td>fastapi</td><td>REST API request handling</td><td><span class="tag kept">kept</span> <span class="tag web">api</span></td></tr>
     <tr><td>uvicorn</td><td>ASGI server for the API</td><td><span class="tag kept">kept</span> <span class="tag web">api</span></td></tr>
@@ -316,7 +316,7 @@ so publishing MusicSeed as open source means a new user needs as little as possi
     <tr><td>Plex metadata DB</td><td>Source of truth for artists/albums/tracks/tags/play history</td><td>read-only, stdlib sqlite3</td></tr>
     <tr><td>Plex blobs DB</td><td>Plex's own 50-dim sonic analysis vectors</td><td>read-only, import time (copied into musicseed.db)</td></tr>
     <tr><td>Plex HTTP API</td><td>Creating/populating playlists; triggering sonic analysis</td><td>optional, token-gated</td></tr>
-    <tr><td>ListenBrainz / MusicBrainz</td><td>Popularity enrichment via recording MBIDs</td><td>optional, rate-limited</td></tr>
+    <tr><td>ListenBrainz</td><td>Popularity enrichment via recording MBIDs</td><td>optional, rate-limited</td></tr>
     <tr><td>Spotify Web API</td><td>Fallback popularity/metadata when MBIDs are missing</td><td>optional, credentialed</td></tr>
   </tbody>
 </table>
@@ -352,9 +352,9 @@ so publishing MusicSeed as open source means a new user needs as little as possi
   <line x1="760" y1="55" x2="820" y2="55" stroke="#6ea8fe" stroke-width="1.5" marker-end="url(#a1)"/>
   <rect x="825" y="28" rx="8" width="175" height="54" fill="#1d212b" stroke="#6ea8fe"/>
   <text x="912" y="50" text-anchor="middle" class="box-label">musicseed.db</text>
-  <text x="912" y="66" text-anchor="middle" class="box-sub">13 tables</text>
+  <text x="912" y="66" text-anchor="middle" class="box-sub">metadata · state · vectors</text>
 </svg>
-<figcaption><code>musicseed import</code> — one-way copy of artists, albums, tracks, genres, moods, styles, play history. The Plex file is never written to.</figcaption>
+<figcaption><code>musicseed-cli import</code> — one-way copy of artists, albums, tracks, genres, moods, styles, play history. The Plex file is never written to.</figcaption>
 </figure>
 
 <h3>3.2 Enrich — popularity signals (async, resumable)</h3>
@@ -382,7 +382,7 @@ so publishing MusicSeed as open source means a new user needs as little as possi
   <text x="907" y="70" text-anchor="middle" class="box-label">popularity columns</text>
   <text x="907" y="86" text-anchor="middle" class="box-sub">musicseed.db · batch commits</text>
 </svg>
-<figcaption><code>musicseed enrich --source listenbrainz|spotify</code> — attempted tracks are flagged so interrupted runs resume. This is the only workflow that spends third-party API calls, which is why old Postgres data was migrated rather than re-fetched.</figcaption>
+<figcaption><code>musicseed-cli enrich --source listenbrainz|spotify</code> — attempted tracks are flagged so interrupted runs resume. This is the only workflow that spends third-party API calls, which is why old Postgres data was migrated rather than re-fetched.</figcaption>
 </figure>
 
 <h3>3.3 Sonic import — copy vectors into musicseed.db, read local store at query time</h3>
@@ -464,27 +464,26 @@ so publishing MusicSeed as open source means a new user needs as little as possi
 <table>
   <thead><tr><th>Gap</th><th>Notes</th></tr></thead>
   <tbody>
-    <tr><td>PyPI packaging</td><td>core + cli + web are separate distributions joined by editable paths; decide on one combined package or publish them all.</td></tr>
+    <tr><td>PyPI packaging</td><td>core, api, cli, and mcp are separate Python distributions; the Next.js UI is built with npm. Source installs join Python packages through editable paths.</td></tr>
     <tr><td>Plex DB discovery</td><td>Server discovery is solved (GDM/SSDP; <code>plex.tv/api/resources</code> for other subnets). On-disk <code>db_path</code> probes macOS and Linux candidates; Windows is untested.</td></tr>
     <tr><td>Sonic analysis coverage</td><td>Recommendation quality depends on Plex having analyzed the library; <code>sonic-probe</code> reports coverage, <code>sonic-refresh</code> triggers the Butler task.</td></tr>
   </tbody>
 </table>
 
 <h2>5. Verify the current state</h2>
-<pre><code>cd core &amp;&amp; uv run ruff check src
-cd api  &amp;&amp; uv run ruff check src &amp;&amp; uv run pytest tests -q
-cd cli  &amp;&amp; uv run ruff check src &amp;&amp; uv run pytest tests -q
-cd web  &amp;&amp; npx tsc --noEmit &amp;&amp; npm run lint
-python3 -m compileall -q core/src/musicseed api/src/musicseed_api cli/src/musicseed_cli
-cd cli &amp;&amp; uv run musicseed-cli init-db      # creates the SQLite file
-uv run musicseed-cli status                  # shows DB path + file size
-uv run musicseed-cli recommend --seed-id 123 --limit 20 --explain</code></pre>
+<pre><code># From the repository root, after syncing each app environment:
+uv run --project core ruff check core/src
+uv run --project api pytest api/tests -q
+uv run --project cli pytest cli/tests -q
+uv run --project mcp pytest mcp/tests -q
+python3 -m compileall -q core/src/musicseed api/src/musicseed_api cli/src/musicseed_cli mcp/src/musicseed_mcp
+.venv-docs/bin/mkdocs build --strict
+# Read-only checks against a configured local library:
+uv run --project cli musicseed-cli status
+uv run --project cli musicseed-cli recommend --seed-id 123 --limit 20 --explain</code></pre>
 
 <footer>
-  Generated August 2026, after the React/Next.js web rewrite and the extraction of the
-  <code>api/</code> orchestration layer. Historical context:
-  <code>docs/ard/001</code> (original design, superseded), <code>docs/ard/002</code> (sonic
-  vectors at query time), <code>docs/implementation-plan.md</code> (original build plan, historical).
+  Updated September 2026 against core, API, CLI, and MCP source.
 </footer>
 
 </main>

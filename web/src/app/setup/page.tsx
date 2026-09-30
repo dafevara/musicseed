@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { api } from "@/lib/api";
 import type { DiscoveryResponse, LibraryStatus } from "@/lib/types";
 import { discoveredLocalPlexPath, refreshSetupState, type SetupStep as Step } from "@/lib/setup-state";
@@ -179,6 +180,11 @@ export default function SetupPage() {
         title="Set up MusicSeed"
         description="Connect Plex, prepare your local library, and start building recommendations from the music you already own."
       />
+
+      <p className="m-0 text-sm muted">
+        Need a hand? <Link href="/quick-start" className="underline">Follow the Quick Start guides</Link>
+        {" "}for installation, configuration, and importing from a remote Plex server.
+      </p>
 
       <SetupIntro />
       <StepIndicator current={step} />

@@ -10,10 +10,10 @@ Before guessing, capture the current state with the two cheapest probes:
 
 - **From the web UI:** the setup wizard and dashboard already render discovery results and job
   state. The underlying JSON is available directly at
-  `curl http://127.0.0.1:8789/discovery` — it reports, for each required local file and the Plex
+  `curl http://127.0.0.1:8789/api/discovery` — it reports, for each required local file and the Plex
   server, a machine-readable `reason` code plus `missing_inputs` (keys like `plex_token`,
   `plex_unreachable`, `plex_library`, `plex_db_path`, `db_location`, `enrichment_credentials`) and a
-  derived `first_run` status (`no_config` / `db_missing` / `library_empty`).
+  derived `first_run` status (`no_config` / `db_missing` / `library_empty` / `import_incomplete`).
 - **From the CLI:** `musicseed-cli status` shows the resolved database path, Plex URL/DB/library,
   and library/enrichment coverage.
 
@@ -23,7 +23,7 @@ Logs are the next stop: `~/.local/share/musicseed/logs/latest.log` (plus timesta
 ## Plex server not found
 
 Symptom: the setup wizard shows no discovered server, or discovery reports
-`plex_unreachable` / `missing_inputs` includes `plex_server`.
+`plex_unreachable` in `missing_inputs`.
 
 Checks and recovery:
 
@@ -70,9 +70,9 @@ Symptom: `musicseed` (or contributor `dev.sh`) fails with "address already in us
 
 Recovery:
 
-1. The product server defaults to `127.0.0.1:8789`. Contributor `dev.sh` also uses `:3000`.
+1. The product server defaults to `127.0.0.1:8789`. Contributor `dev.sh` also uses `:3000` (web) and `:8790` (MCP).
 2. Free the port: `lsof -i :8789` (or `:3000`) to find the process, then stop it — or pick a
-   new port with `musicseed --port <n>`. `dev.sh` reads `API_PORT`, `WEB_PORT`, and `API_URL`.
+   new port with `musicseed --port <n>`. `dev.sh` reads `API_PORT`, `WEB_PORT`, `API_URL`, and `MCP_PORT`.
 3. If you change the API port under `dev.sh`, point the web proxy at it with
    `API_URL=http://127.0.0.1:<new>`.
 
@@ -83,7 +83,7 @@ crash, or machine sleep).
 
 Recovery:
 
-- **Import** is incremental by default and resumable: re-running it (`POST /library/import`, or
+- **Import** is incremental by default and resumable: re-running it (`POST /api/library/import` on the product server, or
   `musicseed-cli import`) continues where it left off. Use `--full` (CLI) only when you intend a
   complete re-import.
 - **Enrichment** marks attempted tracks, so re-running with resume
@@ -151,7 +151,8 @@ Checks and recovery:
 - **Trigger analysis:** `musicseed-cli sonic-refresh` runs Plex's MusicAnalysis Butler task. It
   processes Plex's *entire* pending backlog (CPU-heavy) and keeps running after the command
   finishes; the command prompts for confirmation first. `sonic-probe --trigger-butler` tests the
-  Butler path on one album before committing to it.
+  Butler path while watching one album, but also starts the whole pending backlog; it is not
+  an album-scoped analysis request.
 - Tracks Plex has not analyzed still participate in recommendation — they get a neutral sonic
   score (0.5) and rank on the other five signals. So partial coverage is a quality issue, not a
   blocker.
@@ -166,13 +167,14 @@ Checks and recovery:
 - **Restore** by copying the file back. If the file is corrupt or you want a clean start, stop the
   API/CLI, move the file aside, and run setup again (the wizard re-runs when the database is
   missing — the `db_missing` first-run signal).
-- **Rebuilding is safe and idempotent.** The database is derived from Plex metadata; a fresh
-  `init-db` + `import` + `enrich` reconstructs it. Enrichment is the only step that spends
-  third-party API calls, which is why resuming beats re-fetching.
+- **Rebuilding restores derived library data, not every local record.** A fresh `init-db` +
+  `import` + `import-plex-sonic` + `enrich` can reconstruct metadata, vectors, and popularity,
+  but does not restore old job history or completion records. Keep a backup before rebuilding.
+  Enrichment requires third-party API calls, which is why resuming beats re-fetching.
 
 ## Logs and where to look
 
-- `~/.local/share/musicseed/logs/latest.log` — CLI and `musicseed` (API/UI) append here.
+- `~/.local/share/musicseed/logs/latest.log` — CLI, `musicseed` (API/UI), and MCP append here.
   Follow with `tail -f ~/.local/share/musicseed/logs/latest.log`.
   Set `MUSICSEED_LOG_LEVEL=DEBUG` (or `--log-level` on the CLI) to raise verbosity.
 - `~/.local/share/musicseed/logs/musicseed_YYYYMMDD_HHMMSS.log` — timestamped per-process run.

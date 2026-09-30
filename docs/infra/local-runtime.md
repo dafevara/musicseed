@@ -7,7 +7,7 @@ actions.
 ## Runtime Pieces
 
 - Python 3.12+ packages under `core/src/musicseed` (library), `cli/src/musicseed_cli` (CLI), and
-  `api/src/musicseed_api` (REST API).
+  `api/src/musicseed_api` (REST API), plus `mcp/src/musicseed_mcp` (agent tools).
 - A Next.js + React + TypeScript web UI under `web/` (client-rendered SPA) that talks to the API
   over HTTP.
 - uv for dependency management and command execution during **development** (per-app lockfiles,
@@ -19,7 +19,7 @@ actions.
 - Plex blobs SQLite database as a read-only source of sonic analysis vectors, imported into
   MusicSeed's local `track_vectors` store (MUS-83); a remote Plex host's files can be fetched
   as consistent snapshots over verified SSH via `plex.db_ssh_target` (see [Remote Plex DB access](#remote-plex-db-access)).
-- Optional Plex HTTP API for playlist creation (`core/src/musicseed/clients/plex_api.py`).
+- Optional Plex HTTP API for playlist creation (`core/src/musicseed/clients/plex/`; `plex_api.py` is a compatibility re-export).
 - Optional external HTTP APIs: ListenBrainz and Spotify.
 - Local logs under `~/.local/share/musicseed/logs/`.
 
@@ -40,10 +40,11 @@ musicseed-cli status        # shows the DB path and file size
 `init-db` creates tables. `optimize-db` creates search, queue, and tag
 indexes. `ensure_schema()` applies lightweight additive updates for existing local databases.
 
-Backup and restore are file operations: copy `musicseed.db` (plus `-wal`/`-shm` if copying
-while in use). A one-shot migration from the retired Postgres setup lives at
-`scripts/migrate_pg_to_sqlite.py` (`uv run scripts/migrate_pg_to_sqlite.py` from the repo
-root).
+For a file-copy backup, stop all MusicSeed processes and ensure the database has closed cleanly.
+For a live database or an outstanding WAL, use SQLite's online backup API or `.backup` command;
+sequentially copying the database and sidecars does not guarantee a consistent snapshot. See
+[backup and recovery](troubleshooting.md#database-backup-and-recovery). PostgreSQL is historical;
+the old migration utility is no longer included in this checkout.
 
 ## Configuration
 
@@ -53,7 +54,10 @@ Config lookup order:
 2. `~/.musicseed.yaml`
 3. `config.yaml`
 
-Environment variables and `~` are expanded. Keep credentials out of repo-local tracked files.
+The CLI can override lookup with `musicseed-cli --config /path/to/config.yaml COMMAND`.
+Without a matching file, core uses model defaults. Environment variables and `~` are expanded
+in YAML values. Saving settings writes back to the resolved file, or to the canonical
+`~/.config/musicseed/config.yaml` if no file was found. Keep credentials out of tracked files.
 
 The Plex token is auto-detected when possible: discovery reads `PlexOnlineToken` from Plex's
 `Preferences.xml`, falling back to `.LocalAdminToken` (localhost-only). It probes the usual
@@ -128,7 +132,7 @@ and are not included in the snapshot stream.
 
 The web UI is the default onboarding path. Users run `./scripts/install.sh` then `musicseed`,
 which serves the API and the static UI on `127.0.0.1:8789`. `./scripts/dev.sh` is contributor
-hot reload (API + `next dev` on port 3000).
+hot reload (API + `next dev` on port 3000 + MCP on port 8790).
 
 - **First-run wizard** (`/setup`): detects the Plex server (local-network discovery plus a
   manual URL), initializes the database, and optionally runs import and enrichment. Non-setup
@@ -144,6 +148,8 @@ hot reload (API + `next dev` on port 3000).
 
 Relevant API routes: `GET /discovery`, `GET /discovery/plex-servers`,
 `POST /discovery/check`, `POST /discovery/config` (save-only), `POST /discovery/init-db`.
+These paths are relative to the JSON base URL: prepend `/api` for the normal `musicseed`
+server. See [HTTP API modes](../api-reference/http-api.md#server-modes-and-openapi).
 
 ### Import state and recovery
 
@@ -175,9 +181,12 @@ Relevant API routes: `GET /discovery`, `GET /discovery/plex-servers`,
 
 ### Ports
 
-`musicseed` listens on `127.0.0.1:8789` (JSON at `/api`, UI at `/`). Contributor `dev.sh`
-adds Next.js on `127.0.0.1:3000` and reads `API_PORT`, `WEB_PORT`, and `API_URL` from the
-environment. Both bind loopback only.
+`musicseed` listens on `127.0.0.1:8789` (JSON at `/api`, UI at `/`). `musicseed --no-ui`
+serves unprefixed JSON. Contributor `dev.sh` starts that unprefixed API, Next.js on
+`127.0.0.1:3000`, and MCP streamable HTTP on `127.0.0.1:8790`. It reads `API_PORT`, `WEB_PORT`,
+`API_URL`, and `MCP_PORT`; when changing `API_PORT`, also set `API_URL` for the Next.js proxy.
+The script binds services to loopback. See the [MCP reference](../mcp-reference.md) for stdio
+and standalone transports.
 
 ### Offline behavior
 
@@ -188,7 +197,11 @@ multicast and a manual URL, and enrichment is simply skipped for tracks it can't
 
 ## Logging
 
-The CLI configures file logging through `core/src/musicseed/logging_config.py`.
+CLI, API product server, and MCP configure file logging through
+`core/src/musicseed/logging_config.py`. `MUSICSEED_LOG_LEVEL` takes precedence over configured
+or command-line levels. The API also attaches uvicorn to these handlers. MCP logs to stderr
+so stdout remains available for JSON-RPC. `scripts/dev.sh` defaults to DEBUG and also captures
+MCP process output in repo-local `logs/mcp.log` (override with `MCP_LOG`).
 
 - Timestamped run logs: `~/.local/share/musicseed/logs/musicseed_YYYYMMDD_HHMMSS.log`
 - Latest run: `~/.local/share/musicseed/logs/latest.log`
@@ -201,18 +214,24 @@ output. Console output should summarize progress and outcome.
 These are cheap and should be used before heavier checks:
 
 ```bash
-python3 -m compileall -q core/src/musicseed cli/src/musicseed_cli api/src/musicseed_api
-uv run ruff check src
-uv run musicseed-cli --help
+python3 -m compileall -q core/src/musicseed cli/src/musicseed_cli api/src/musicseed_api mcp/src/musicseed_mcp
+uv run --project core ruff check core/src
+uv run --project cli musicseed-cli --help
+.venv-docs/bin/mkdocs build --strict
 ```
 
-Stateful commands should be limited during development:
+From the repository root, use bounded enrichment and read-only previews during development
+(the examples below require configured local data; replace `123` with a real track ID):
 
 ```bash
-uv run musicseed-cli enrich --source listenbrainz --limit 100 --batch-size 50 --resume
-uv run musicseed-cli sonic-probe
-uv run musicseed-cli recommend --seed-id 123 --limit 20 --dry-run --explain
+uv run --project cli musicseed-cli enrich --source listenbrainz --limit 100 --batch-size 50 --resume
+uv run --project cli musicseed-cli sonic-probe
+uv run --project cli musicseed-cli recommend --seed-id 123 --limit 20 --explain
 ```
+
+`recommend` is already read-only; there is no `--dry-run` option. `import` and
+`import-plex-sonic` have no limit/dry-run flags and should only be run against real data with
+explicit intent. Use disposable fixtures for import exploration.
 
 ## Slow Or Risky Operations
 

@@ -1,7 +1,7 @@
 """Programmatic server entry point for the MusicSeed API.
 
 Surfaces start the API through ``serve()`` instead of assembling uvicorn
-themselves. Used by the ``musicseed-api`` script entry point. When a static
+themselves. Used by the ``musicseed`` script entry point. When a static
 UI is present, ``create_ui_app()`` mounts the JSON API at ``/api`` and serves
 the exported Next.js files from ``/``.
 """
