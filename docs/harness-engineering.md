@@ -27,7 +27,7 @@ Guides are feedforward context that shape agent behavior before work starts.
 - `docs/domain/music-recommendation.md`: recommendation concepts and signal semantics.
 - `docs/infra/local-runtime.md`: local services, config, logs, commands, operational safety.
 - `docs/infra/troubleshooting.md`: concrete checks and recovery for setup/job failures.
-- `docs/resolvers/recommendation-resolvers.md`: seed resolution, candidate pools, scoring,
+- `docs/resolvers/recommendation-resolvers.md`: seed resolution, eligible retrieval, scoring,
   diversity, and explainability.
 
 Keep guides short and linked. If a doc grows into many unrelated topics, split it.
@@ -39,9 +39,9 @@ Sensors are feedback mechanisms that tell an agent whether work is valid.
 Computational sensors:
 
 ```bash
-python3 -m compileall -q core/src/musicseed cli/src/musicseed_cli api/src/musicseed_api
-uv run ruff check src
-uv run musicseed-cli --help
+python3 -m compileall -q core/src/musicseed cli/src/musicseed_cli api/src/musicseed_api mcp/src/musicseed_mcp
+uv run --project core ruff check core/src
+uv run --project cli musicseed-cli --help
 .venv-docs/bin/mkdocs build --strict
 ```
 
@@ -52,8 +52,8 @@ errors surface at edit time instead of rotting in the site.
 Runtime sensors:
 
 ```bash
-uv run musicseed-cli status
-uv run musicseed-cli recommend --seed-id 123 --limit 20 --dry-run --explain
+uv run --project cli musicseed-cli status
+uv run --project cli musicseed-cli recommend --seed-id 123 --limit 20 --explain
 ```
 
 Human sensors:

@@ -28,7 +28,7 @@ def sonic_refresh(
     library_name: str | None = Query(default=None),
     days: int = Query(default=7),
 ) -> dict:
-    """Trigger a Plex sonic analysis refresh for recently added music."""
+    """Trigger Plex's pending sonic backlog; days scopes watching, not analysis."""
     result = trigger_sonic_refresh(library_name, days=days)
     return result.model_dump()
 

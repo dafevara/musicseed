@@ -62,8 +62,6 @@ logic to a surface or handler that could live in core, move it to `core/services
 - Seed matching, candidate generation, scoring, playlist selection: `docs/resolvers/recommendation-resolvers.md`.
 - Visual dependency/workflow explainer (self-contained HTML, keep in sync when deps change):
   `docs/musicseed-dependency-architecture.html`.
-- Historical plan and architecture: `docs/implementation-plan.md`, `docs/ard/001-initial-system-design.md`
-  (partially superseded by `docs/ard/002-sonic-vectors-at-query-time.md`).
 
 The docs in `docs/` also render as a MkDocs Material site (config `mkdocs.yml`); verify it with
 `.venv-docs/bin/mkdocs build --strict` from the repo root.

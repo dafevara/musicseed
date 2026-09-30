@@ -9,7 +9,8 @@ lightweight external enrichment.
 - Album: release container imported from Plex.
 - Track: playable recording with metadata, file path, identifiers, tags, popularity,
   and Plex references.
-- Mood, style, genre: Plex tag dimensions used as soft recommendation signals.
+- Style and genre: Plex tag dimensions used as recommendation signals. Mood is stored metadata
+  only and does not affect ranking.
 - Play history and track stats: listening behavior used for novelty and discovery.
 - Playlist: selected recommendation output intended for Plex.
 

@@ -15,6 +15,10 @@ analysis vectors (imported from Plex into the local store), and play history.
 - [Harness engineering](harness-engineering.md) — harness strategy and maintenance loop.
 - [API Reference](api-reference/core-services.md) — auto-generated Python API docs for the core
   services, the recommender, and the API handlers.
+- [HTTP API](api-reference/http-api.md) — server modes, request encoding, jobs, and playlist writes.
+- [CLI reference](cli-reference.md) — commands and options generated from the Typer app.
+- [MCP reference](mcp-reference.md) — agent tools, transports, and preview/approval workflows.
+- [Building the docs](infra/documentation.md) — update source pages and regenerate `site/`.
 
 The visual dependency/workflow explainer lives at
 [musicseed-dependency-architecture.html](musicseed-dependency-architecture.html) (raw HTML).

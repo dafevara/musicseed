@@ -16,17 +16,17 @@ def submit_job(kind: str, target: Callable[..., None], *args, **kwargs) -> int:
     ``target(job_id, *args, **kwargs)``, and reconciles its terminal state.
 
     Args:
-        kind: job kind (see core ``JobKind``); only one active job per kind
+        kind: job kind (see core ``JobKind``); only one active job of any kind
             is allowed across processes sharing the database.
         target: blocking callable to run in the worker thread.
-        *args: positional arguments forwarded to ``target`` after ``job_id``.
-        **kwargs: keyword arguments forwarded to ``target``.
+        *args (object): positional arguments forwarded to ``target`` after ``job_id``.
+        **kwargs (object): keyword arguments forwarded to ``target``.
 
     Returns:
         The id of the newly created job row.
 
     Raises:
-        JobConflictError: if a job of the same kind is already active, or the
+        JobConflictError: if a job is already active for this database, or the
             concurrency pool is full.
     """
     return jobs_service.get_manager().submit(kind, target, *args, **kwargs)

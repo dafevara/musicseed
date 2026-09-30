@@ -11,6 +11,7 @@
 #
 # Editable installs of core/ and api/ make `musicseed` and `musicseed_api`
 # importable so mkdocstrings can render the API reference.
+# mkdocstrings also reads mcp/src statically via mkdocs.yml; no MCP runtime is needed.
 mkdocs-material>=9.5
 mkdocstrings[python]>=0.26
 mkdocs-typer2>=0.1.0

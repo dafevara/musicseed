@@ -461,7 +461,7 @@ class JobManager:
             The id of the newly created job row.
 
         Raises:
-            JobConflictError: if a job of the same kind is already active, or
+            JobConflictError: if a job is already active for this database, or
                 the concurrency pool is full.
         """
         with _configuration_lock, self._lock:

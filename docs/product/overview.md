@@ -8,7 +8,8 @@ The intended user is a technically comfortable music collector running Plex loca
 library. The web UI is the default path (first-run wizard, dashboard, recommendation, playlists);
 a Typer CLI remains available as the power-user surface for scripting and advanced control. The
 project assumes the user can start local services, provide API credentials when needed, and
-inspect logs.
+inspect logs. An MCP server exposes the same recommendation and playlist services to agents,
+with a preview → approval → exact-selection write workflow.
 
 ## Product Promise
 
@@ -64,6 +65,12 @@ flows below remain the power-user path:
 2. Import Plex metadata.
 3. Enrich ListenBrainz popularity for MBID-backed tracks.
 4. Optionally enrich Spotify metadata.
-5. Ensure Plex has sonically analyzed the library (`sonic-probe` to check, `sonic-refresh` to trigger).
+5. Check Plex sonic analysis (`sonic-probe`; `sonic-refresh` triggers the entire pending backlog),
+   then copy vectors into MusicSeed with `import-plex-sonic`.
 6. Run `recommend` with seed text or seed IDs to preview the list.
-7. Run `playlist --name "My Playlist"` with the same parameters to approve and create it in Plex.
+7. Run `playlist --name "My Playlist"` with seed parameters, review its fresh preview, and
+   confirm to write those displayed IDs to Plex. Use `playlists` and `populate --dry-run` to
+   preview additions to an existing playlist before running `populate` to approve and append.
+
+See the [CLI reference](../cli-reference.md), [HTTP API](../api-reference/http-api.md), and
+[MCP tools](../mcp-reference.md) for each surface's inputs and result shapes.

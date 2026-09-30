@@ -55,7 +55,7 @@ musicseed
 
 ```bash
 git clone https://github.com/dafevara/musicseed.git
-cd MusicSeed
+cd musicseed
 ./scripts/install.sh
 musicseed
 ```
@@ -64,6 +64,10 @@ Then open `http://127.0.0.1:8789`. `install.sh` creates a Python virtualenv (`.v
 core library and API installed, builds the static UI, and puts `musicseed` on your PATH via a
 symlink in `~/.local/bin`. After that, runtime is Python only — Node is not required to start
 the app.
+
+Open **Quick Start** in the web navigation (`/quick-start`) for step-by-step installation,
+connection, and import guides, including Plex on a remote server or NAS over SSH and manually
+copied database backups. The guides are available before setup is complete.
 
 On first run the setup wizard (`/setup`) walks you through setup:
 

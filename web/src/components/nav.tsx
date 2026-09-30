@@ -9,12 +9,14 @@ const SECTIONS: Section[] = [
   { key: "recommend", label: "Recommend", href: "/recommend" },
   { key: "playlists", label: "Playlists", href: "/playlists" },
   { key: "settings", label: "Settings", href: "/settings" },
+  { key: "quick-start", label: "Quick Start", href: "/quick-start" },
 ];
 
 const PREFIXES: [string, string][] = [
   ["/recommend", "recommend"],
   ["/playlists", "playlists"],
   ["/settings", "settings"],
+  ["/quick-start", "quick-start"],
 ];
 
 function activeSection(path: string): string | null {

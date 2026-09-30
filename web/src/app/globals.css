@@ -184,6 +184,142 @@ body {
   }
 }
 
+/* ── Quick Start guides ─────────────────────── */
+.quick-start-welcome {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  background: var(--ms-accent-soft);
+}
+
+.quick-start-index {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.quick-start-card {
+  display: flex;
+  gap: 0.85rem;
+  padding: 1rem;
+  color: var(--ms-text);
+  background: var(--ms-surface);
+  border: 1px solid var(--ms-border);
+  border-radius: var(--ms-radius-control);
+  text-decoration: none;
+}
+
+.quick-start-card:hover {
+  color: var(--ms-text);
+  border-color: var(--ms-accent);
+  background: var(--ms-surface-raised);
+}
+
+.quick-start-number {
+  color: var(--ms-accent-secondary);
+  font-family: var(--ms-font-mono);
+  font-size: 0.85rem;
+}
+
+.quick-start-guide,
+.quick-start-index {
+  scroll-margin-top: 7rem;
+}
+
+.quick-start-guide {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.quick-start-guide p {
+  max-width: 76ch;
+  color: var(--ms-text-muted);
+  margin: 0.65rem 0;
+}
+
+.quick-start-guide a {
+  color: var(--ms-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.quick-start-steps {
+  list-style: decimal;
+  padding-left: 1.5rem;
+  margin: 1.5rem 0;
+}
+
+.quick-start-steps > li {
+  padding-left: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.quick-start-steps > li::marker {
+  color: var(--ms-accent-secondary);
+  font-weight: 700;
+}
+
+.quick-start-steps h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+.quick-start-guide pre {
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 1rem;
+  margin: 0.75rem 0;
+  background: var(--ms-surface-code);
+  border: 1px solid var(--ms-border);
+  border-radius: var(--ms-radius-control);
+  font-size: 0.85rem;
+}
+
+.quick-start-guide code {
+  font-family: var(--ms-font-mono);
+}
+
+.quick-start-guide details {
+  margin-top: 1rem;
+  padding: 0.85rem 1rem;
+  background: var(--ms-canvas-muted);
+  border-radius: var(--ms-radius-control);
+}
+
+.quick-start-guide summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.quick-start-guide .quick-start-next {
+  padding-top: 1rem;
+  border-top: 1px solid var(--ms-border);
+}
+
+.quick-start-back {
+  display: inline-block;
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.quick-start-card:focus-visible,
+.quick-start-guide :is(a, summary, pre):focus-visible {
+  outline: 2px solid var(--ms-focus);
+  outline-offset: 3px;
+}
+
+@media (max-width: 640px) {
+  .quick-start-index {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .quick-start-welcome {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
 /* ── Badges ─────────────────────────────────── */
 .badge {
   display: inline-block;

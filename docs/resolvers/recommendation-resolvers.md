@@ -5,6 +5,8 @@ This document explains how seed input becomes a ranked recommendation list.
 ## Entry Points
 
 - CLI command: `musicseed-cli recommend` in `cli/src/musicseed_cli/commands/recommend.py`.
+- Public services: `core/src/musicseed/services/recommend.py` and `populate.py`, shared by
+  CLI, API handlers, and MCP tools.
 - Orchestration: `core/src/musicseed/recommender/playlist.py`.
 - Eligible scoring/selection: `core/src/musicseed/recommender/retrieval.py`.
 - Historical bounded reference (offline comparisons only): `core/src/musicseed/recommender/candidates.py`.
@@ -113,11 +115,15 @@ Artist, album, year, popularity, local/Plex IDs, scores, sources and normal reco
 remain serializable after session closure and engine disposal. Only internal recommendation
 objects carry ORM tracks.
 
-A preview followed by confirmation is **not** a second recommendation request. CLI/web creation
-writes the preview's seed IDs plus its approved recommendation IDs in order; populate writes the
+A preview followed by confirmation is **not** a second recommendation request. CLI, web, and MCP creation
+write the preview's seed IDs plus its approved recommendation IDs in order; populate writes the
 approved IDs (including any user pruning). Empty or malformed API selections fail. Stale local
 IDs or tracks without a Plex mapping reject the whole write before any Plex mutation, rather than
 silently writing a subset. Duplicate IDs are collapsed in first-occurrence order.
+
+Exact-selection create retries reuse only the same name and ordered contents; other name
+collisions fail. Populate skips tracks already present in Plex. Core and MCP return both
+`added_count` and `already_present_count`; the HTTP adapter currently returns `added_count`.
 
 The API's create and populate write routes now require `track_ids`; seed-only/selection-free
 clients must preview first. Core retains explicit generate-and-write entry points for callers
