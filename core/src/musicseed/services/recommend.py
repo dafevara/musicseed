@@ -2,12 +2,12 @@
 
 from pydantic import BaseModel
 
-from musicseed.clients.plex import Playlist, PlexClient
+from musicseed.clients.plex import Playlist
 from musicseed.context import MusicSeedContext, get_context
 from musicseed.exceptions import NotFoundError
 from musicseed.recommender.playlist import RecommendMethod, recommend_tracks
 from musicseed.recommender.scoring import SonicCoverage, Weights
-from musicseed.services.plex_link import require_plex_token
+from musicseed.services.plex_link import plex_client
 from musicseed.services.schemas import (
     ServiceRecommendation,
     ServiceTrack,
@@ -142,7 +142,6 @@ def create_playlist(
     """
     ctx = context or get_context()
     config = ctx.config
-    token = require_plex_token(config)
 
     # Score the full selection first; this is the same call a preview makes.
     result = get_recommendations(
@@ -163,7 +162,7 @@ def create_playlist(
     ]
 
     # Write the ordered selection to Plex in a single call.
-    client = PlexClient(base_url=config.plex.url, token=token)
+    client = plex_client(config)
     playlist = client.create_playlist(name, plex_ids)
 
     return PlaylistCreateResult(

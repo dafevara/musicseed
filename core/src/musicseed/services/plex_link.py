@@ -40,6 +40,7 @@ import httpx
 from pydantic import BaseModel, Field
 
 from musicseed import __version__
+from musicseed.clients.plex import PlexClient
 from musicseed.config import (
     Config,
     PlexConfig,
@@ -47,6 +48,7 @@ from musicseed.config import (
     reload_config,
     save_config,
     set_config,
+    url_is_remote_cleartext,
 )
 from musicseed.exceptions import ConfigurationError, MusicSeedError
 from musicseed.logging_config import get_logger
@@ -214,6 +216,33 @@ def require_plex_token(config: Config | None = None) -> str:
         if fresh.plex.token:
             return fresh.plex.token
     raise ConfigurationError(PLEX_LINK_GUIDANCE)
+
+
+def plex_client(
+    config: Config | None = None, *, timeout: float = 15.0
+) -> PlexClient:
+    """Build a Plex client for the configured server, guarding cleartext remote.
+
+    The stored Plex token travels with every Plex request. Sending it over
+    plain ``http://`` to a remote (non-local) host is refused unless
+    ``plex.allow_cleartext_remote`` is set, making cleartext remote a
+    deliberate choice. Local and home-LAN HTTP remain supported, and https://
+    keeps httpx's certificate verification enabled.
+
+    Raises:
+        ConfigurationError: when Plex is not linked, or the configured URL is
+            remote cleartext without the explicit opt-in flag.
+    """
+    cfg = config or get_config()
+    token = require_plex_token(cfg)
+    if url_is_remote_cleartext(cfg.plex.url) and not cfg.plex.allow_cleartext_remote:
+        raise ConfigurationError(
+            "The configured Plex server uses plain http:// to a remote address, "
+            "which would send your Plex token in cleartext over the network. "
+            "Use https:// (or a VPN/tunnel), or set "
+            "plex.allow_cleartext_remote: true to opt in deliberately."
+        )
+    return PlexClient(base_url=cfg.plex.url, token=token, timeout=timeout)
 
 
 # ---------------------------------------------------------------------------

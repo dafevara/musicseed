@@ -67,7 +67,7 @@ def library(tmp_path, monkeypatch):
 
     plex = FakePlex()
     monkeypatch.setattr(populate, "_plex_client", lambda _ctx=None: plex)
-    monkeypatch.setattr(playlist_tracks, "PlexClient", lambda **_kw: plex)
+    monkeypatch.setattr(playlist_tracks, "plex_client", lambda config=None, **kwargs: plex)
     yield ctx, ids, plex
     ctx.engine.dispose()
 

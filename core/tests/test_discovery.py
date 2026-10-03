@@ -393,6 +393,24 @@ def test_probing_different_ssh_target_holds_back_password(
     assert captured["password"] == ""
 
 
+def test_remote_cleartext_is_reported_and_token_held(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch_client(monkeypatch, check=_ok_check())
+    cfg = _config(tmp_path, url="http://plex.example.com:32400", token=SECRET_TOKEN)
+
+    result = discover(config=cfg)
+    assert result.plex_server.reason is Reason.INSECURE_TRANSPORT
+    assert not result.plex_server.token_configured
+    assert result.plex_server.token_source == "none"
+    assert "cleartext" in (result.plex_server.detail or "")
+
+    # Opting in lets the probe proceed with the token.
+    cfg.plex.allow_cleartext_remote = True
+    allowed = discover(config=cfg)
+    assert allowed.plex_server.token_source == "config"
+
+
 # ---------------------------------------------------------------- client probe
 
 

@@ -1,9 +1,11 @@
 """Configuration loading and management."""
 
+import ipaddress
 import os
 import sys
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import yaml
 from pydantic import BaseModel, Field
@@ -72,6 +74,43 @@ def _expand_env_vars(value: Any) -> Any:
     return value
 
 
+_LOCAL_HOST_SUFFIXES = (
+    ".local", ".lan", ".home", ".internal", ".localhost", ".localdomain",
+)
+
+
+def _is_local_hostname(host: str) -> bool:
+    """True for a home-network hostname (mDNS / single-label / LAN suffixes)."""
+    host = host.lower()
+    if host == "localhost":
+        return True
+    if "." not in host:
+        return True
+    return host.endswith(_LOCAL_HOST_SUFFIXES)
+
+
+def url_is_remote_cleartext(url: str) -> bool:
+    """True when ``url`` is plain ``http://`` to a non-local, non-private host.
+
+    Local and home-LAN HTTP is the supported local-first path; cleartext to a
+    *remote* host would send the Plex token over the public internet and must
+    be opted into explicitly via ``plex.allow_cleartext_remote``.
+    """
+    parsed = urlparse(url)
+    if (parsed.scheme or "").lower() != "http":
+        return False
+    host = (parsed.hostname or "").lower()
+    if not host:
+        return False
+    if _is_local_hostname(host):
+        return False
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return True  # a non-local hostname is remote by default
+    return not (ip.is_loopback or ip.is_private or ip.is_link_local)
+
+
 class DatabaseConfig(BaseModel):
     path: str = "~/.local/share/musicseed/musicseed.db"
 
@@ -108,6 +147,10 @@ class PlexConfig(BaseModel):
     # and agent instead.
     db_ssh_password: str = ""
     db_ssh_port: int = 22
+    # Opt-in for a plain http:// connection to a remote (non-local) Plex host.
+    # Defaults False so a remote cleartext connection is a deliberate choice;
+    # prefer https:// or a VPN/tunnel instead.
+    allow_cleartext_remote: bool = False
 
     @property
     def db_path_expanded(self) -> Path:

@@ -24,6 +24,10 @@ plex:
   # Omit to auto-detect (macOS + Linux Plex data dirs). Override if discovery misses.
   db_path: >-
     ~/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db
+  # A plain http:// connection to a *remote* (non-local) Plex host sends the token
+  # in cleartext, so it is refused unless this is set to true. Prefer https:// or a
+  # VPN/tunnel. Local and home-LAN http:// keep working without this flag.
+  allow_cleartext_remote: false
 
 # Optional. Leave empty (or omit) if you only use ListenBrainz enrichment.
 spotify:

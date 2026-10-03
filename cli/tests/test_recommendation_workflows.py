@@ -58,7 +58,7 @@ def workflow(tmp_path, monkeypatch):
 
     plex = FakePlex()
     monkeypatch.setattr(populate, "_plex_client", lambda _ctx=None: plex)
-    monkeypatch.setattr(playlist_tracks, "PlexClient", lambda **_kw: plex)
+    monkeypatch.setattr(playlist_tracks, "plex_client", lambda config=None, **kwargs: plex)
     monkeypatch.setattr(console, "width", 250)
     app = typer.Typer()
     recommend_command.register(app)

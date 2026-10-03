@@ -13,12 +13,27 @@ from musicseed.config import (
     reload_config,
     save_config,
     set_config,
+    url_is_remote_cleartext,
 )
 
 
 def _reset_globals() -> None:
     config_module._config = None
     config_module._config_path = None
+
+
+def test_url_is_remote_cleartext() -> None:
+    # Local and home-LAN HTTP stay supported.
+    assert not url_is_remote_cleartext("http://localhost:32400")
+    assert not url_is_remote_cleartext("http://127.0.0.1:32400")
+    assert not url_is_remote_cleartext("http://192.168.1.5:32400")
+    assert not url_is_remote_cleartext("http://nas.lan:32400")
+    assert not url_is_remote_cleartext("http://plex.local:32400")
+    # https:// to any host keeps certificate verification; not cleartext.
+    assert not url_is_remote_cleartext("https://plex.example.com")
+    # Plain http:// to a remote host is cleartext.
+    assert url_is_remote_cleartext("http://plex.example.com")
+    assert url_is_remote_cleartext("http://8.8.8.8:32400")
 
 
 def test_save_config_round_trips_values(tmp_path) -> None:

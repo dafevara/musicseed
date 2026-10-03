@@ -10,7 +10,7 @@ from musicseed.recommender.playlist import Recommendation
 from musicseed.recommender.populate import PopulateMethod, populate_playlist_recommendations
 from musicseed.recommender.scoring import Weights
 from musicseed.services.playlist_tracks import resolve_track_selection
-from musicseed.services.plex_link import require_plex_token
+from musicseed.services.plex_link import plex_client
 from musicseed.services.schemas import ServiceRecommendation, to_service_recommendation
 
 
@@ -32,10 +32,7 @@ class PopulateApplyResult(PopulateResult):
 
 
 def _plex_client(context: MusicSeedContext | None = None) -> PlexClient:
-    config = (context or get_context()).config
-    return PlexClient(
-        base_url=config.plex.url, token=require_plex_token(config)
-    )
+    return plex_client((context or get_context()).config)
 
 
 def list_plex_playlists(context: MusicSeedContext | None = None) -> list[Playlist]:

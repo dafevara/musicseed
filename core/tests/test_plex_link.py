@@ -383,3 +383,37 @@ def test_require_plex_token_reloads_a_stale_process_config(tmp_path) -> None:
     set_config(stale)
 
     assert require_plex_token(stale) == SECRET_TOKEN
+
+
+def test_plex_client_refuses_remote_cleartext_without_opt_in() -> None:
+    cfg = get_config().model_copy(deep=True)
+    cfg.plex.token = SECRET_TOKEN
+    cfg.plex.url = "http://plex.example.com:32400"
+    set_config(cfg)
+
+    with pytest.raises(ConfigurationError) as excinfo:
+        plex_link.plex_client(cfg)
+
+    message = str(excinfo.value)
+    assert "cleartext" in message
+    assert "plex.allow_cleartext_remote" in message
+
+
+def test_plex_client_allows_remote_cleartext_when_opted_in() -> None:
+    cfg = get_config().model_copy(deep=True)
+    cfg.plex.token = SECRET_TOKEN
+    cfg.plex.url = "http://plex.example.com:32400"
+    cfg.plex.allow_cleartext_remote = True
+    set_config(cfg)
+
+    client = plex_link.plex_client(cfg)
+    assert client is not None
+
+
+def test_plex_client_allows_local_http_without_opt_in() -> None:
+    cfg = get_config().model_copy(deep=True)
+    cfg.plex.token = SECRET_TOKEN
+    cfg.plex.url = "http://192.168.1.5:32400"
+    set_config(cfg)
+
+    assert plex_link.plex_client(cfg) is not None

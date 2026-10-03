@@ -26,6 +26,7 @@ from musicseed.config import (
     get_config_path,
     plex_data_dir_candidates,
     plex_library_db_candidates,
+    url_is_remote_cleartext,
 )
 from musicseed.exceptions import NotFoundError
 from musicseed.logging_config import get_logger
@@ -118,6 +119,7 @@ class Reason(StrEnum):
     MISSING_TOKEN = "missing_token"
     UNREACHABLE = "unreachable"
     UNAUTHORIZED = "unauthorized"
+    INSECURE_TRANSPORT = "insecure_transport"
     LIBRARY_NOT_FOUND = "library_not_found"
     ERROR = "error"
 
@@ -582,7 +584,29 @@ def discover(
     else:
         local_token = read_plex_token()
         token, token_source = (local_token, "local") if local_token else ("", "none")
-    if check_server:
+    # A remote cleartext URL would send the token over the public internet.
+    # Report it and hold the token back unless the operator opted in explicitly.
+    insecure_remote = url_is_remote_cleartext(url) and not cfg.plex.allow_cleartext_remote
+    if insecure_remote:
+        token, token_source = "", "none"
+    if check_server and insecure_remote:
+        plex_server = PlexServerDiscovery(
+            url=url,
+            source=url_source,
+            token_configured=False,
+            token_source=token_source,
+            server_version=None,
+            library=library,
+            library_found=False,
+            reason=Reason.INSECURE_TRANSPORT,
+            detail=(
+                "This Plex address uses plain http:// to a remote host, which would "
+                "send your Plex token in cleartext. Use https:// (or a VPN/tunnel), "
+                "or set plex.allow_cleartext_remote: true to opt in."
+            ),
+            ok=False,
+        )
+    elif check_server:
         plex_server = _discover_server(
             url, url_source, token, library, timeout, token_source
         )

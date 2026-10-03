@@ -105,6 +105,14 @@ the configured address clears the previously bound secret unless a new one is
 provided in the same submission. This keeps testing an alternate server from
 silently re-sending credentials elsewhere.
 
+## Transport encryption
+
+Local and home-LAN ``http://`` Plex connections are supported. A plain
+``http://`` connection to a *remote* (non-local) host would send the Plex token
+in cleartext, so MusicSeed refuses it unless ``plex.allow_cleartext_remote`` is
+set explicitly — prefer ``https://`` or a VPN/tunnel. HTTPS keeps certificate
+verification enabled (httpx defaults); it is never disabled.
+
 ## Scope notes
 
 Out of scope for security reports unless they create a concrete local exploit:
