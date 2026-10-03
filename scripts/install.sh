@@ -49,7 +49,10 @@ if ! "$VENV/bin/python" -m pip --version >/dev/null 2>&1; then
   fi
 fi
 "$VENV/bin/python" -m pip install --quiet --upgrade pip
-"$VENV/bin/python" -m pip install --quiet -e "$ROOT/core" -e "$ROOT/api" -e "$ROOT/cli"
+# Install against the pinned, CI-tested dependency set rather than whatever pip
+# resolves today (regenerate with scripts/export-constraints.sh).
+"$VENV/bin/python" -m pip install --quiet -c "$ROOT/constraints.txt" \
+  -e "$ROOT/core" -e "$ROOT/api" -e "$ROOT/cli"
 
 echo "[install] building web UI ..."
 (cd "$ROOT/web" && npm ci && npm run build)

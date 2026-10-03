@@ -133,6 +133,18 @@ size of a remote Plex database snapshot (which is also refused when the
 destination lacks free disk space). Plex sonic-vector blobs are decompressed
 under a fixed per-blob cap, so a malformed blob cannot expand into a zip bomb.
 
+## Installations and releases
+
+- CI covers every app (core, cli, api, and mcp), runs a per-app dependency
+  audit (``uv audit``), a gitleaks secret scan, and an ``npm audit`` on a
+  schedule and on every push/PR.
+- CI actions are pinned to immutable commit SHAs.
+- Releases are only cut after the ``CI`` workflow passes on ``main`` (or via an
+  explicit manual dispatch).
+- End-user installs (``scripts/install.sh``) install against a pinned,
+  CI-tested dependency set (``constraints.txt``), regenerated from the
+  lockfiles with ``scripts/export-constraints.sh``.
+
 ## Scope notes
 
 Out of scope for security reports unless they create a concrete local exploit:
