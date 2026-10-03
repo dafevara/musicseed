@@ -64,14 +64,20 @@ def _ip(hostname: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
 
 
 def is_trusted_network_host(hostname: str) -> bool:
-    """Loopback, link-local, or RFC1918/ULA private — the trusted home-LAN surface."""
+    """Loopback, link-local, private/LAN, or CGNAT/VPN — not globally routable.
+
+    ``is_global`` is False for loopback, RFC1918 private, link-local, and
+    CGNAT/Tailscale (100.64.0.0/10) addresses, so a MusicSeed instance hosted
+    on a LAN or VPN address is reachable while a public hostname is not trusted
+    without an explicit ``security.allowed_hosts`` entry.
+    """
     hostname = _hostname(hostname)
     if hostname == "localhost":
         return True
     ip = _ip(hostname)
     if ip is None:
         return False
-    return ip.is_loopback or ip.is_private or ip.is_link_local
+    return not ip.is_global
 
 
 def host_allowed(host: str, allowed_hosts: list[str] | tuple[str, ...] | set[str]) -> bool:

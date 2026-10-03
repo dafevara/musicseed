@@ -29,7 +29,10 @@ def test_host_allowed_defaults():
     assert host_allowed("localhost:8789", [])
     assert host_allowed("[::1]:8789", [])
     assert host_allowed("192.168.1.10", [])
+    # VPN / CGNAT / Tailscale addresses are trusted local-network hosts.
+    assert host_allowed("100.73.64.125:8789", [])
     assert not host_allowed("evil.example.com", [])
+    assert not host_allowed("8.8.8.8:8789", [])
     assert host_allowed("musicseed.lan", ["musicseed.lan"])
     assert not host_allowed("musicseed.lan", [])
 

@@ -29,9 +29,16 @@ def test_url_is_remote_cleartext() -> None:
     assert not url_is_remote_cleartext("http://192.168.1.5:32400")
     assert not url_is_remote_cleartext("http://nas.lan:32400")
     assert not url_is_remote_cleartext("http://plex.local:32400")
+    # VPN / CGNAT / Tailscale and link-local addresses are local, not public.
+    assert not url_is_remote_cleartext("http://100.73.64.125:32400")
+    assert not url_is_remote_cleartext("http://100.100.100.100:32400")
+    assert not url_is_remote_cleartext("http://myhost.ts.net:32400")
+    assert not url_is_remote_cleartext("http://plex.home.arpa:32400")
+    assert not url_is_remote_cleartext("http://169.254.1.1:32400")
+    assert not url_is_remote_cleartext("http://10.8.0.2:32400")
     # https:// to any host keeps certificate verification; not cleartext.
     assert not url_is_remote_cleartext("https://plex.example.com")
-    # Plain http:// to a remote host is cleartext.
+    # Plain http:// to a publicly routable host is cleartext.
     assert url_is_remote_cleartext("http://plex.example.com")
     assert url_is_remote_cleartext("http://8.8.8.8:32400")
 

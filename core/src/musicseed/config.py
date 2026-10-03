@@ -76,12 +76,21 @@ def _expand_env_vars(value: Any) -> Any:
 
 
 _LOCAL_HOST_SUFFIXES = (
-    ".local", ".lan", ".home", ".internal", ".localhost", ".localdomain",
+    ".local", ".lan", ".home", ".home.arpa", ".internal", ".localhost",
+    ".localdomain", ".ts.net",
 )
 
 
+def _ip(host: str):
+    """Parse ``host`` as an IP address, or return None for a hostname."""
+    try:
+        return ipaddress.ip_address(host)
+    except ValueError:
+        return None
+
+
 def _is_local_hostname(host: str) -> bool:
-    """True for a home-network hostname (mDNS / single-label / LAN suffixes)."""
+    """True for a home-network or VPN hostname (mDNS / single-label / known suffixes)."""
     host = host.lower()
     if host == "localhost":
         return True
@@ -91,11 +100,12 @@ def _is_local_hostname(host: str) -> bool:
 
 
 def url_is_remote_cleartext(url: str) -> bool:
-    """True when ``url`` is plain ``http://`` to a non-local, non-private host.
+    """True when ``url`` is plain ``http://`` to a globally routable host.
 
-    Local and home-LAN HTTP is the supported local-first path; cleartext to a
-    *remote* host would send the Plex token over the public internet and must
-    be opted into explicitly via ``plex.allow_cleartext_remote``.
+    Local, home-LAN, and VPN addresses — loopback, RFC1918 private, link-local,
+    CGNAT/Tailscale (100.64.0.0/10), IPv6 ULA, and ``.local``/``.ts.net``
+    hostnames — keep working over ``http://``. Only a *publicly routable* host
+    is treated as remote, where cleartext would expose the token to the internet.
     """
     parsed = urlparse(url)
     if (parsed.scheme or "").lower() != "http":
@@ -105,11 +115,12 @@ def url_is_remote_cleartext(url: str) -> bool:
         return False
     if _is_local_hostname(host):
         return False
-    try:
-        ip = ipaddress.ip_address(host)
-    except ValueError:
+    ip = _ip(host)
+    if ip is None:
         return True  # a non-local hostname is remote by default
-    return not (ip.is_loopback or ip.is_private or ip.is_link_local)
+    # ``is_global`` is False for private/loopback/link-local/CGNAT/ULA and True
+    # only for globally routable addresses — exactly the remote case.
+    return ip.is_global
 
 
 class DatabaseConfig(BaseModel):
