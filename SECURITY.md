@@ -98,20 +98,22 @@ front of it — MusicSeed does not ship a login.
 
 ## Credential routing
 
-A stored Plex token is bound to the server address it was saved for, and a
-stored SSH password to its SSH target. Probing a *different* address sends no
-stored secret until the user explicitly supplies one for that address; changing
-the configured address clears the previously bound secret unless a new one is
-provided in the same submission. This keeps testing an alternate server from
-silently re-sending credentials elsewhere.
+An SSH password is bound to its SSH target: probing a *different* target sends
+no stored password, and changing the configured target clears the password
+unless a new one is supplied in the same submission, so changing servers cannot
+silently re-send a password elsewhere. The Plex token is account-wide, so
+selecting a different server on the same account keeps it — and the server
+picker verifies candidate addresses without sending any token.
 
 ## Transport encryption
 
-Local and home-LAN ``http://`` Plex connections are supported. A plain
-``http://`` connection to a *remote* (non-local) host would send the Plex token
-in cleartext, so MusicSeed refuses it unless ``plex.allow_cleartext_remote`` is
-set explicitly — prefer ``https://`` or a VPN/tunnel. HTTPS keeps certificate
-verification enabled (httpx defaults); it is never disabled.
+Local, home-LAN, and VPN ``http://`` Plex connections are supported — loopback,
+RFC1918 private, link-local, CGNAT/Tailscale (``100.64.0.0/10``), IPv6 ULA, and
+``.local``/``.home.arpa``/``.ts.net`` hostnames. A plain ``http://`` connection
+to a *globally routable* host would send the Plex token in cleartext, so
+MusicSeed refuses it unless ``plex.allow_cleartext_remote`` is set explicitly —
+prefer ``https://`` or a VPN/tunnel. HTTPS keeps certificate verification
+enabled (httpx defaults); it is never disabled.
 
 ## Private file handling
 
