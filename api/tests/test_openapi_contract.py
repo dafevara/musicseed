@@ -4,6 +4,10 @@ from fastapi.testclient import TestClient
 from musicseed_api.app import create_app
 
 EXPECTED_OPERATIONS = {
+    ("get", "/auth/plex/account"),
+    ("post", "/auth/plex/pin"),
+    ("get", "/auth/plex/pin/{pin_id}"),
+    ("post", "/auth/plex/unlink"),
     ("get", "/dashboard"),
     ("get", "/discovery"),
     ("post", "/discovery/check"),

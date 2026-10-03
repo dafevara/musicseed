@@ -27,7 +27,7 @@ the logic this app calls. This file covers the CLI app only.
 - `src/musicseed_cli/commands/`: **one module per command**, each exposing a plain command function
   plus a `register(app)` that attaches it. `commands/__init__.py` holds `register_all(app)`, which
   registers all modules in the intended command order. Modules: `init_db`, `optimize_db`,
-  `status`, `import_library`, `sonic_probe`, `sonic_refresh`, `enrich`,
+  `status`, `plex_login`, `import_library`, `sonic_probe`, `sonic_refresh`, `enrich`,
   `recommend`, `playlist`, `playlists`, `populate`. To add a command, create a module with
   `register(app)` and list it in
   `commands/__init__.py`.
@@ -46,7 +46,8 @@ Imports from core are unchanged from the pre-monorepo layout (`from musicseed.co
 | Command | Calls |
 |---|---|
 | `init-db` / `optimize-db` / `status` | `services.library.initialize_database` / `optimize_database` / `get_status` |
-| `import` | `services.library.import_library` |
+| `plex-login` (`--open` browser hand-off, otherwise a code for plex.tv/link) / `plex-logout` | `services.plex_link.start_plex_link` → `wait_for_plex_link` → saved credentials / `unlink_plex` |
+| `import` (prints coarse 25% progress for remote snapshot phases) | `services.library.import_library` |
 | `sonic-probe` (`--trigger`/`--trigger-butler` confirm before touching Plex) | `services.plex_analysis.get_sonic_status` / `probe_sonic_trigger` / `probe_butler_trigger` |
 | `sonic-refresh` (`--days N`, confirms before triggering the Butler task) | `services.plex_analysis.refresh_sonic_analysis` |
 | `enrich` (`--source spotify|listenbrainz`) | `services.enrichment.enrich_tracks` |

@@ -58,6 +58,10 @@ Never paste into public issues, PRs, discussions, or screenshots:
 
 - Copy `config.example.yaml` to a local config path (see README); never commit
   a real `config.yaml`.
+- Prefer the Plex account sign-in (setup wizard, Settings, or
+  `musicseed-cli plex-login`) over handling tokens by hand: the token is obtained
+  from plex.tv, validated, and written straight to `config.yaml`. The file is
+  written owner-only (`0600`).
 - Prefer environment-variable placeholders (`${PLEX_TOKEN}`) over hard-coded
   secrets in YAML.
 - Keep `config.yaml`, `.env`, `data/`, `logs/`, and `*.db` out of git (see

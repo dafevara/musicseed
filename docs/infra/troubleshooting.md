@@ -28,41 +28,94 @@ Symptom: the setup wizard shows no discovered server, or discovery reports
 Checks and recovery:
 
 1. **Local subnet.** GDM/SSDP multicast never crosses routers, so discovery only finds servers on
-   the same subnet. If Plex runs on a different subnet, supply a Plex token so MusicSeed can look
-   up your servers via `plex.tv/api/resources` — or enter the server URL manually in the wizard.
-2. **Enter the URL manually.** The wizard and Settings accept an explicit Plex URL
-   (e.g. `http://<plex-host>:32400`). Use the IP or hostname where Plex actually listens.
-3. **Confirm Plex is up.** Verify Plex responds at `http://127.0.0.1:32400/identity` from the same
+   the same subnet. Sign in with your Plex account so MusicSeed can look up your servers via
+   `plex.tv/api/resources` — or enter the server URL manually in the wizard.
+2. **Pick an address that answers.** A Plex server advertises several addresses (its own LAN
+   interfaces, a VPN/Tailscale address, a `plex.direct` hostname), and the ones Plex prefers are
+   often unreachable from another machine. The picker probes each one and labels it: choose an
+   entry marked **reachable** (they are sorted first), and the current address is marked
+   **in use**. An address that only works on the server's own network will always report
+   `unreachable`, no matter what the server is doing.
+3. **Enter the URL manually.** The wizard and Settings accept an explicit Plex URL
+   (e.g. `http://<plex-host>:32400`). Use the IP or hostname where Plex actually listens, and
+   remember that the field shows the URL currently being probed — edit it if it is wrong.
+4. **Confirm Plex is up.** Verify Plex responds at `http://127.0.0.1:32400/identity` from the same
    machine. Firewalls or a VPN that filters multicast/SSDP will hide the server from discovery but
    not from a manual URL.
-4. **Library name.** Discovery reports `library_not_found` when the server is reachable but the
+5. **Library name.** Discovery reports `library_not_found` when the server is reachable but the
    configured music library name doesn't match a section. Check the exact library name in Plex
    settings and re-enter it.
 
-## Token / permission failures
+## Plex sign-in / permission failures
 
 Symptom: `unauthorized`, `missing_token`, or `plex_token` in `missing_inputs`; Plex API calls
 return 401.
 
 Checks and recovery:
 
-1. **Auto-detection.** MusicSeed reads the token from Plex's local install
-   (macOS `~/Library/Application Support/Plex Media Server/Preferences.xml`, or the
-   Linux Plex data dir →
-   `PlexOnlineToken`, falling back to `.LocalAdminToken`). If neither is present (or Plex isn't
-   installed locally), paste a token manually.
-2. **Get a token.** From a signed-in session at app.plex.tv, view any Plex XML resource and copy
-   the `X-Plex-Token` query parameter. The wizard/Settings shows this guidance when no token is
-   found. In the wizard's **Connect Plex** step, enter it in **Plex token** and choose
-   **Save & re-check**. Setup advances to **Review & initialize** once the connection succeeds.
-   Finding the local Plex library and blobs databases does not authenticate the Plex connection.
-   A token is needed to write playlists to Plex; local import and recommendations can work
-   without it. Choose **Continue without Plex connection** to set those up first, then enter
-   the token in the review step or Settings when you're ready to connect.
-3. **Scope.** `.LocalAdminToken` works only for localhost requests. If you access Plex over the
-   network, use `PlexOnlineToken` (a full token) instead.
-4. **Where tokens live.** Tokens are stored in `config.yaml`, not in the database. They are sent in
-   POST bodies and never rendered back to the UI — the UI shows only "configured / not set".
+1. **Sign in with Plex.** In the wizard's **Connect Plex** step (or Settings), choose
+   **Sign in with Plex**. Your browser goes to Plex's own sign-in page, and the token it returns
+   is validated against plex.tv and saved locally — nothing to copy. Setup advances to
+   **Review & initialize** once the connection succeeds.
+2. **No browser on this machine (server/NAS/Docker).** Run `musicseed-cli plex-login` where
+   MusicSeed is installed: it prints a short code to enter at `https://plex.tv/link`. Use
+   `--open` when a browser *is* available. `musicseed-cli plex-logout` forgets the stored token.
+3. **Auto-detection.** When Plex runs on the same machine as MusicSeed, nothing may be needed at
+   all: MusicSeed reads the token from Plex's local install (macOS
+   `~/Library/Application Support/Plex Media Server/Preferences.xml`, or the Linux Plex data dir →
+   `PlexOnlineToken`, falling back to `.LocalAdminToken`).
+4. **plex.tv unreachable.** Offline installs cannot use the sign-in flow at all. Open
+   **Advanced: paste a Plex token instead** in the wizard/Settings and paste one: from a
+   signed-in session at app.plex.tv, view any Plex XML resource and copy the `X-Plex-Token`
+   query parameter.
+5. **Finding the local Plex library and blobs databases does not authenticate the Plex
+   connection.** A token (or sign-in) is needed to write playlists to Plex; local import and
+   recommendations can work without it. Choose **Continue without Plex connection** to set those
+   up first, then connect Plex from the review step or Settings when you're ready.
+6. **Scope.** `.LocalAdminToken` works only for localhost requests. If you access Plex over the
+   network, sign in (or use `PlexOnlineToken`) instead.
+7. **Where tokens live.** Tokens are stored in `config.yaml` (written owner-only, `0600`), not in
+   the database. They are sent in POST bodies and never rendered back to the UI — the UI shows only
+   "configured / not set". Revoking MusicSeed in Plex's **Authorized Devices** page invalidates the
+   stored token; sign in again (or run `plex-login`) to replace it.
+
+## Plex database import over SSH
+
+Symptom: the wizard's **Plex library database** check fails on a remote Plex host, the import
+stops before downloading anything, or `scp` works from a terminal while MusicSeed does not.
+
+Checks and recovery:
+
+1. **Target shape.** Enter `[user@]host:/path` for the folder that holds
+   `com.plexapp.plugins.library.db`. Pasting the database **file's** own path is accepted too (its
+   folder is used). `~` is expanded on the remote host, quotes around the target or the path are
+   stripped, spaces need no escaping, and a trailing slash is ignored — so an `scp` command line
+   can be pasted as is.
+2. **Authentication is non-interactive.** paramiko never prompts, so a key that only exists in
+   your terminal's agent is invisible to a MusicSeed process without `SSH_AUTH_SOCK`. Run
+   `ssh-add`, and make sure whatever starts MusicSeed (shell, `systemd` unit, `launchd` agent,
+   container) inherits `SSH_AUTH_SOCK` — or set `plex.db_ssh_password`. MusicSeed reports
+   authentication failure with exactly that guidance.
+3. **Remote prerequisites.** The host needs `python3` with the standard-library `sqlite3` module,
+   read access to Plex's `Databases` folder, and free temporary space for both backups.
+4. **Read the reported reason.** The bundled helper returns one code, mapped to a message:
+   `not_found` (nothing at that path), `not_a_directory` (the path is a file that is not a Plex
+   database), `database_not_found` (the folder exists but has no library database),
+   `unreadable` (permissions, or SQLite cannot open it), `timeout` (backup exceeded five minutes —
+   retry when Plex is idle). Tracebacks and host paths are never shown; run the helper by hand on
+   the host when you need the raw error.
+5. **Host trust.** First connect once as the same local OS user that runs MusicSeed so the key is
+   in that user's `~/.ssh/known_hosts`. Unknown or changed host keys fail closed — verify the
+   fingerprint independently, never bypass the warning. MusicSeed does not read `~/.ssh/config`
+   aliases, so supply the real host, user, and port.
+6. **After a failure.** The previous published snapshot is kept, so status and recommendations
+   keep working. Never copy live `-wal`/`-shm` files (or a raw copy of a running server's
+   database) into the cache to repair it; run the import again instead.
+7. **Is it stuck?** The refresh reports real percentages: `preparing Plex snapshot` covers the
+   host's own SQLite backups (no data moves during it, and it takes minutes for a large library),
+   then `downloading Plex database` / `downloading Plex sonic-vector database` cover the
+   transfer. Watch for movement: a percentage that climbs is working; one that never leaves 0%
+   (or a `timeout` code) is not. Each database has a five-minute backup budget on the host.
 
 ## Occupied ports
 

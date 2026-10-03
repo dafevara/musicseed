@@ -51,12 +51,31 @@ def import_library(
     console.print(f"  Library: {target_library}")
     console.print(f"  Mode: {'Full' if full else 'Incremental'}\n")
 
+    from musicseed.plex_db_source import SNAPSHOT_PHASES
+
+    shown: dict[str, int] = {}
+
+    def on_progress(current: int, total: int, phase: str) -> None:
+        """Show coarse progress for the remote snapshot stages only.
+
+        Building and fetching the snapshot on a remote host takes minutes and
+        otherwise prints nothing; item-import phases stay quiet as before.
+        """
+        if phase not in SNAPSHOT_PHASES:
+            return
+        step = current // 25
+        if shown.get(phase) == step:
+            return
+        shown[phase] = step
+        console.print(f"  {phase.capitalize()}… {min(100, step * 25)}%")
+
     try:
         result = library_service.import_library(
             plex_db_path=plex_db,
             plex_db_ssh=plex_db_ssh,
             library_name=library,
             full_import=full,
+            progress_callback=on_progress,
         )
         console.print("\n[green]✓ Import completed![/green]")
         console.print(f"  Artists: {result.artists:,}")

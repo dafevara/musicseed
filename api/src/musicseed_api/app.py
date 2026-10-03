@@ -24,6 +24,7 @@ from musicseed_api.routes import (
     jobs,
     library,
     playlists,
+    plex_auth,
     recommend,
     sonic,
 )
@@ -71,6 +72,7 @@ def create_app() -> FastAPI:
         return JSONResponse(status_code=500, content={"detail": str(exc)})
 
     app.include_router(discovery.router)
+    app.include_router(plex_auth.router)
     app.include_router(library.router)
     app.include_router(enrichment.router)
     app.include_router(recommend.router)

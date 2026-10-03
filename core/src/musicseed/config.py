@@ -93,6 +93,11 @@ class PlexConfig(BaseModel):
     url: str = "http://localhost:32400"
     token: str = ""
     library: str = "Music"
+    # Stable identifier for this MusicSeed install, sent to plex.tv as
+    # ``X-Plex-Client-Identifier``. Generated once by the Plex sign-in flow and
+    # reused forever: Plex keys the "Authorized Devices" entry and in-flight
+    # PINs to it, so rotating it would orphan both.
+    client_identifier: str = ""
     db_path: str = Field(default_factory=default_plex_db_path)
     # Optional scp-style SSH target for a remote Plex server, e.g.
     # ``"admin@nas.local:/volume1/Plex/.../Databases"``. When set, MusicSeed
@@ -250,6 +255,9 @@ def save_config(config: Config, path: Path | None = None) -> Path:
     saves target the same file. Falls back to the canonical default location
     when no file has been resolved yet.
 
+    The file holds credentials (Plex token, provider secrets), so it is created
+    and kept owner-only (``0600``).
+
     Returns:
         The path written to.
     """
@@ -258,5 +266,23 @@ def save_config(config: Config, path: Path | None = None) -> Path:
     target.parent.mkdir(parents=True, exist_ok=True)
     with open(target, "w") as f:
         yaml.safe_dump(config.model_dump(), f, sort_keys=False)
+    try:
+        # An existing file keeps its old mode through open(), so tighten it here.
+        target.chmod(0o600)
+    except OSError:  # pragma: no cover - non-POSIX filesystems
+        pass
     _config_path = target
     return target
+
+
+def reload_config() -> Config:
+    """Re-read the config file from disk and install it as the process config.
+
+    Long-running surfaces (the MCP server in particular) cache config at
+    startup, so credentials added by another surface — e.g. a Plex sign-in
+    completed in the web UI — would otherwise stay invisible until restart.
+    """
+    path = _config_path
+    config = load_config(path) if path is not None else load_config()
+    set_config(config)
+    return config

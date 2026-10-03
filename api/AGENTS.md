@@ -44,7 +44,9 @@ JSON. Handlers are the reusable part — routes are the HTTP-specific projection
 | Handler | Orchestrates |
 |---|---|
 | `handlers/discovery.run_discovery` | `services.discovery.discover` (with key filtering) |
-| `handlers/discovery.run_plex_discovery` | `services.plex_discovery.discover_plex_servers` |
+| `handlers/discovery.run_plex_discovery` | `services.plex_discovery.discover_plex_servers` with `verify=True` — the picker must know which advertised addresses actually answer from this host |
+| `handlers/plex_auth.start_link` / `poll_link` | `services.plex_link.start_plex_link` / `poll_plex_link` — PIN sign-in; validates `forward_url` (absolute http(s), same origin as the request) before handing it to plex.tv |
+| `handlers/plex_auth.read_account` / `clear_link` | `services.plex_link.get_plex_account` / `unlink_plex` |
 | `handlers/discovery.save_config_overrides` | active-job guard → deep-copy config → `save_config` → replace config/context (no DB init) |
 | `handlers/discovery.apply_config_and_init_db` | `save_config_overrides` → `services.library.initialize_database` |
 | `handlers/library.get_library_status` | `services.library.get_status` |
@@ -77,14 +79,15 @@ JSON. Handlers are the reusable part — routes are the HTTP-specific projection
   console, and uvicorn level (default INFO).
 - `src/musicseed_api/handlers/`: **orchestration layer** — one module per domain. No HTTP
   framework imports anywhere. Every function is callable from any surface. Modules:
-  `discovery.py`, `library.py`, `enrichment.py`, `dashboard.py`, `recommend.py`, `sonic.py`,
-  `jobs.py`. Shared constants (`IMPORT_KIND`, `ENRICH_KIND`, `DB_BLOCKERS`, `DISCOVERY_KEYS`)
-  live in the handler that owns them — import them directly rather than duplicating.
+  `discovery.py`, `plex_auth.py`, `library.py`, `enrichment.py`, `dashboard.py`, `recommend.py`,
+  `sonic.py`, `jobs.py`. Shared constants (`IMPORT_KIND`, `ENRICH_KIND`, `DB_BLOCKERS`,
+  `DISCOVERY_KEYS`) live in the handler that owns them — import them directly rather than
+  duplicating.
 - `src/musicseed_api/routes/`: **JSON endpoints** — one module per domain, each with an
   `APIRouter` named `router` (no prefix). These are
   thin wrappers: parse HTTP (Form, Query, path params), call a handler, return JSON. Modules:
-  `discovery.py`, `library.py`, `enrichment.py`, `recommend.py`, `sonic.py`, `dashboard.py`,
-  `jobs.py`, `playlists.py`.
+  `discovery.py`, `plex_auth.py`, `library.py`, `enrichment.py`, `recommend.py`, `sonic.py`,
+  `dashboard.py`, `jobs.py`, `playlists.py`.
 
 - **API contract**: the OpenAPI schema is auto-generated from the routes (FastAPI serves it at
   `/openapi.json`). It is the single source of truth for the JSON shapes — do not maintain a
@@ -124,7 +127,13 @@ JSON. Handlers are the reusable part — routes are the HTTP-specific projection
 - **Secrets in routes.** Token and credential fields arrive via POST bodies (`Form`), are
   passed to handlers, and are never placed in JSON responses. The discovery route's
   `extract_overrides` helper separates secrets from sticky form values — secrets go to
-  discovery, but only non-secret fields are echoed back.
+  discovery, but only non-secret fields are echoed back. `/auth/plex/*` follows the same rule:
+  the browser gets a PIN code and an account name, never the Plex token, which is written to
+  `config.yaml` by core.
+- **Server addresses are verified, not trusted.** `GET /discovery/plex-servers` returns every
+  usable connection of every discovered server with `reachable` set (`true`/`false`/`null`),
+  reachable entries first. Plex's own ranking describes the *server's* interfaces; only a probe
+  says what works from this machine.
 
 ## Dependencies
 

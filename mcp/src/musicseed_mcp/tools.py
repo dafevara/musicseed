@@ -4,6 +4,11 @@ Each function is synchronous, returns JSON-safe data, and lets the core
 service's typed exceptions (``NotFoundError``, ``ConfigurationError``,
 ``PlexAPIError``) propagate so the MCP surface reports them as tool errors.
 
+Credentials are never collected here: this surface has no interactive sign-in
+and stores nothing. When Plex is not linked, core's ``ConfigurationError``
+carries the pointer the agent should relay to the user — sign in through the
+MusicSeed web interface, or run ``musicseed-cli plex-login``.
+
 The preview/apply split is deliberate: preview tools never write to Plex, and
 write tools accept only previously-approved local track IDs, which core
 validates in full before any Plex write.

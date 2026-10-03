@@ -56,6 +56,27 @@ Service entry points:
   `list[DiscoveredPlexServer]` deduplicated by address (empty when nothing responds, never
   raises). A separate, opt-in probe — not part of `discovery.discover()`. The first-run
   wizard consumes it.
+  - **Every usable connection is listed, not just Plex's preferred one, and `verify=True`
+    probes them.** A server advertises its own interfaces, so the address Plex ranks best (its
+    192.168.x LAN address) is routinely unreachable from the machine running MusicSeed, while the
+    VPN/CGNAT address it ranks last is the one that works. `verify_servers` probes `/identity`
+    in parallel, sets `reachable`, and sorts answerers first; the wizard's picker uses it so a
+    wrong-but-plausible address can't be picked silently. Relay connections, `.0`/`.255` network
+    addresses, and Docker bridge addresses are still filtered out.
+- `services/plex_link.py`: `start_plex_link`, `poll_plex_link`, `wait_for_plex_link`,
+  `fetch_account`, `get_plex_account`, `unlink_plex`, `require_plex_token`, plus
+  `PlexLinkError`. Implements plex.tv's PIN device-linking flow so surfaces can offer
+  "sign in with Plex" instead of a pasted token: `forward` (strong PIN → `app.plex.tv/auth`,
+  with an optional `forwardUrl`) and `link` (short PIN → `plex.tv/link`). Generates and persists
+  `plex.client_identifier` once, validates the retrieved token against `GET /api/v2/user`
+  *before* writing anything, and saves the token (plus a server URL when the account has exactly
+  one server and the configured URL is unset or still the default) through `save_config`. The URL
+  is only taken from a connection that answered a reachability probe, so a fresh sign-in never
+  leaves MusicSeed pointed at an address that only works on Plex's own network. This is
+  the write path that makes one credential store serve the web UI, CLI, and MCP. Use
+  `require_plex_token(config)` from Plex write paths instead of checking `plex.token` directly —
+  it re-reads the config file so a long-running MCP/CLI process sees a link completed elsewhere,
+  and raises the user-facing guidance (no raw config keys) when Plex isn't linked.
 - `services/enrichment.py`: `enrich_tracks` (**calls `asyncio.run()` internally — never call it
   from inside a running event loop; offload to a thread**).
 - `services/evaluation.py`: `evaluate_recommendations` — deterministic synthetic fixtures,
@@ -115,12 +136,27 @@ Service entry points:
   drops the whole default context (engine + sonic cache) — kept as a test/config-change hook.
 - `importers/plex.py`: Plex SQLite metadata import. Track years fall back to the album year when
   Plex doesn't set one on the track row.
-- `plex_db_source.py`: `resolve_plex_dbs(config, refresh=...)` returns local files or stable
-  SSH snapshot generations under `~/.cache/musicseed/plex-dbs/snapshots-v1/`. The remote
-  `_plex_snapshot.py` helper uses Python's SQLite backup API and streams standalone files;
+- `plex_db_source.py`: `resolve_plex_dbs(config, refresh=..., on_progress=...)` returns local
+  files or stable SSH snapshot generations under `~/.cache/musicseed/plex-dbs/snapshots-v1/`. The
+  remote `_plex_snapshot.py` helper uses Python's SQLite backup API and streams standalone files;
   never copy live DB/WAL/SHM files. Validate staged generations before atomic publication,
   preserve previous readers, and verify known SSH host keys. Remote Python3/SQLite is required.
   Used by import/coverage/sonic-import; the recommendation runtime never calls it.
+  - **Progress is part of the contract.** A refresh reports `(percent, 100, phase)` for
+    `PREPARE_PHASE` (the host's backups — minutes of silence otherwise, so the helper emits
+    `MUSICSEED_PROGRESS <done> <total>` bytes on stderr and the client drains it on a thread to
+    avoid stalling the shared channel window) and for each `_DOWNLOAD_PHASES` entry (per-file
+    transfer). `SNAPSHOT_PHASES` is exported so the API layer can pass these phase names through
+    instead of prefixing them with "importing". Failures arrive as one `MUSICSEED_ERROR <code>`
+    line mapped by `REMOTE_ERROR_HINTS`; raw stderr is never echoed to a surface.
+    - Gotcha: `exec_command` opens stdout/stderr in text mode (`makefile_stderr("r")`), so
+      `readline()` returns `str` while `read()` returns `bytes`. Always go through
+      `_stderr_lines` (which handles both and ends on `""` *or* `b""`) — iterating with a bytes
+      sentinel never terminates on a text stream. The drain loop also logs and skips unparsable
+      lines rather than dying: an undrained buffer blocks the transfer on the channel window.
+  - Targets are normalized by `parse_ssh_target`: a pasted database *file* path means its
+    directory, and quotes/escapes/trailing slashes/`~` are tolerated so an `scp` line can be
+    pasted as-is (all spellings share one cache identity).
 - `enrichers/`: ListenBrainz and Spotify clients + the async enrichment pipeline. (The old
   MusicBrainz MBID→Spotify cross-reference client was removed; it was never wired in.)
 - `sonic.py`: `load_sonic_vectors` reads Plex sonic-analysis vectors from the Plex blobs DB

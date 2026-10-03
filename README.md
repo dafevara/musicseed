@@ -71,8 +71,10 @@ copied database backups. The guides are available before setup is complete.
 
 On first run the setup wizard (`/setup`) walks you through setup:
 
-1. **Discover your Plex server** — local-network discovery (GDM + SSDP), with cross-subnet lookup
-   via `plex.tv` when you supply a Plex token. A manual URL is available as a fallback.
+1. **Discover your Plex server and sign in** — local-network discovery (GDM + SSDP) plus the
+   plex.tv PIN sign-in (no token to copy; `musicseed-cli plex-login` covers headless installs),
+   with cross-subnet lookup via `plex.tv` once linked. A manual URL and a manual token are
+   available as fallbacks.
 2. **Confirm the music library and database paths** — the wizard pre-fills the Plex music library
    and the on-disk Plex database paths and lets you correct them.
 3. **Initialize the MusicSeed database** — creates the SQLite file and schema.
@@ -81,8 +83,9 @@ On first run the setup wizard (`/setup`) walks you through setup:
 
 After setup you land on a dashboard showing Plex health, import/enrichment coverage, and job
 state, with recommendation and playlist pages once the library is imported. A persistent
-**Settings** view (`/settings`) holds your Plex URL/token/library, database paths, and Spotify
-credentials; it saves without starting any import or initialization.
+**Settings** view (`/settings`) holds your Plex account sign-in (or a manual token), Plex URL and
+library, database paths, and Spotify credentials; it saves without starting any import or
+initialization.
 
 `musicseed --open` launches the browser. `musicseed --no-ui` serves JSON only.
 

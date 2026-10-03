@@ -52,7 +52,10 @@ Read the root `AGENTS.md` for product context and repo-wide safety rules, and
   contents. Preserve these semantics.
 - **Errors propagate.** Let core's `NotFoundError` / `ConfigurationError` /
   `PlexAPIError` surface as tool errors; do not swallow them into generic
-  strings.
+  strings. Plex credentials are out of scope for this surface: it never signs in
+  and stores nothing. When Plex isn't linked, core's `ConfigurationError` names
+  the fix (sign in through the web UI, or `musicseed-cli plex-login`) — relay
+  that instead of retrying or improvising a token.
 - **Weights via presets only.** Tools take a `preset` name resolved through
   `RECOMMENDATION_PRESETS`; do not expose six raw weight floats.
 

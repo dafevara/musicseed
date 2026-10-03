@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+from musicseed.plex_db_source import SNAPSHOT_PHASES
 from musicseed.services.jobs import complete_job, get_manager, update_progress
 from musicseed.services.library import LibraryStatus, get_status, import_library
 
@@ -50,9 +51,10 @@ def run_import_job(job_id: int) -> None:
 
     def on_progress(current: int, total: int, phase: str) -> None:
         phases[phase] = {"current": current, "total": total}
-        checkpoint = phase if phase == "downloading Plex database" else f"importing {phase}"
+        # Snapshot phases already read as sentences; import phases need a verb.
+        label = phase if phase in SNAPSHOT_PHASES else f"importing {phase}"
         update_progress(
-            job_id, current, total, f"{checkpoint}…", phases=phases,
+            job_id, current, total, f"{label}…", phases=phases,
         )
 
     result = import_library(progress_callback=on_progress, should_cancel=should_cancel)

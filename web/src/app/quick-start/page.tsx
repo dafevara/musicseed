@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/page-header";
 
 const GUIDES = [
   { id: "install", title: "Install MusicSeed", description: "Start the app on macOS or Linux." },
-  { id: "connect", title: "Connect to Plex", description: "Set your server, token, and music library." },
+  { id: "connect", title: "Connect to Plex", description: "Sign in with Plex and pick your music library." },
   { id: "local-plex", title: "Plex on this computer", description: "Use your local Plex database." },
   { id: "remote-plex", title: "Plex on a server or NAS", description: "Fetch database snapshots over SSH." },
   { id: "copied-database", title: "Use a database copy", description: "Import a backup without SSH access." },
@@ -107,9 +107,9 @@ export default function QuickStartPage() {
             <p>Open the <Link href="/setup">setup wizard</Link> and select your Plex server. If discovery does not find it, enter its address in <strong>Plex server URL</strong>, for example <code>http://nas.local:32400</code>.</p>
             <p>For Plex on another computer, use that computer&apos;s reachable hostname or IP address. <code>127.0.0.1</code> refers to the computer running MusicSeed.</p>
           </Step>
-          <Step title="Add a Plex token if one was not detected">
-            <p>In Plex Web, sign in and open your library. Open your browser&apos;s developer tools, select the Network tab, and find a Plex request containing <code>X-Plex-Token</code> in its headers or URL. Copy only the token value into <strong>Plex token</strong>.</p>
-            <p>Use a token that can access this server and library. Keep it private; MusicSeed stores it locally and does not display the saved value.</p>
+          <Step title="Sign in with Plex">
+            <p>Choose <strong>Sign in with Plex</strong> and finish signing in on the Plex page that opens. MusicSeed stores the returned token on this computer — there is no token to copy.</p>
+            <p>No browser on this machine (a NAS or a server you reach over SSH)? Run <code>musicseed-cli plex-login</code> and enter the short code it prints at <code>plex.tv/link</code>. MusicSeed never displays the saved token.</p>
           </Step>
           <Step title="Confirm your music library">
             <p>Enter the exact name shown in Plex under <strong>Music library name</strong>, then choose <strong>Save &amp; re-check</strong>. A successful connection takes you to <strong>Review &amp; initialize</strong>.</p>
@@ -152,14 +152,15 @@ export default function QuickStartPage() {
           <Step title="Configure the remote database source">
             <p><a href="#connect">Connect to Plex</a> first. In <strong>Review &amp; initialize → Finish your setup</strong>, check <strong>Plex is on another machine (fetch the database over SSH)</strong>. Enter an <strong>SSH target</strong> using this format:</p>
             <Command label="Example SSH target field value">{"your-user@nas.local:/path/to/Plex Media Server/Plug-in Support/Databases"}</Command>
-            <p>Replace the path with the actual <strong>directory</strong> on the remote host, not a database filename. Paste it without surrounding quotes, even when it contains spaces. Use the actual hostname; MusicSeed does not read aliases from <code>~/.ssh/config</code>.</p>
+            <p>Point at the <strong>folder</strong> holding <code>com.plexapp.plugins.library.db</code>. Pasting the database file&apos;s own path works too, <code>~</code> is expanded on the remote host, and spaces need no escaping or quotes.</p>
             <p>Set <strong>SSH port</strong> if it is not 22. Use <strong>SSH password</strong> for password authentication. If no password is saved, MusicSeed uses standard SSH keys or your SSH agent. Leaving the password field blank keeps any previously saved password.</p>
           </Step>
           <Step title="Re-check, then import">
             <p>Choose <strong>Save &amp; re-check</strong>. Once the library database is found, continue to <a href="#first-playlist">initialize and import</a>. The import creates and downloads fresh SQLite snapshots, including committed changes from Plex&apos;s WAL files. Later imports refresh the snapshots.</p>
             <details>
-              <summary>SSH works in a terminal, but the import fails?</summary>
-              <p>Check the actual host and port, host trust for the user running MusicSeed, saved password or available keys, database read permissions, Python&apos;s SQLite support, and free space on both computers. Unknown or changed host keys must be verified before reconnecting.</p>
+              <summary>SSH works in my terminal, but the import fails?</summary>
+              <p>MusicSeed connects without prompting, so a key that only lives in your terminal&apos;s agent is not enough: run <code>ssh-add</code> and make sure the process running MusicSeed can see <code>SSH_AUTH_SOCK</code> (a server started by <code>systemd</code> or <code>launchd</code> usually cannot), or enter an <strong>SSH password</strong>. MusicSeed does not read aliases from <code>~/.ssh/config</code>, so use the real hostname and user.</p>
+              <p>Then check host trust for the user running MusicSeed, database read permissions, Python&apos;s SQLite support, and free space on both computers. Unknown or changed host keys must be verified before reconnecting.</p>
               <p>If a backup times out, retry when Plex is less busy. A failed transfer keeps the last published snapshot. Do not copy live WAL or SHM files into the cache to repair it.</p>
             </details>
           </Step>
@@ -201,7 +202,7 @@ export default function QuickStartPage() {
             <p>For sonic similarity, Plex must already have analyzed your music. In <strong>Settings → Sonic vectors</strong>, choose <strong>Import from Plex</strong> to bring its existing analysis into MusicSeed.</p>
           </Step>
           <Step title="Preview your first playlist">
-            <p>Open <Link href="/recommend">Recommend</Link>, choose seed tracks from your imported library, and review the suggestions. Use <Link href="/playlists">Playlists</Link> to preview a new playlist, then confirm the tracks before saving it to Plex. Saving requires a working Plex connection and token.</p>
+            <p>Open <Link href="/recommend">Recommend</Link>, choose seed tracks from your imported library, and review the suggestions. Use <Link href="/playlists">Playlists</Link> to preview a new playlist, then confirm the tracks before saving it to Plex. Saving requires a working Plex connection (sign in with Plex in the wizard or Settings).</p>
           </Step>
         </ol>
         <p className="quick-start-next">Ready to begin? <Link href="/setup">Open the setup wizard →</Link></p>

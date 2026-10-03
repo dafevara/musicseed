@@ -37,15 +37,22 @@ def run_discovery(**overrides: str) -> DiscoveryResult:
     return discover(**filtered)
 
 
-def run_plex_discovery(timeout: float = 3.0) -> list[DiscoveredPlexServer]:
+def run_plex_discovery(timeout: float = 3.0, verify: bool = True) -> list[DiscoveredPlexServer]:
     """Discover Plex servers: local subnet via GDM/SSDP, plus the Plex account.
 
     Uses the configured Plex token so servers on other subnets (invisible to
     multicast) are included when credentials exist. This is a separate, opt-in
     probe — it never runs as part of ``discover()``.
+
+    Args:
+        timeout: seconds to listen for local multicast replies.
+        verify: probe every advertised address (``/identity``) so the picker can
+            tell the user which addresses actually answer from this machine. A
+            Plex server advertises addresses that are only meaningful on its own
+            network, so an unverified list invites picking a dead one.
     """
     token = get_config().plex.token
-    return discover_plex_servers(timeout=timeout, token=token)
+    return discover_plex_servers(timeout=timeout, token=token, verify=verify)
 
 
 def extract_overrides(**raw: str) -> tuple[dict[str, str], dict[str, str]]:

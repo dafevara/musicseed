@@ -18,7 +18,7 @@ const SHORT_REASON: Record<string, string> = {
   parent_missing: "folder missing",
   parent_not_writable: "folder not writable",
   unreachable: "unreachable",
-  missing_token: "needs a token",
+  missing_token: "needs sign-in",
   unauthorized: "token rejected",
   library_not_found: "library not found",
   error: "error",
@@ -45,9 +45,9 @@ function plexGuidance(reason: string | null, detail: string | null): string {
     case "unreachable":
       return "Can't reach Plex at this address. Is Plex Media Server running? If it uses a different host or port, enter the URL in Settings.";
     case "missing_token":
-      return "Plex requires a token and none was found on this machine. To get one: sign in at app.plex.tv/desktop, open your browser's developer tools (Network tab), load any library, find a request with an X-Plex-Token header, and copy its value — then paste it in Settings.";
+      return "Plex needs a sign-in and none was found on this computer. Choose Sign in with Plex in the setup wizard or Settings (or run 'musicseed-cli plex-login' on the machine running MusicSeed).";
     case "unauthorized":
-      return "Plex rejected the configured token. Paste a valid token in Settings.";
+      return "Plex rejected the saved credentials. Sign in with Plex again in Settings — the account token may have been revoked or replaced.";
     case "library_not_found":
       return detail || "Enter the exact library name in Settings.";
     default:

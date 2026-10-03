@@ -1,5 +1,7 @@
 """Tests for config persistence — save_config/load_config round-trips."""
 
+import stat
+
 import musicseed.config as config_module
 from musicseed.config import (
     Config,
@@ -8,7 +10,9 @@ from musicseed.config import (
     load_config,
     plex_data_dir_candidates,
     plex_library_db_candidates,
+    reload_config,
     save_config,
+    set_config,
 )
 
 
@@ -61,6 +65,36 @@ def test_save_config_falls_back_to_default(monkeypatch, tmp_path) -> None:
 def test_default_log_dir_uses_xdg_data_home(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "xdg"))
     assert default_log_dir() == tmp_path / "xdg" / "musicseed" / "logs"
+
+
+def test_save_config_is_owner_only(tmp_path) -> None:
+    """The config file holds credentials, so it must not be group/world readable."""
+    path = tmp_path / "config.yaml"
+    save_config(Config(), path)
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+    # An existing file with loose permissions is tightened, not left alone.
+    path.chmod(0o644)
+    save_config(Config(), path)
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+
+def test_reload_config_rereads_the_same_file(tmp_path) -> None:
+    path = tmp_path / "config.yaml"
+    first = Config()
+    first.plex.token = "first"
+    save_config(first, path)
+    set_config(first)  # this process cached the pre-link config
+
+    # Another surface (the Plex sign-in flow) rewrites the file on disk.
+    second = Config()
+    second.plex.token = "second"
+    save_config(second, path)
+
+    assert config_module.get_config().plex.token == "first"
+    assert reload_config().plex.token == "second"
+    assert config_module.get_config().plex.token == "second"
+    _reset_globals()
 
 
 def test_plex_candidates_include_macos_and_linux() -> None:

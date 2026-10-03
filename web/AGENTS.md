@@ -66,7 +66,18 @@ API shapes are typed in `src/lib/types.ts`.
   refresh explains its whole-backlog impact and requires a separate confirmation. Cancel leaves
   Plex untouched.
 - **Secrets never render.** The Plex token and Spotify secret travel in POST bodies only; the UI
-  shows configured/not-set, never the value.
+  shows configured/not-set, never the value. Plex sign-in (`components/plex-signin.tsx`) is the
+  intended path: the browser only ever holds a PIN code and the pending `pin_id`
+  (`localStorage`, shared across this origin's tabs so returning from app.plex.tv resumes the
+  poll); the token is written to
+  `config.yaml` by core and never reaches the client.
+- **Server pickers show reachability.** A Plex server advertises addresses that only work on its
+  own network, so `plex-server-picker.tsx` labels and orders entries by the API's
+  `reachable` probe result and marks the address currently in use. Never present an unverified
+  address as if it works — that is what produced "Plex isn't responding" on a valid server.
+- **Config fields never hide behind a placeholder.** Where a URL or path is already in effect
+  (Plex server URL in `setup-form.tsx` and Settings), seed the input from the effective value so
+  the user can see and correct it; a placeholder alone looks greyed-out and cannot be submitted.
 - **Polling is back-off aware.** The dashboard only polls `/dashboard` while jobs are active and
   skips polls when `document.visibilityState` is hidden. The Plex server probe runs once on mount
   and on window focus, not every poll.

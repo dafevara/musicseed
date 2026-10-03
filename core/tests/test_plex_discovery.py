@@ -5,7 +5,7 @@ import socket
 import httpx
 import pytest
 from musicseed.services import plex_discovery
-from musicseed.services.plex_discovery import discover_plex_servers
+from musicseed.services.plex_discovery import DiscoveredPlexServer, discover_plex_servers
 
 GDM_REPLY = (
     "HTTP/1.0 200 OK\r\n"
@@ -141,21 +141,77 @@ def test_discover_sends_both_probes(monkeypatch: pytest.MonkeyPatch) -> None:
 # ---------------------------------------------------------------- account
 
 
-def test_account_discovery_parses_servers(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_account_discovery_lists_every_usable_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(
         plex_discovery.httpx, "get",
         lambda *a, **k: httpx.Response(200, text=ACCOUNT_RESOURCES_XML),
     )
     servers = plex_discovery.discover_plex_account_servers("tok")
-    hosts = sorted(s.host for s in servers)
-    # Docker bridges and .0 network addresses are filtered; client is skipped.
-    assert hosts == ["192.168.1.50", "192.168.139.3", "192.168.80.10"]
+    # Docker bridges and .0/.255 network addresses are filtered; the client is
+    # skipped. Every remaining address is listed, preference-first: Plex's
+    # ``local`` flag is the server's own view, and the VPN/CGNAT address it
+    # ranks last is often the only one reachable from another machine.
+    assert [s.host for s in servers] == [
+        "192.168.139.3", "192.168.80.10", "100.73.64.125",  # Caladan
+        "192.168.1.50", "100.64.146.128",  # tpi-plex
+    ]
+    assert all(s.reachable is None for s in servers)  # not probed by default
     tpi = next(s for s in servers if s.host == "192.168.1.50")
     assert tpi.name == "tpi-plex"
     assert tpi.machine_identifier == "3a2ce8fe80eda6bf330a41d60e2b35e568aa51a5"
     caladan = next(s for s in servers if s.host == "192.168.80.10")
     assert caladan.name == "Caladan"
     assert caladan.version == "1.43.3.10828"
+
+
+def test_verify_servers_sorts_answerers_first(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    probed: list[str] = []
+
+    def fake_get(url, **_kwargs):
+        probed.append(url)
+        if "192.168.139.3" in url or "dead.example" in url:
+            raise httpx.ConnectError("no route to host")
+        return httpx.Response(200, text="<MediaContainer/>")
+
+    monkeypatch.setattr(plex_discovery.httpx, "get", fake_get)
+    dead = DiscoveredPlexServer(name="A", host="192.168.139.3", port=32400)
+    live = DiscoveredPlexServer(name="A", host="100.73.64.125", port=32400)
+    also_dead = DiscoveredPlexServer(name="A", host="dead.example", port=32400)
+
+    ordered = plex_discovery.verify_servers([dead, live, also_dead])
+
+    assert [s.host for s in ordered] == ["100.73.64.125", "192.168.139.3", "dead.example"]
+    assert [s.reachable for s in ordered] == [True, False, False]
+    # Every candidate is probed, in parallel, at the public /identity endpoint.
+    assert sorted(probed) == [
+        "http://100.73.64.125:32400/identity",
+        "http://192.168.139.3:32400/identity",
+        "http://dead.example:32400/identity",
+    ]
+
+
+def test_verify_servers_handles_no_candidates() -> None:
+    assert plex_discovery.verify_servers([]) == []
+
+
+def test_account_discovery_can_verify(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_get(url, **_kwargs):
+        if "api/resources" in url:
+            return httpx.Response(200, text=ACCOUNT_RESOURCES_XML)
+        if "100.73.64.125" in url:
+            return httpx.Response(200, text="<MediaContainer/>")
+        raise httpx.ConnectError("no route to host")
+
+    monkeypatch.setattr(plex_discovery.httpx, "get", fake_get)
+    servers = plex_discovery.discover_plex_account_servers("tok", verify=True)
+
+    assert servers[0].host == "100.73.64.125"
+    assert servers[0].reachable is True
+    assert all(s.reachable is False for s in servers[1:])
 
 
 def test_account_discovery_no_token_returns_empty(monkeypatch: pytest.MonkeyPatch) -> None:

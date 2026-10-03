@@ -22,7 +22,11 @@ _WORKFLOW = (
     "then call create_playlist with the approved recommendation IDs. For an "
     "existing playlist, use preview_populate then populate_playlist. Never pass "
     "IDs that were not shown in a preview to a write tool; writes are "
-    "idempotent and report both added_count and already_present_count."
+    "idempotent and report both added_count and already_present_count. "
+    "If a tool reports that Plex is not linked, stop and tell the user to "
+    "sign in through the MusicSeed web interface or run "
+    "'musicseed-cli plex-login' — this server never signs in interactively "
+    "and cannot store credentials itself."
 )
 
 mcp = MCPServer("musicseed", instructions=_WORKFLOW)
