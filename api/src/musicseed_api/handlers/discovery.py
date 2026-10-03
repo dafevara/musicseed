@@ -99,8 +99,14 @@ def _apply_config_overrides(
         cfg.listenbrainz.token = listenbrainz_token
         changed = True
     if plex_url:
+        changed_url = plex_url.rstrip("/") != cfg.plex.url.rstrip("/")
         cfg.plex.url = plex_url
         changed = True
+        # The stored token belongs to the previously selected address. Changing
+        # the address clears it unless a new token is supplied in this same
+        # submission, so a server change never silently re-sends the token.
+        if changed_url and not plex_token.strip():
+            cfg.plex.token = ""
     if plex_token:
         cfg.plex.token = plex_token
         changed = True
@@ -113,10 +119,17 @@ def _apply_config_overrides(
             # Same precedence as read-only discovery: an explicit local path
             # replaces the remote source, rather than silently retaining SSH.
             cfg.plex.db_ssh_target = ""
+            cfg.plex.db_ssh_password = ""
         changed = True
     if plex_db_ssh:
+        changed_target = plex_db_ssh.strip() != cfg.plex.db_ssh_target.strip()
         cfg.plex.db_ssh_target = plex_db_ssh
         changed = True
+        # The stored SSH password belongs to the previous target. Changing the
+        # target clears it unless a new password is supplied here, so a server
+        # change never silently re-sends the password.
+        if changed_target and not plex_db_ssh_password.strip():
+            cfg.plex.db_ssh_password = ""
     if plex_db_ssh_password:
         cfg.plex.db_ssh_password = plex_db_ssh_password
         changed = True

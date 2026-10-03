@@ -86,6 +86,15 @@ The web API applies layered browser protections on every request:
   header obtained from ``GET /security/csrf``. Non-browser clients (CLI, curl,
   MCP) are exempt.
 
+## Credential routing
+
+A stored Plex token is bound to the server address it was saved for, and a
+stored SSH password to its SSH target. Probing a *different* address sends no
+stored secret until the user explicitly supplies one for that address; changing
+the configured address clears the previously bound secret unless a new one is
+provided in the same submission. This keeps testing an alternate server from
+silently re-sending credentials elsewhere.
+
 ## Scope notes
 
 Out of scope for security reports unless they create a concrete local exploit:

@@ -342,6 +342,57 @@ def test_token_never_appears_in_results(tmp_path: Path,
     assert SECRET_TOKEN not in json.dumps(result.model_dump(), default=str)
 
 
+def test_probing_different_url_holds_back_stored_token(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch_client(monkeypatch, check=_ok_check())
+    cfg = _config(tmp_path, url="http://plex.local:32400", token=SECRET_TOKEN)
+
+    # The configured address is the one the token is bound to: it is sent.
+    same = discover(config=cfg)
+    assert same.plex_server.token_source == "config"
+    assert same.plex_server.token_configured
+
+    # Probing a different address sends no stored token until one is supplied.
+    other = discover(plex_url="http://other:32400", config=cfg)
+    assert other.plex_server.token_source == "none"
+    assert not other.plex_server.token_configured
+
+    # An explicit token override for that probe is still honored.
+    explicit = discover(
+        plex_url="http://other:32400", plex_token="override-token", config=cfg
+    )
+    assert explicit.plex_server.token_source == "override"
+    assert explicit.plex_server.token_configured
+
+
+def test_probing_different_ssh_target_holds_back_password(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, str] = {}
+
+    def fake_ssh(target, filename, *, password="", port=22, timeout=10.0):
+        captured["password"] = password
+        return (False, None)
+
+    monkeypatch.setattr(discovery, "ssh_file_exists", fake_ssh)
+    cfg = _config(tmp_path)
+    cfg.plex.db_ssh_target = "user@nas.local:/volume1/Plex"
+    cfg.plex.db_ssh_password = "hunter2"
+
+    # Same target: the stored password is sent.
+    discover(
+        plex_db_ssh="user@nas.local:/volume1/Plex", check_server=False, config=cfg
+    )
+    assert captured["password"] == "hunter2"
+
+    # A different target: the stored password is held back.
+    discover(
+        plex_db_ssh="user@other.local:/volume1/Plex", check_server=False, config=cfg
+    )
+    assert captured["password"] == ""
+
+
 # ---------------------------------------------------------------- client probe
 
 

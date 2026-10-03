@@ -88,3 +88,26 @@ def test_init_db_route_forwards_plex_overrides(tmp_path):
     assert reloaded.plex.db_ssh_port == 2222
     assert reloaded.database.path == str(db_path)
     assert db_path.exists()
+
+
+def test_changing_address_clears_bound_secret(tmp_path):
+    from musicseed_api.handlers.discovery import save_config_overrides
+
+    _seed_config(tmp_path)
+    save_config_overrides(plex_url="http://old.local:32400", plex_token="tok1")
+    save_config_overrides(
+        plex_db_ssh="user@old.local:/volume1/Plex", plex_db_ssh_password="pw1"
+    )
+
+    # Changing the URL without a new token clears the stored token.
+    save_config_overrides(plex_url="http://new.local:32400")
+    # Changing the SSH target without a new password clears the stored password.
+    save_config_overrides(plex_db_ssh="user@new.local:/volume1/Plex")
+
+    config_module._config = None
+    config_module._config_path = None
+    reloaded = load_config(tmp_path / "config.yaml")
+    assert reloaded.plex.url == "http://new.local:32400"
+    assert reloaded.plex.token == ""
+    assert reloaded.plex.db_ssh_target == "user@new.local:/volume1/Plex"
+    assert reloaded.plex.db_ssh_password == ""
