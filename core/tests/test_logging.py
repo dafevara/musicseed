@@ -1,8 +1,37 @@
 """Tests for default log directory resolution."""
 
 import logging
+import stat
 
-from musicseed.logging_config import resolve_log_level, setup_logging
+import musicseed.config as config_module
+from musicseed.config import Config, set_config
+from musicseed.logging_config import SecretRedactionFilter, resolve_log_level, setup_logging
+
+
+def test_log_files_are_owner_only(tmp_path) -> None:
+    log_dir = tmp_path / "logs"
+    setup_logging(log_dir=log_dir)
+    assert stat.S_IMODE((log_dir / "latest.log").stat().st_mode) == 0o600
+    stamped = next(log_dir.glob("musicseed_*.log"))
+    assert stat.S_IMODE(stamped.stat().st_mode) == 0o600
+
+
+def test_secret_redaction_filter_scrubs_configured_secrets(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    config_module._config = None
+    config_module._config_path = None
+    cfg = Config()
+    cfg.plex.token = "SECRET-TOKEN"
+    cfg.spotify.client_secret = "SECRET-SPOTIFY"
+    set_config(cfg)
+
+    f = SecretRedactionFilter()
+    record = logging.LogRecord(
+        "musicseed.test", logging.ERROR, __file__, 1,
+        "auth failed for token SECRET-TOKEN", None, None,
+    )
+    assert f.filter(record) is True
+    assert record.getMessage() == "auth failed for token [REDACTED]"
 
 
 def test_setup_logging_writes_to_explicit_dir(tmp_path) -> None:

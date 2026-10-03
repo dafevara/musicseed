@@ -113,6 +113,17 @@ in cleartext, so MusicSeed refuses it unless ``plex.allow_cleartext_remote`` is
 set explicitly — prefer ``https://`` or a VPN/tunnel. HTTPS keeps certificate
 verification enabled (httpx defaults); it is never disabled.
 
+## Private file handling
+
+- The config file is written owner-only (``0600``) from its very first write:
+  it is dumped to an owner-only temp file in the same directory and atomically
+  moved into place, so an interruption cannot leave a half-written config.
+- The MusicSeed SQLite database is created owner-only (``0600``); its WAL/SHM
+  sidecars inherit that mode.
+- Log files are created owner-only (``0600``) before their first write, and a
+  redaction filter replaces any configured token/secret that reaches a log line
+  with ``[REDACTED]``.
+
 ## Scope notes
 
 Out of scope for security reports unless they create a concrete local exploit:

@@ -94,6 +94,14 @@ def test_save_config_is_owner_only(tmp_path) -> None:
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
 
+def test_save_config_is_atomic_without_temp_leftovers(tmp_path) -> None:
+    path = tmp_path / "config.yaml"
+    save_config(Config(), path)
+    # Atomic replace writes a same-directory temp then moves it into place.
+    assert list(tmp_path.glob("*.tmp")) == []
+    assert path.is_file()
+
+
 def test_reload_config_rereads_the_same_file(tmp_path) -> None:
     path = tmp_path / "config.yaml"
     first = Config()

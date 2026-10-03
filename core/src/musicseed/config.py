@@ -3,6 +3,7 @@
 import ipaddress
 import os
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -317,10 +318,25 @@ def save_config(config: Config, path: Path | None = None) -> Path:
     global _config_path
     target = Path(path) if path is not None else (_config_path or default_config_path())
     target.parent.mkdir(parents=True, exist_ok=True)
-    with open(target, "w") as f:
-        yaml.safe_dump(config.model_dump(), f, sort_keys=False)
+    # Write to an owner-only temp file in the same directory, then atomically
+    # replace the target. ``mkstemp`` creates the temp with mode 0600, so secrets
+    # are never written to a world-readable file; ``os.replace`` means an
+    # interruption cannot leave a half-written configuration behind.
+    fd, tmp_name = tempfile.mkstemp(
+        dir=target.parent, prefix=f".{target.name}.", suffix=".tmp"
+    )
+    tmp_path = Path(tmp_name)
     try:
-        # An existing file keeps its old mode through open(), so tighten it here.
+        with os.fdopen(fd, "w") as f:
+            yaml.safe_dump(config.model_dump(), f, sort_keys=False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, target)
+    except BaseException:
+        tmp_path.unlink(missing_ok=True)
+        raise
+    try:
+        # Belt-and-suspenders on filesystems that ignore the temp mode.
         target.chmod(0o600)
     except OSError:  # pragma: no cover - non-POSIX filesystems
         pass
