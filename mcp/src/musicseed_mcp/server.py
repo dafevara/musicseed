@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from anyio import to_thread
 from mcp.server.mcpserver import MCPServer
+from mcp.server.transport_security import TransportSecuritySettings
 
 from musicseed_mcp import tools
 
@@ -155,7 +156,10 @@ def main() -> None:
     stdio is the production mode: an MCP host spawns ``musicseed-mcp`` and
     talks JSON-RPC over stdin/stdout. ``--transport sse`` or
     ``--transport streamable-http`` start a listening endpoint (for
-    ``scripts/dev.sh`` or hosts that connect over a URL).
+    ``scripts/dev.sh`` or hosts that connect over a URL). Loopback binds get
+    the SDK's built-in DNS-rebinding protection; a non-loopback (LAN) bind
+    requires ``security.allowed_hosts`` entries and applies the same
+    protection to the names the operator configured.
     """
     import argparse
 
@@ -173,7 +177,37 @@ def main() -> None:
     if args.transport == "stdio":
         mcp.run()
     else:
-        mcp.run(transport=args.transport, host=args.host, port=args.port)
+        mcp.run(
+            transport=args.transport,
+            host=args.host,
+            port=args.port,
+            transport_security=_transport_security(args.host),
+        )
+
+
+def _transport_security(host: str) -> TransportSecuritySettings | None:
+    """DNS-rebinding protection for a listening HTTP transport.
+
+    Loopback binds rely on the SDK's built-in loopback-only protection (which
+    auto-enables for ``127.0.0.1``/``localhost``/``::1``). A non-loopback (LAN)
+    bind instead enforces the operator's ``security.allowed_hosts`` entries
+    plus the concrete bind host, so only named hosts/origins can reach the
+    server.
+    """
+    if host in ("127.0.0.1", "localhost", "::1"):
+        return None
+    from musicseed.config import get_config
+
+    names = list(get_config().security.allowed_hosts)
+    if host not in ("0.0.0.0", "::") and host not in names:
+        names.append(host)
+    hosts = [f"{name}:*" for name in names]
+    origins = [f"http://{name}:*" for name in names]
+    return TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=hosts,
+        allowed_origins=origins,
+    )
 
 
 if __name__ == "__main__":

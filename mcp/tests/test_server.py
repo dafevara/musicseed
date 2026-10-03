@@ -52,3 +52,21 @@ def test_sonic_preset_prefers_sonic_signal():
 def test_unknown_preset_raises_with_choices():
     with pytest.raises(ValueError, match="balanced"):
         tools._weights("bogus")
+
+
+def test_transport_security_loopback_defers_to_sdk():
+    from musicseed_mcp.server import _transport_security
+
+    assert _transport_security("127.0.0.1") is None
+    assert _transport_security("localhost") is None
+    assert _transport_security("::1") is None
+
+
+def test_transport_security_lan_enforces_allowlist():
+    from musicseed_mcp.server import _transport_security
+
+    security = _transport_security("192.168.1.10")
+    assert security is not None
+    assert security.enable_dns_rebinding_protection is True
+    assert "192.168.1.10:*" in security.allowed_hosts
+    assert "http://192.168.1.10:*" in security.allowed_origins

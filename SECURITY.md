@@ -74,7 +74,10 @@ Never paste into public issues, PRs, discussions, or screenshots:
 
 ## Browser protections
 
-The web API applies layered browser protections on every request:
+The web API and the MCP HTTP transports apply browser protections on every
+request. The MCP server (``streamable-http``/``sse``) uses the SDK's built-in
+DNS-rebinding protection on loopback, and enforces ``security.allowed_hosts``
+on a non-loopback bind.
 
 - **Host allowlist** — requests whose ``Host`` header names an unexpected
   hostname are rejected (blocks DNS rebinding). Loopback and private
@@ -85,6 +88,13 @@ The web API applies layered browser protections on every request:
 - **CSRF token** — browser-driven writes must include an ``X-MusicSeed-CSRF``
   header obtained from ``GET /security/csrf``. Non-browser clients (CLI, curl,
   MCP) are exempt.
+
+These protections keep a trusted home-LAN surface usable without accounts.
+They are **not** authentication: any client that can reach the server can
+still exercise MusicSeed's permissions (Plex playlists, enrichment, import).
+Only expose the server on a network you trust. If you expose it to a public or
+untrusted network, put an authenticating reverse proxy (or the equivalent) in
+front of it — MusicSeed does not ship a login.
 
 ## Credential routing
 
