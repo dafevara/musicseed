@@ -9,7 +9,7 @@ const SECTIONS: Section[] = [
   { key: "recommend", label: "Recommend", href: "/recommend" },
   { key: "playlists", label: "Playlists", href: "/playlists" },
   { key: "settings", label: "Settings", href: "/settings" },
-  { key: "quick-start", label: "Quick Start", href: "/quick-start" },
+  { key: "quick-start", label: "Help", href: "/quick-start" },
 ];
 
 const PREFIXES: [string, string][] = [

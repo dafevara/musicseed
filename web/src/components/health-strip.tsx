@@ -1,14 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { useState } from "react";
 import type { DashboardSnapshot, JobSummary, PlexServerCheck } from "@/lib/types";
-
-interface SonicStatus {
-  total_tracks: number;
-  analyzed_tracks: number;
-  unanalyzed_albums: Array<{ title: string | null; artist: string | null; unanalyzed_count: number }>;
-}
 
 function fmt(n: number | string): string {
   const v = typeof n === "string" ? parseInt(n, 10) || 0 : n;
@@ -118,7 +111,6 @@ export function HealthStrip({
   activeJobs,
   onEnrich,
   onEnrichListenBrainz,
-  onSonicRefresh,
   onSonicImport,
   plexServer,
 }: {
@@ -126,7 +118,6 @@ export function HealthStrip({
   activeJobs: JobSummary[];
   onEnrich: () => void | Promise<void>;
   onEnrichListenBrainz: () => void | Promise<void>;
-  onSonicRefresh: () => void | Promise<void>;
   onSonicImport: () => void | Promise<void>;
   plexServer?: PlexServerCheck | null;
 }) {
@@ -141,19 +132,9 @@ export function HealthStrip({
   const importJob = activeJobs.find((j) => j.kind === "import" && isActive(j));
   const sonicImportJob = activeJobs.find((j) => j.kind === "sonic_import" && isActive(j));
   const importCov = lib.import_coverage;
-  const [sonicStatus, setSonicStatus] = useState<SonicStatus | null>(null);
   const [enrichingSpotify, setEnrichingSpotify] = useState(false);
   const [enrichingLb, setEnrichingLb] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const [importingVectors, setImportingVectors] = useState(false);
-  const [confirmRefresh, setConfirmRefresh] = useState(false);
-
-  async function doRefresh() {
-    setRefreshing(true);
-    setConfirmRefresh(false);
-    await onSonicRefresh();
-    setRefreshing(false);
-  }
 
   async function doImportVectors() {
     setImportingVectors(true);
@@ -182,12 +163,6 @@ export function HealthStrip({
     }
   }
 
-  useEffect(() => {
-    api.get<{ total_tracks: number; analyzed_tracks: number; unanalyzed_albums: SonicStatus["unanalyzed_albums"] }>("/sonic/status")
-      .then(setSonicStatus)
-      .catch(() => {});
-  }, []);
-
   const spotifyAttempted = num(enrichment.spotify_attempted);
   const lbAttempted = num(enrichment.listenbrainz_attempted);
   const spotifyCovered = num(enrichment.tracks_with_spotify);
@@ -200,10 +175,6 @@ export function HealthStrip({
   const lbHint = lbAttempted > 0
     ? "No ListenBrainz data. Tracks may lack recording MBIDs."
     : "Not yet queried. Requires tracks with MusicBrainz recording IDs.";
-
-  const sonicHint = sonicStatus
-    ? `${fmt(sonicStatus.unanalyzed_albums.length)} albums pending analysis`
-    : "Sonic analysis not yet available";
 
   return (
     <>
@@ -299,18 +270,6 @@ export function HealthStrip({
             }}
           />
           <CoverageBar
-            label="Sonic analysis (Plex)"
-            covered={sonicStatus ? sonicStatus.analyzed_tracks : 0}
-            total={sonicStatus ? sonicStatus.total_tracks : tracks}
-            zeroHint={sonicHint}
-            action={{
-              label: "Refresh analysis",
-              icon: "refresh",
-              busy: refreshing,
-              onClick: () => setConfirmRefresh(true),
-            }}
-          />
-          <CoverageBar
             label="Sonic vectors (local)"
             covered={enrichment.tracks_with_sonic}
             total={tracks}
@@ -324,25 +283,6 @@ export function HealthStrip({
             }}
           />
         </div>
-
-        {confirmRefresh && (
-          <div className="flash flash-warn mt-3 mb-0">
-            <p className="m-0 mb-2">
-              Refreshing sonic analysis starts Plex&apos;s MusicAnalysis Butler task, which
-              processes the server&apos;s <strong>entire pending backlog</strong> — not just recent
-              additions — and can keep running after MusicSeed returns. This may take a long time
-              and run in the background on your Plex server.
-            </p>
-            <div className="flex gap-2">
-              <button className="btn btn-primary btn-sm" onClick={doRefresh} disabled={refreshing}>
-                {refreshing ? "Starting…" : "Confirm refresh"}
-              </button>
-              <button className="btn btn-secondary btn-sm" onClick={() => setConfirmRefresh(false)}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
       </section>
     </>
   );

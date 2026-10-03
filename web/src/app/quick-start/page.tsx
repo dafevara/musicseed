@@ -199,7 +199,7 @@ export default function QuickStartPage() {
           </Step>
           <Step title="Add optional recommendation signals">
             <p>You can skip enrichment to start listening sooner. To add popularity data later, configure a ListenBrainz user token or Spotify credentials in <Link href="/settings">Settings</Link>, then start enrichment from <Link href="/">Library</Link>.</p>
-            <p>For sonic similarity, Plex must already have analyzed your music. In <strong>Settings → Sonic vectors</strong>, choose <strong>Import from Plex</strong> to bring its existing analysis into MusicSeed.</p>
+            <p>For sonic similarity, Plex must already have analyzed your music. In <strong>Library → Coverage → Sonic vectors (local)</strong>, choose <strong>Import vectors</strong> to bring its existing analysis into MusicSeed.</p>
           </Step>
           <Step title="Preview your first playlist">
             <p>Open <Link href="/recommend">Recommend</Link>, choose seed tracks from your imported library, and review the suggestions. Use <Link href="/playlists">Playlists</Link> to preview a new playlist, then confirm the tracks before saving it to Plex. Saving requires a working Plex connection (sign in with Plex in the wizard or Settings).</p>
