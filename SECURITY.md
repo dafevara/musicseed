@@ -124,6 +124,15 @@ verification enabled (httpx defaults); it is never disabled.
   redaction filter replaces any configured token/secret that reaches a log line
   with ``[REDACTED]``.
 
+## Resource limits
+
+Expensive work is bounded by default and can be raised deliberately via the
+``limits`` config section for large libraries: request body size, seed count,
+approved selection size, typeahead/recommendation result counts, and the total
+size of a remote Plex database snapshot (which is also refused when the
+destination lacks free disk space). Plex sonic-vector blobs are decompressed
+under a fixed per-blob cap, so a malformed blob cannot expand into a zip bomb.
+
 ## Scope notes
 
 Out of scope for security reports unless they create a concrete local exploit:

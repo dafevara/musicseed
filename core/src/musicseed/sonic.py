@@ -14,8 +14,8 @@ neither blocks nor is blocked by a running Plex Media Server.
 
 from __future__ import annotations
 
-import gzip
 import sqlite3
+import zlib
 from pathlib import Path
 
 import numpy as np
@@ -32,6 +32,11 @@ MUSIC_SECTION_TYPE = 8
 
 # Plex sonic vectors are natively 50-dimensional.
 PLEX_SONIC_DIM = 50
+
+#: Upper bound on one decompressed Plex sonic blob. A real vector is a CSV of 50
+#: floats (~hundreds of bytes); this cap turns a malformed/adversarial gzip blob
+#: into a decode failure instead of a zip-bomb expansion.
+MAX_SONIC_BLOB_BYTES = 64 * 1024
 
 _VECTOR_QUERY = """
     SELECT mi.id AS plex_id, b.blob
@@ -52,12 +57,19 @@ _VECTOR_QUERY = """
 def decode_sonic_blob(blob: bytes) -> list[float] | None:
     """Decode one Plex sonic blob (gzipped ASCII CSV) into a float vector.
 
+    Decompression is bounded by :data:`MAX_SONIC_BLOB_BYTES`, so a blob that
+    expands past that returns None rather than allocating unbounded memory.
     Returns None when the blob is unreadable or is not the expected dimension.
     """
     try:
-        text = gzip.decompress(blob).decode("ascii")
+        decompressor = zlib.decompressobj(zlib.MAX_WBITS | 16)  # gzip stream
+        text_bytes = decompressor.decompress(blob, MAX_SONIC_BLOB_BYTES + 1)
+        if len(text_bytes) > MAX_SONIC_BLOB_BYTES or decompressor.unconsumed_tail:
+            return None
+        text_bytes += decompressor.flush()
+        text = text_bytes.decode("ascii")
         values = [float(value) for value in text.split(",") if value]
-    except (OSError, UnicodeDecodeError, ValueError):
+    except (OSError, UnicodeDecodeError, ValueError, zlib.error):
         return None
 
     if len(values) != PLEX_SONIC_DIM:

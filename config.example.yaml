@@ -67,3 +67,13 @@ recommendation:
 security:
   allowed_hosts: []
   csrf_secret: ""
+
+# Bounds on expensive work. Raise these deliberately for very large libraries;
+# they keep a single request from forcing unbounded memory, CPU, or disk use.
+limits:
+  max_request_body_bytes: 1048576
+  max_seeds: 50
+  max_selection_tracks: 500
+  max_search_results: 50
+  max_recommendations: 200
+  max_snapshot_bytes: 21474836480

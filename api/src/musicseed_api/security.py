@@ -146,6 +146,19 @@ async def security_filter(request: Request, call_next):
             content={"detail": f"Unexpected Host header: {host_header or '(missing)'}"},
         )
 
+    # Bound request bodies before they are parsed, so an oversized form cannot
+    # force unbounded work in the multipart/JSON layer.
+    content_length = request.headers.get("content-length")
+    if (
+        content_length is not None
+        and content_length.isdigit()
+        and int(content_length) > config.limits.max_request_body_bytes
+    ):
+        return JSONResponse(
+            status_code=413,
+            content={"detail": "Request body too large."},
+        )
+
     if request.method in SAFE_METHODS:
         return await call_next(request)
 

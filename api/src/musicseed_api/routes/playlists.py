@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Form, HTTPException, Query
+from musicseed.config import get_config
 from musicseed.recommender.populate import PopulateMethod
 from musicseed.recommender.scoring import Weights
 
@@ -31,7 +32,7 @@ def _parse_method(value: str) -> PopulateMethod:
 
 
 def _approved_ids(value: str) -> list[int]:
-    """Reject empty/malformed selections instead of generating or writing a subset."""
+    """Reject empty/malformed/oversized selections instead of writing a subset."""
     parts = [part.strip() for part in value.split(",")]
     if not parts or any(
         len(part) > 19 or not part.isascii() or not part.isdecimal() for part in parts
@@ -40,6 +41,12 @@ def _approved_ids(value: str) -> list[int]:
     ids = [int(part) for part in parts]
     if any(not 0 < track_id <= 2**63 - 1 for track_id in ids):
         raise HTTPException(status_code=400, detail="Track IDs must be positive SQLite integers.")
+    limit = get_config().limits.max_selection_tracks
+    if len(ids) > limit:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Selection exceeds the maximum of {limit} tracks.",
+        )
     return list(dict.fromkeys(ids))
 
 
@@ -56,6 +63,11 @@ def create_playlist(
 ) -> dict:
     """Create the approved preview; scoring inputs belong to the preview request."""
     ids = _approved_ids(seed_ids)
+    if len(ids) > get_config().limits.max_seeds:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Too many seed tracks (max {get_config().limits.max_seeds}).",
+        )
     selected_ids = _approved_ids(track_ids)
     if not name.strip():
         raise HTTPException(status_code=400, detail="Playlist name is required.")
@@ -80,6 +92,12 @@ def preview(
     w_novelty: str = Query(default=""),
 ) -> dict:
     """Preview complementary recommendations for an existing playlist."""
+    max_recommendations = get_config().limits.max_recommendations
+    if limit <= 0 or limit > max_recommendations:
+        raise HTTPException(
+            status_code=400,
+            detail=f"limit must be between 1 and {max_recommendations}.",
+        )
     y_min = int(year_min) if year_min else None
     y_max = int(year_max) if year_max else None
 

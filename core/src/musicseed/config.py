@@ -210,6 +210,21 @@ class SecurityConfig(BaseModel):
     csrf_secret: str = ""
 
 
+class LimitsConfig(BaseModel):
+    #: Maximum request body (form data) the JSON API will accept, in bytes.
+    max_request_body_bytes: int = 1_048_576
+    #: Maximum seed tracks accepted per recommendation/preview request.
+    max_seeds: int = 50
+    #: Maximum approved tracks accepted per playlist create/populate.
+    max_selection_tracks: int = 500
+    #: Maximum matches returned by a single typeahead search.
+    max_search_results: int = 50
+    #: Maximum recommendations returned by a single recommendation/preview call.
+    max_recommendations: int = 200
+    #: Upper bound on the total size of a remote Plex database snapshot, in bytes.
+    max_snapshot_bytes: int = 20 * 1024**3
+
+
 class Config(BaseModel):
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     plex: PlexConfig = Field(default_factory=PlexConfig)
@@ -219,6 +234,7 @@ class Config(BaseModel):
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     recommendation: RecommendationConfig = Field(default_factory=RecommendationConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
+    limits: LimitsConfig = Field(default_factory=LimitsConfig)
 
 
 def load_config(config_path: Path | None = None) -> Config:
