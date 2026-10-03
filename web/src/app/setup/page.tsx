@@ -9,6 +9,7 @@ import { DiscoveryChecks } from "@/components/discovery-checks";
 import { SetupForm } from "@/components/setup-form";
 import { SetupIntro } from "@/components/setup-intro";
 import { PlexServerPicker } from "@/components/plex-server-picker";
+import { PlexSignIn } from "@/components/plex-signin";
 import { HelpIcon } from "@/components/help-icon";
 import { JobProgress } from "@/components/job-progress";
 import { PageHeader } from "@/components/page-header";
@@ -103,6 +104,18 @@ export default function SetupPage() {
 
   async function handleSelectServer(url: string) {
     await handleRecheck({ plex_url: url });
+  }
+
+  // A completed Plex sign-in wrote the token to the local config; re-probe so
+  // the wizard reflects it (server connection, library, and step) immediately.
+  async function handlePlexLinked() {
+    setSaveError(null);
+    setSaved(false);
+    try {
+      await applyDiscovery(() => api.get<DiscoveryResponse>("/discovery"));
+    } catch (e) {
+      setSaveError(String(e).replace("Error: ", ""));
+    }
   }
 
   async function handleInitDb() {
@@ -209,9 +222,8 @@ export default function SetupPage() {
               {data.result.plex_library_db.ok
                 ? "Plex database files were found. These let MusicSeed read library data, but do not authenticate the connection to Plex. "
                 : "Database access and the Plex server connection are checked separately. "}
-              A valid Plex token is required to save playlists to Plex. Enter it below,
-              then choose Save &amp; re-check. You can also continue with local import
-              and recommendations, and connect Plex later.
+              Signing in with Plex below enables saving playlists to Plex. You can also
+              continue with local import and recommendations, and connect Plex later.
             </p>
 
             {plex.ok ? (
@@ -222,22 +234,24 @@ export default function SetupPage() {
             ) : (
               <div className="flash flash-warn mt-3">
                 {plex.reason === "unreachable" &&
-                  "Plex isn't responding. Make sure Plex Media Server is running, then scan again."}
-                {plex.reason === "missing_token" && (
-                  <>
-                    Plex requires a token and none was found on this machine.{" "}
-                    <HelpIcon>
-                      Sign in at app.plex.tv/desktop, open your browser&apos;s developer tools
-                      (Network tab), load any library, find a request with an X-Plex-Token
-                      header, and copy its value — then paste it in the Plex token field below.
-                    </HelpIcon>
-                  </>
-                )}
+                  `Plex isn't responding at ${plex.url}. Plex advertises addresses that may only work on its own network — pick one marked reachable above, or enter an address that works from this computer.`}
+                {plex.reason === "missing_token" &&
+                  "Plex needs a sign-in and none was found on this computer. Use Sign in with Plex below — or paste a token manually under Advanced."}
                 {plex.reason !== "unreachable" &&
                   plex.reason !== "missing_token" &&
                   (plex.detail || "Plex needs attention before continuing.")}
               </div>
             )}
+
+            <div className="grid gap-2 mt-4">
+              <h3 className="m-0 text-base font-semibold">Sign in with Plex</h3>
+              <p className="muted text-sm m-0">
+                {plex.token_configured
+                  ? "A Plex token is already saved on this computer. Sign in again to replace it."
+                  : "No token to copy: Plex handles the sign-in, and the token it returns is saved on this computer for the CLI and MCP server too."}
+              </p>
+              <PlexSignIn onLinked={handlePlexLinked} forwardPath="/setup" />
+            </div>
 
             <div className="flex flex-wrap gap-2 mt-3 items-baseline">
               {(plex.ok || data.result.can_import) && (

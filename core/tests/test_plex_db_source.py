@@ -81,6 +81,50 @@ def test_parse_ssh_target():
             pds.parse_ssh_target(bad)
 
 
+# The exact shape pasted from an `scp` command line, with escaped spaces.
+PASTED_DB_FILE = (
+    r"dafevara@caladan.tail0c115.ts.net:~/Library/Application\ Support/"
+    r"Plex\ Media\ Server/Plug-in\ Support/Databases/" + pds.PLEX_LIBRARY_DB_NAME
+)
+_MAILBOX = (
+    "dafevara",
+    "caladan.tail0c115.ts.net",
+    "~/Library/Application Support/Plex Media Server/Plug-in Support/Databases",
+)
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        PASTED_DB_FILE,
+        'dafevara@caladan.tail0c115.ts.net:"~/Library/Application Support/Plex Media '
+        'Server/Plug-in Support/Databases/"',
+        "dafevara@caladan.tail0c115.ts.net:~/Library/Application Support/Plex Media "
+        "Server/Plug-in Support/Databases",
+        r"dafevara@caladan.tail0c115.ts.net:~/Library/Application\ Support/Plex\ Media\ "
+        r"Server/Plug-in\ Support/Databases/com.plexapp.plugins.library.blobs.db",
+    ],
+)
+def test_parse_ssh_target_normalizes_real_pastes(target):
+    """A pasted database *file* means the directory that holds it.
+
+    Regression: the file name used to be kept, so the probe and the snapshot
+    helper looked for ``<file>/com.plexapp.plugins.library.db`` and failed with
+    "unable to open database file" while ``scp`` with the same path worked.
+    """
+    assert pds.parse_ssh_target(target) == _MAILBOX
+    # Every spelling of the same source must share one snapshot cache.
+    canonical = f"{_MAILBOX[0]}@{_MAILBOX[1]}:{_MAILBOX[2]}"
+    assert pds._cache_dir(target) == pds._cache_dir(canonical)
+
+
+def test_parse_ssh_target_keeps_an_unrelated_file_path():
+    # Only a Plex database name implies "use my parent directory"; anything else
+    # is passed through so the remote helper can report what is wrong.
+    user, host, remote = pds.parse_ssh_target("u@nas:/Plex/Databases/library.db")
+    assert (user, host, remote) == ("u", "nas", "/Plex/Databases/library.db")
+
+
 def test_local_passthrough(tmp_path):
     cfg = _config(tmp_path, target="")
     result = pds.resolve_plex_dbs(cfg)
@@ -173,6 +217,83 @@ def test_nonzero_remote_exit_rejects_even_valid_archive(remote, tmp_path, monkey
         pds.resolve_plex_dbs(_config(tmp_path), refresh=True)
 
 
+def test_remote_error_code_becomes_an_actionable_message(
+    remote, tmp_path, monkeypatch
+):
+    """The helper's code is shown; its traceback never is."""
+    monkeypatch.setattr(_Stdout, "recv_exit_status", lambda self: 1)
+    monkeypatch.setattr(
+        _Client,
+        "exec_command",
+        lambda self, command, **kwargs: (
+            io.BytesIO(),
+            _Stdout(self.archive),
+            io.BytesIO(
+                b"Traceback (most recent call last):\n"
+                b"  File \"/Users/dafevara/Library/.../plex_db_source.py\", line 36\n"
+                b"MUSICSEED_ERROR database_not_found\n"
+            ),
+        ),
+    )
+
+    with pytest.raises(NotFoundError) as excinfo:
+        pds.resolve_plex_dbs(_config(tmp_path), refresh=True)
+
+    message = str(excinfo.value)
+    assert pds.PLEX_LIBRARY_DB_NAME in message
+    assert "does not contain" in message
+    # Host-local paths and tracebacks stay on the host.
+    assert "Traceback" not in message
+    assert "dafevara" not in message
+    assert "Could not create/read the remote Plex snapshot" not in message
+
+
+def test_unknown_remote_error_code_falls_back_without_echoing_stderr(
+    remote, tmp_path, monkeypatch
+):
+    monkeypatch.setattr(_Stdout, "recv_exit_status", lambda self: 1)
+    monkeypatch.setattr(
+        _Client,
+        "exec_command",
+        lambda self, command, **kwargs: (
+            io.BytesIO(),
+            _Stdout(self.archive),
+            io.BytesIO(b"MUSICSEED_ERROR something_new\n/secret/path\n"),
+        ),
+    )
+
+    with pytest.raises(NotFoundError) as excinfo:
+        pds.resolve_plex_dbs(_config(tmp_path), refresh=True)
+
+    message = str(excinfo.value)
+    assert message == pds.REMOTE_ERROR_FALLBACK
+    assert "/secret/path" not in message
+
+
+@pytest.mark.parametrize(
+    ("code", "expected"),
+    [
+        ("not_found", "Nothing exists at that path"),
+        ("not_a_directory", "is a file, not the directory"),
+        ("database_not_found", "does not contain"),
+        ("unreadable", "cannot read"),
+        ("timeout", "took too long"),
+    ],
+)
+def test_remote_error_hints_cover_every_helper_code(code, expected):
+    assert expected in pds.REMOTE_ERROR_HINTS[code]
+    assert code in Path(pds.__file__).with_name("_plex_snapshot.py").read_text()
+
+
+def test_remote_error_ignores_output_without_a_code():
+    assert pds._remote_error_message("") == ""
+    assert (
+        pds._remote_error_message("not_a_directory")
+        == pds.REMOTE_ERROR_HINTS["not_a_directory"]
+    )
+    assert pds._remote_error_message("brand_new_code") == pds.REMOTE_ERROR_FALLBACK
+
+
 def test_remote_helper_backs_up_committed_wal_and_cleans_temp(tmp_path):
     source = tmp_path / "source with ' spaces"
     source.mkdir()
@@ -205,6 +326,297 @@ def test_remote_helper_backs_up_committed_wal_and_cleans_temp(tmp_path):
         db.close()
 
 
+def test_remote_helper_accepts_a_database_file_path(tmp_path):
+    """Pasting the database file must work exactly like naming its directory."""
+    source = tmp_path / "Databases"
+    source.mkdir()
+    _database(source / pds.PLEX_LIBRARY_DB_NAME)
+    helper = Path(pds.__file__).with_name("_plex_snapshot.py").read_text()
+
+    result = subprocess.run(
+        [sys.executable, "-c", helper, str(source / pds.PLEX_LIBRARY_DB_NAME)],
+        capture_output=True, check=True, timeout=10,
+    )
+
+    with tarfile.open(fileobj=io.BytesIO(result.stdout)) as archive:
+        assert archive.getnames() == [pds.PLEX_LIBRARY_DB_NAME]
+
+
+@pytest.mark.parametrize(
+    ("relative", "code"),
+    [
+        ("missing-dir", "not_found"),
+        ("not-a-databases-dir/notes.txt", "not_a_directory"),
+        ("empty-dir", "database_not_found"),
+    ],
+)
+def test_remote_helper_reports_a_code_not_a_traceback(tmp_path, relative, code):
+    """The UI gets a precise reason instead of "unable to open database file"."""
+    if relative.startswith("not-a-databases-dir"):
+        bad = tmp_path / "not-a-databases-dir"
+        bad.mkdir()
+        (bad / "notes.txt").write_text("not a database")
+    elif relative == "empty-dir":
+        (tmp_path / "empty-dir").mkdir()
+    helper = Path(pds.__file__).with_name("_plex_snapshot.py").read_text()
+
+    result = subprocess.run(
+        [sys.executable, "-c", helper, str(tmp_path / relative)],
+        capture_output=True, timeout=10,
+    )
+
+    assert result.returncode == 1
+    assert result.stdout == b""
+    assert result.stderr.decode().strip() == f"{pds.REMOTE_ERROR_PREFIX}{code}"
+    assert code in pds.REMOTE_ERROR_HINTS
+
+
+def test_remote_helper_reports_an_unreadable_database(tmp_path):
+    source = tmp_path / "Databases"
+    source.mkdir()
+    (source / pds.PLEX_LIBRARY_DB_NAME).write_bytes(b"definitely not sqlite")
+    helper = Path(pds.__file__).with_name("_plex_snapshot.py").read_text()
+
+    result = subprocess.run(
+        [sys.executable, "-c", helper, str(source)], capture_output=True, timeout=10,
+    )
+
+    assert result.returncode == 1
+    # Progress lines may precede the failure; the code is the last line.
+    lines = result.stderr.decode().strip().splitlines()
+    assert lines[-1] == f"{pds.REMOTE_ERROR_PREFIX}unreadable"
+    assert all(line.startswith(pds.REMOTE_PROGRESS_PREFIX) for line in lines[:-1])
+
+
+def test_remote_helper_usage_code():
+    helper = Path(pds.__file__).with_name("_plex_snapshot.py").read_text()
+    result = subprocess.run(
+        [sys.executable, "-c", helper], capture_output=True, timeout=10,
+    )
+    assert result.returncode == 1
+    assert result.stderr.decode().strip() == f"{pds.REMOTE_ERROR_PREFIX}usage"
+
+
+def test_remote_helper_reports_backup_progress(tmp_path):
+    """A remote backup of a large database must not look hung.
+
+    The host streams nothing on stdout until every backup is done, so progress
+    lines on stderr are the only feedback during that window.
+    """
+    source = tmp_path / "Databases"
+    source.mkdir()
+    _database(source / pds.PLEX_LIBRARY_DB_NAME)
+    _database(source / pds.PLEX_BLOBS_DB_NAME, value=2)
+    total = (source / pds.PLEX_LIBRARY_DB_NAME).stat().st_size + (
+        source / pds.PLEX_BLOBS_DB_NAME
+    ).stat().st_size
+    helper = Path(pds.__file__).with_name("_plex_snapshot.py").read_text()
+
+    result = subprocess.run(
+        [sys.executable, "-c", helper, str(source)], capture_output=True, check=True, timeout=20,
+    )
+
+    lines = result.stderr.decode().strip().splitlines()
+    assert lines, "the helper must report progress"
+    samples = []
+    for line in lines:
+        assert line.startswith(pds.REMOTE_PROGRESS_PREFIX), line
+        done, _, reported_total = line[len(pds.REMOTE_PROGRESS_PREFIX):].partition(" ")
+        assert int(reported_total) == total
+        samples.append(int(done))
+    assert samples == sorted(samples)  # never goes backwards
+    assert samples[0] == 0
+    assert samples[-1] == total  # both databases accounted for
+    # One line per percent at most, however many pages SQLite reports.
+    assert len(samples) <= 101
+
+
+def test_fetch_reports_prepare_and_download_progress(remote, tmp_path, monkeypatch):
+    """The job gets a moving bar for both halves of the wait."""
+    monkeypatch.setattr(_Stdout, "recv_exit_status", lambda self: 0)
+    size = (tmp_path / "fixture.db").stat().st_size  # the archived payload
+    monkeypatch.setattr(
+        _Client,
+        "exec_command",
+        lambda self, command, **kwargs: (
+            io.BytesIO(),
+            _Stdout(self.archive),
+            io.BytesIO(
+                f"{pds.REMOTE_PROGRESS_PREFIX}0 {size}\n"
+                f"{pds.REMOTE_PROGRESS_PREFIX}{size // 2} {size}\n"
+                f"{pds.REMOTE_PROGRESS_PREFIX}{size} {size}\n".encode()
+            ),
+        ),
+    )
+    seen: list[tuple[int, int, str]] = []
+
+    pds.resolve_plex_dbs(_config(tmp_path), refresh=True, on_progress=lambda *a: seen.append(a))
+
+    prepare = [p for p in seen if p[2] == pds.PREPARE_PHASE]
+    assert [p[0] for p in prepare] == [0, 50, 100]
+    assert all(p[1] == 100 for p in seen)  # reported as percent, not raw bytes
+
+    library = [p for p in seen if p[2] == "downloading Plex database"]
+    assert library[0][0] == 0
+    assert library[-1][0] == 100
+    assert [p[0] for p in library] == sorted(p[0] for p in library)
+    assert "downloading Plex sonic-vector database" in {p[2] for p in seen}
+
+
+class _StderrChannel:
+    """Minimal channel backing a real paramiko stderr file, over memory."""
+
+    def __init__(self, payload: bytes) -> None:
+        self._payload = payload
+        self._buffer = io.BytesIO(payload)
+
+    def recv_stderr(self, size):
+        return self._buffer.read(size)
+
+    def recv(self, size):
+        return b""
+
+    def sendall(self, data):
+        return None
+
+    def close(self):
+        pass
+
+    @property
+    def remaining(self) -> int:
+        return len(self._payload) - self._buffer.tell()
+
+
+def text_stderr(payload: bytes) -> paramiko.channel.ChannelStderrFile:
+    """A real paramiko stderr file over ``payload``, in the mode production uses.
+
+    ``exec_command`` opens stderr as ``makefile_stderr("r")`` — text mode — so
+    ``readline()`` returns ``str`` while ``read()`` returns ``bytes``. Using
+    paramiko's own class reproduces that instead of inventing a test double.
+    """
+    return paramiko.channel.ChannelStderrFile(_StderrChannel(payload))
+
+
+class _TextClient(_Client):
+    """Client whose stderr is a real paramiko text-mode channel file."""
+
+    def __init__(self, archive, stderr: bytes | str, exit_status: int = 0):
+        super().__init__(archive)
+        payload = stderr.encode() if isinstance(stderr, str) else stderr
+        self.stderr = text_stderr(payload)
+        self.exit_status = exit_status
+
+    def exec_command(self, command, **kwargs):
+        self.commands.append(command)
+        stdout = _Stdout(self.archive)
+        stdout.recv_exit_status = lambda: self.exit_status
+        return io.BytesIO(), stdout, self.stderr
+
+
+def test_stderr_lines_handles_text_and_binary_streams():
+    """Normalize both shapes and, critically, stop at EOF in either one.
+
+    A bytes sentinel would never match paramiko's text-mode ``""``, leaving the
+    reader spinning forever while the transfer stalled on a full channel window.
+    """
+    assert list(pds._stderr_lines(io.StringIO("a\nb\n"))) == ["a\n", "b\n"]
+    assert list(pds._stderr_lines(io.BytesIO(b"a\nb\n"))) == ["a\n", "b\n"]
+    assert list(pds._stderr_lines(io.StringIO(""))) == []
+    assert list(pds._stderr_lines(io.BytesIO(b""))) == []
+    # Unterminated final lines still arrive from both shapes.
+    assert list(pds._stderr_lines(io.StringIO("tail"))) == ["tail"]
+    assert list(pds._stderr_lines(io.BytesIO(b"tail"))) == ["tail"]
+    # The real paramiko file object behaves the same way.
+    real = text_stderr(b"MUSICSEED_PROGRESS 1 2\ntail")
+    assert isinstance(real.readline(), str)
+    assert list(pds._stderr_lines(text_stderr(b"a\ntail"))) == ["a\n", "tail"]
+
+
+def test_progress_and_error_line_parsing():
+    assert pds._parse_progress_line("MUSICSEED_PROGRESS 12 34") == (12, 34)
+    for rejected in (
+        "MUSICSEED_ERROR not_found",
+        "MUSICSEED_PROGRESS",
+        "MUSICSEED_PROGRESS a b",
+        "MUSICSEED_PROGRESS 12",
+        "Traceback (most recent call last):",
+        "",
+    ):
+        assert pds._parse_progress_line(rejected) is None
+
+    assert pds._parse_error_line("MUSICSEED_ERROR not_found") == "not_found"
+    assert pds._parse_error_line("MUSICSEED_PROGRESS 1 2") is None
+    assert pds._parse_error_line("/home/user/secret/path") is None
+
+
+def test_a_bad_stderr_line_does_not_stop_the_drain(tmp_path, monkeypatch):
+    """Unparsable output is skipped: an undrained buffer would block the transfer."""
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    data = _database(tmp_path / "fixture.db")
+    size = len(data)
+    client = _TextClient(
+        _archive({pds.PLEX_LIBRARY_DB_NAME: data}),
+        (
+            "not a protocol line\n"
+            "MUSICSEED_PROGRESS nonsense\n"
+            f"{pds.REMOTE_PROGRESS_PREFIX}{size} {size}\n"
+        ),
+    )
+    monkeypatch.setattr(pds, "_open_ssh", lambda *a, **k: client)
+    seen: list[tuple[int, int, str]] = []
+
+    pds.resolve_plex_dbs(_config(tmp_path), refresh=True, on_progress=lambda *a: seen.append(a))
+
+    # The good line still landed and the stream was read to EOF.
+    assert (100, 100, pds.PREPARE_PHASE) in seen
+    assert client.stderr.channel.remaining == 0
+
+
+def test_fetch_reads_progress_from_a_text_mode_stderr(tmp_path, monkeypatch):
+    """Regression: paramiko stderr is str-mode; the reader thread must cope."""
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    data = _database(tmp_path / "fixture.db")
+    size = len(data)
+    client = _TextClient(
+        _archive({pds.PLEX_LIBRARY_DB_NAME: data}),
+        (
+            f"{pds.REMOTE_PROGRESS_PREFIX}0 {size}\n"
+            f"{pds.REMOTE_PROGRESS_PREFIX}{size // 4} {size}\n"
+            f"{pds.REMOTE_PROGRESS_PREFIX}{size} {size}\n"
+        ),
+    )
+    monkeypatch.setattr(pds, "_open_ssh", lambda *a, **k: client)
+    seen: list[tuple[int, int, str]] = []
+
+    pds.resolve_plex_dbs(_config(tmp_path), refresh=True, on_progress=lambda *a: seen.append(a))
+
+    assert [p[0] for p in seen if p[2] == pds.PREPARE_PHASE] == [0, 25, 100]
+    assert client.stderr.channel.remaining == 0  # drained, reader stopped at EOF
+
+
+def test_fetch_maps_errors_from_a_text_mode_stderr(tmp_path, monkeypatch):
+    """The error code survives the text-mode stream too."""
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    data = _database(tmp_path / "fixture.db")
+    client = _TextClient(
+        _archive({pds.PLEX_LIBRARY_DB_NAME: data}),
+        f"{pds.REMOTE_ERROR_PREFIX}database_not_found\n",
+        exit_status=1,
+    )
+    monkeypatch.setattr(pds, "_open_ssh", lambda *a, **k: client)
+
+    with pytest.raises(NotFoundError) as excinfo:
+        pds.resolve_plex_dbs(_config(tmp_path), refresh=True)
+
+    assert pds.PLEX_LIBRARY_DB_NAME in str(excinfo.value)
+
+
+def test_progress_is_optional(remote, tmp_path):
+    """Callers without a progress callback (coverage, CLI) stay unchanged."""
+    result = pds.resolve_plex_dbs(_config(tmp_path), refresh=True)
+    assert result.library_db.exists()
+
+
 @pytest.mark.parametrize("password", ["", "test password"])
 def test_ssh_loads_known_hosts_rejects_unknown_and_preserves_auth(monkeypatch, password):
     from unittest.mock import MagicMock
@@ -234,6 +646,42 @@ def test_changed_host_key_failure_closes_connection(monkeypatch):
     client.connect.side_effect = paramiko.BadHostKeyException("nas", key, key)
     monkeypatch.setattr(pds.paramiko, "SSHClient", lambda: client)
     with pytest.raises(NotFoundError, match="changed-host-key"):
+        pds._open_ssh("u", "nas", 22, "")
+    client.close.assert_called_once()
+
+
+def test_authentication_failure_says_what_to_fix(monkeypatch):
+    """An agent-based login that only works in a terminal must be explained.
+
+    paramiko never prompts: a key loaded in the user's shell agent is invisible
+    to a MusicSeed process without SSH_AUTH_SOCK, which looks like "scp works
+    but the web UI cannot connect".
+    """
+    from unittest.mock import MagicMock
+
+    client = MagicMock()
+    client.connect.side_effect = paramiko.AuthenticationException("Authentication failed.")
+    monkeypatch.setattr(pds.paramiko, "SSHClient", lambda: client)
+
+    with pytest.raises(NotFoundError) as excinfo:
+        pds._open_ssh("u", "nas", 22, "")
+
+    message = str(excinfo.value)
+    assert "SSH authentication to nas failed" in message
+    assert "ssh-agent" in message
+    assert "SSH_AUTH_SOCK" in message
+    assert "plex.db_ssh_password" in message
+    client.close.assert_called_once()
+
+
+def test_unreachable_host_reports_the_generic_ssh_failure(monkeypatch):
+    from unittest.mock import MagicMock
+
+    client = MagicMock()
+    client.connect.side_effect = OSError("Network is unreachable")
+    monkeypatch.setattr(pds.paramiko, "SSHClient", lambda: client)
+
+    with pytest.raises(NotFoundError, match="SSH connection failed"):
         pds._open_ssh("u", "nas", 22, "")
     client.close.assert_called_once()
 
@@ -331,7 +779,7 @@ def test_concurrent_publications_keep_each_readers_generation(tmp_path, monkeypa
     barrier = Barrier(2)
     payload = _database(tmp_path / "payload.db")
 
-    def fetch(config, target, stage):
+    def fetch(config, target, stage, on_progress=None):
         (stage / pds.PLEX_LIBRARY_DB_NAME).write_bytes(payload)
         barrier.wait(timeout=5)
 

@@ -69,7 +69,7 @@ def import_plex_sonic(
     if progress_callback is not None:
         progress_callback(0, 0, "reading Plex snapshot")
     # Read Plex's blobs DB once; vectors come back L2-normalized in memory, keyed by plex_id.
-    dbs = resolve_plex_dbs(ctx.config, refresh=True)
+    dbs = resolve_plex_dbs(ctx.config, refresh=True, on_progress=progress_callback)
     vectors = load_sonic_vectors(
         plex_db_path=dbs.library_db,
         blobs_db_path=dbs.blobs_db,

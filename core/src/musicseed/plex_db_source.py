@@ -15,19 +15,75 @@ import shutil
 import sqlite3
 import tarfile
 import tempfile
+import threading
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable, Iterator
 
 import paramiko
 
 from musicseed.config import Config
 from musicseed.exceptions import NotFoundError
+from musicseed.logging_config import get_logger
+
+logger = get_logger("plex_db_source")
 
 SQLITE_HEADER = b"SQLite format 3\x00"
 PLEX_LIBRARY_DB_NAME = "com.plexapp.plugins.library.db"
 PLEX_BLOBS_DB_NAME = "com.plexapp.plugins.library.blobs.db"
 _DB_NAMES = {PLEX_LIBRARY_DB_NAME, PLEX_BLOBS_DB_NAME}
+
+#: Protocol with the remote helper (``_plex_snapshot.py``): it reports failures
+#: as one ``MUSICSEED_ERROR <code>`` line so the user gets an actionable message
+#: instead of a traceback (which would carry host-local paths), and so nothing
+#: from the remote side is echoed verbatim into the UI.
+REMOTE_ERROR_PREFIX = "MUSICSEED_ERROR "
+#: Progress protocol with the same helper: ``MUSICSEED_PROGRESS <done> <total>``
+#: in bytes, emitted while the remote backups run (see :data:`PREPARE_PHASE`).
+REMOTE_PROGRESS_PREFIX = "MUSICSEED_PROGRESS "
+
+#: Phase reported while the SSH host builds its standalone backups. A large Plex
+#: database takes minutes here and streams nothing meanwhile, so the UI needs
+#: this to show movement instead of an apparently hung job.
+PREPARE_PHASE = "preparing Plex snapshot"
+#: Phase per database being streamed back, keyed by the archive member name.
+_DOWNLOAD_PHASES = {
+    PLEX_LIBRARY_DB_NAME: "downloading Plex database",
+    PLEX_BLOBS_DB_NAME: "downloading Plex sonic-vector database",
+}
+#: Phases whose name is already user-facing (the API layer must not prefix them).
+SNAPSHOT_PHASES = frozenset({PREPARE_PHASE, *_DOWNLOAD_PHASES.values()})
+
+REMOTE_ERROR_HINTS = {
+    "not_found": "Nothing exists at that path on the SSH host.",
+    "not_a_directory": (
+        "That SSH path is a file, not the directory holding your Plex databases. "
+        "Point the target at the folder that contains "
+        f"{PLEX_LIBRARY_DB_NAME}."
+    ),
+    "database_not_found": (
+        f"That directory does not contain {PLEX_LIBRARY_DB_NAME}."
+    ),
+    "unreadable": (
+        "The SSH user cannot read — or the host's SQLite cannot open — the Plex "
+        "database. Check permissions, and that the path is Plex's Databases folder."
+    ),
+    "timeout": (
+        "Plex's database backup took too long; retry while Plex is idle."
+    ),
+}
+REMOTE_ERROR_FALLBACK = (
+    "The remote helper failed before streaming any data. Run it by hand on the SSH "
+    'host to see why: python3 -c "$(\'cat _plex_snapshot.py\')" <databases-dir>'
+)
+
+
+ProgressCallback = Callable[[int, int, str], None]
+
+
+class _RemoteSnapshotError(NotFoundError):
+    """A failure already described actionably; never re-wrapped generically."""
 
 
 @dataclass(frozen=True)
@@ -39,10 +95,32 @@ class ResolvedPlexDbs:
     source: str  # "local" | "ssh"
 
 
+def _strip_wrapping_quotes(value: str) -> str:
+    """Drop one layer of matching shell quotes around a pasted value."""
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        return value[1:-1].strip()
+    return value
+
+
 def parse_ssh_target(target: str) -> tuple[str | None, str, str]:
-    """Split ``[user@]host:/directory``; tolerate pasted shell-escaped spaces."""
-    host_spec, sep, remote_dir = target.strip().partition(":")
-    if not sep or not host_spec or not remote_dir.strip("/"):
+    r"""Split ``[user@]host:/directory`` into ``(user, host, directory)``.
+
+    Tolerates what an ``scp``/``ssh`` command line or a copy-paste actually
+    produces: shell-escaped spaces (``Application\ Support``), quotes around the
+    whole target or around the remote path (``host:"~/My Plex/Databases"``), a
+    trailing slash, and — because pasting the database file's own path is the
+    obvious thing to do — the full path of a database *file*, in which case the
+    directory that holds it is returned. That directory is what both the presence
+    probe and the remote snapshot helper need.
+
+    Raises:
+        NotFoundError: when the target is not ``[user@]host:/path``.
+    """
+    cleaned = _strip_wrapping_quotes(target)
+    host_spec, sep, remote = cleaned.partition(":")
+    remote = _strip_wrapping_quotes(remote)
+    if not sep or not host_spec or not remote.strip("/"):
         raise NotFoundError("Invalid SSH target; expected [user@]host:/remote/directory")
     if "@" in host_spec:
         user, host = host_spec.split("@", 1)
@@ -52,7 +130,11 @@ def parse_ssh_target(target: str) -> tuple[str | None, str, str]:
         user, host = None, host_spec
     if not host or any(c.isspace() for c in host_spec):
         raise NotFoundError("Invalid SSH target: missing or invalid host")
-    return user, host, remote_dir.rstrip("/").replace("\\ ", " ")
+    remote_dir = remote.rstrip("/").replace("\\ ", " ")
+    if remote_dir not in _DB_NAMES and Path(remote_dir).name in _DB_NAMES:
+        # Pointing at com.plexapp.plugins.library.db means its parent directory.
+        remote_dir = str(Path(remote_dir).parent)
+    return user, host, remote_dir
 
 
 def _cache_dir(target: str, port: int = 22) -> Path:
@@ -84,6 +166,21 @@ def _open_ssh(
             timeout=timeout, banner_timeout=timeout, auth_timeout=timeout,
         )
         return client
+    except paramiko.BadHostKeyException as exc:
+        client.close()
+        raise NotFoundError(
+            f"SSH host key for {host} does not match the trusted key. Verify the host "
+            "fingerprint independently before changing known_hosts; never bypass a "
+            "changed-host-key warning."
+        ) from exc
+    except paramiko.AuthenticationException as exc:
+        client.close()
+        raise NotFoundError(
+            f"SSH authentication to {host} failed. MusicSeed connects without prompting, so "
+            "it needs a key it can use in this process: load it into ssh-agent (ssh-add) and "
+            "make sure whatever starts MusicSeed has SSH_AUTH_SOCK, or set "
+            "plex.db_ssh_password. Keys in the default ~/.ssh locations are tried automatically."
+        ) from exc
     except (paramiko.SSHException, OSError) as exc:
         client.close()
         raise NotFoundError(
@@ -160,16 +257,112 @@ def _validate_sqlite(path: Path, *, full: bool) -> int:
     return size
 
 
-def _fetch_snapshot(config: Config, target: str, dest_dir: Path) -> None:
-    """Run read-only source backups and safely unpack their SSH stream into staging."""
+def _remote_error_message(code: str) -> str:
+    """Map a helper error code to a message; never echo raw remote output.
+
+    Only the ``MUSICSEED_ERROR`` code from stderr is interpreted. Anything else
+    the host wrote (tracebacks, host paths) is discarded rather than shown.
+    """
+    if not code:
+        return ""
+    return REMOTE_ERROR_HINTS.get(code, REMOTE_ERROR_FALLBACK)
+
+
+def _stderr_lines(stream) -> Iterator[str]:
+    """Yield text lines from a channel file, whatever mode it was opened in.
+
+    paramiko's ``exec_command`` opens stderr with mode ``"r"`` (no ``"b"``), so
+    ``readline()`` decodes to ``str`` while ``read()`` still returns ``bytes``.
+    Both shapes are accepted here; the EOF check must treat ``""`` and ``b""``
+    alike, because comparing against a bytes sentinel never ends for text mode.
+    """
+    while True:
+        raw = stream.readline()
+        if not raw:  # "" or b"" — end of stream
+            return
+        yield raw.decode("utf-8", "replace") if isinstance(raw, bytes) else raw
+
+
+def _parse_progress_line(line: str) -> tuple[int, int] | None:
+    """Parse ``MUSICSEED_PROGRESS <done> <total>``; ``None`` for anything else."""
+    if not line.startswith(REMOTE_PROGRESS_PREFIX):
+        return None
+    done, _, total = line[len(REMOTE_PROGRESS_PREFIX):].partition(" ")
+    if not (done.isdigit() and total.isdigit()):
+        return None
+    return int(done), int(total)
+
+
+def _parse_error_line(line: str) -> str | None:
+    """Extract the code from ``MUSICSEED_ERROR <code>``; ``None`` otherwise."""
+    if not line.startswith(REMOTE_ERROR_PREFIX):
+        return None
+    return line[len(REMOTE_ERROR_PREFIX):].strip()
+
+
+def _fetch_snapshot(
+    config: Config,
+    target: str,
+    dest_dir: Path,
+    on_progress: ProgressCallback | None = None,
+) -> None:
+    """Run read-only source backups and safely unpack their SSH stream into staging.
+
+    Progress is reported as ``(percent, 100, phase)`` so the job UI can show a
+    moving bar for both halves of the wait: the host's own SQLite backups
+    (:data:`PREPARE_PHASE`) and the transfer of each file
+    (:data:`_DOWNLOAD_PHASES`).
+    """
     user, host, remote_dir = parse_ssh_target(target)
     helper = Path(__file__).with_name("_plex_snapshot.py").read_text()
     command = shlex.join(["python3", "-c", helper, remote_dir])
+    reported: dict[str, int] = {}
+
+    def emit(done: int, total: int, phase: str) -> None:
+        """Report whole-percent steps only; one job update per percent, at most."""
+        percent = max(0, min(100, int(done * 100 / total) if total else 0))
+        if reported.get(phase) == percent:
+            return
+        reported[phase] = percent
+        if on_progress is not None:
+            on_progress(percent, 100, phase)
+
     with closing(_open_ssh(
         user, host, config.plex.db_ssh_port, config.plex.db_ssh_password
     )) as client:
         stdin, stdout, stderr = client.exec_command(command, timeout=360)
         stdin.close()
+        remote: dict[str, str] = {}
+
+        def pump_stderr() -> None:
+            """Drain stderr while stdout streams; the channel window is shared.
+
+            A parse failure must never stop the drain: an unread stderr buffer
+            eventually blocks the transfer on the shared channel window. Bad
+            lines are logged and skipped, not fatal.
+            """
+            try:
+                for raw in _stderr_lines(stderr):
+                    line = raw.strip()
+                    progress = _parse_progress_line(line)
+                    if progress is not None:
+                        emit(progress[0], progress[1], PREPARE_PHASE)
+                        continue
+                    code = _parse_error_line(line)
+                    if code is not None:
+                        remote["error"] = code
+            except (OSError, paramiko.SSHException):
+                pass  # channel closed underneath us: normal at the end
+            except Exception:  # noqa: BLE001 - keep draining, log for diagnosis
+                logger.warning("Plex snapshot progress reader stopped", exc_info=True)
+
+        # Announced before the SSH round-trip so the UI moves at once; the
+        # reader then takes over with the host's real numbers.
+        emit(0, 1, PREPARE_PHASE)
+        reader = threading.Thread(
+            target=pump_stderr, name="plex-snapshot-stderr", daemon=True
+        )
+        reader.start()
         try:
             seen: set[str] = set()
             with tarfile.open(fileobj=stdout, mode="r|") as archive:
@@ -177,16 +370,27 @@ def _fetch_snapshot(config: Config, target: str, dest_dir: Path) -> None:
                     if member.name not in _DB_NAMES or not member.isfile() or member.name in seen:
                         raise NotFoundError("Unexpected file in remote Plex snapshot")
                     seen.add(member.name)
+                    phase = _DOWNLOAD_PHASES[member.name]
+                    emit(0, member.size, phase)
                     with closing(archive.extractfile(member)) as source:
+                        copied = 0
                         with (dest_dir / member.name).open("xb") as dest:
-                            shutil.copyfileobj(source, dest, length=1024 * 1024)
+                            while chunk := source.read(1024 * 1024):
+                                dest.write(chunk)
+                                copied += len(chunk)
+                                emit(copied, member.size, phase)
                             dest.flush()
                             os.fsync(dest.fileno())
+                        emit(copied, member.size, phase)
             # Drain the small tar end padding before waiting for remote completion.
             while stdout.read(65536):
                 pass
             if stdout.channel.recv_exit_status() != 0:
-                raise NotFoundError("Remote SQLite backup failed")
+                raise _RemoteSnapshotError(
+                    _remote_error_message(remote.get("error", "")) or REMOTE_ERROR_FALLBACK
+                )
+        except _RemoteSnapshotError:
+            raise
         except (tarfile.TarError, OSError, paramiko.SSHException, NotFoundError) as exc:
             # No remote stderr is echoed: tracebacks may contain host-local paths.
             raise NotFoundError(
@@ -196,18 +400,21 @@ def _fetch_snapshot(config: Config, target: str, dest_dir: Path) -> None:
                 f"({type(exc).__name__})"
             ) from exc
         finally:
+            reader.join(timeout=5.0)
             stdout.close()
             stderr.close()
 
 
-def _publish_snapshot(config: Config, target: str, root: Path) -> Path:
+def _publish_snapshot(
+    config: Config, target: str, root: Path, on_progress: ProgressCallback | None = None
+) -> Path:
     """Publish one complete generation, leaving prior readers and cache untouched."""
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
     stage = Path(tempfile.mkdtemp(prefix="generation-", dir=root))
     pointer = root / (stage.name + ".pointer")
     published = False
     try:
-        _fetch_snapshot(config, target, stage)
+        _fetch_snapshot(config, target, stage, on_progress)
         sizes = {PLEX_LIBRARY_DB_NAME: _validate_sqlite(stage / PLEX_LIBRARY_DB_NAME, full=True)}
         if (stage / PLEX_BLOBS_DB_NAME).exists():
             sizes[PLEX_BLOBS_DB_NAME] = _validate_sqlite(stage / PLEX_BLOBS_DB_NAME, full=True)
@@ -244,7 +451,11 @@ def _cached_snapshot(root: Path) -> Path:
 
 
 def resolve_plex_dbs(
-    config: Config, *, refresh: bool = False, ssh_target: str | None = None
+    config: Config,
+    *,
+    refresh: bool = False,
+    ssh_target: str | None = None,
+    on_progress: ProgressCallback | None = None,
 ) -> ResolvedPlexDbs:
     """Return local files or one stable SSH snapshot generation.
 
@@ -253,6 +464,15 @@ def resolve_plex_dbs(
     Old generations are retained for in-flight readers; remove the source cache
     manually only when no imports/readers are active. Legacy live-copy caches
     are intentionally ignored. The optional blobs path may not exist.
+
+    Args:
+        config: resolved MusicSeed config (SSH target and port when remote).
+        refresh: fetch a new snapshot instead of reusing the published one.
+        ssh_target: override the configured ``plex.db_ssh_target``.
+        on_progress: optional ``(current, total, phase)`` callback. A refresh
+            reports ``(percent, 100, phase)`` for :data:`PREPARE_PHASE` and each
+            download phase — the only feedback available while a multi-gigabyte
+            backup runs on the remote host.
     """
     target = ssh_target or config.plex.db_ssh_target
     if not target:
@@ -264,7 +484,9 @@ def resolve_plex_dbs(
     try:
         root = _cache_dir(target, config.plex.db_ssh_port)
         generation = (
-            _publish_snapshot(config, target, root) if refresh else _cached_snapshot(root)
+            _publish_snapshot(config, target, root, on_progress)
+            if refresh
+            else _cached_snapshot(root)
         )
     except (OSError, ValueError, paramiko.SSHException) as exc:
         raise NotFoundError(

@@ -251,11 +251,51 @@ def test_run_plex_discovery_delegates(monkeypatch):
 
     captured = {}
 
-    def fake_discover(timeout, token):
+    def fake_discover(timeout, token, verify):
         captured["token"] = token
+        captured["verify"] = verify
         return "servers"
 
     monkeypatch.setattr(discovery_handlers, "discover_plex_servers", fake_discover)
     assert discovery_handlers.run_plex_discovery() == "servers"
     # conftest config has no plex token.
     assert captured["token"] == ""
+    # The picker must know which advertised addresses actually answer.
+    assert captured["verify"] is True
+
+
+def test_run_import_job_labels_snapshot_phases(monkeypatch):
+    """Snapshot phases already read as sentences; import phases need a verb.
+
+    Regression: the import's remote stages were reported as one frozen
+    "downloading Plex database…" line with no progress against it.
+    """
+    import musicseed_api.handlers.library as library_handlers
+    from musicseed.services.library import ImportResult
+
+    updates: list[str] = []
+    monkeypatch.setattr(
+        library_handlers,
+        "update_progress",
+        lambda job_id, current, total, checkpoint="", **kwargs: updates.append(checkpoint),
+    )
+    monkeypatch.setattr(
+        library_handlers,
+        "get_manager",
+        lambda: type("M", (), {"should_cancel": staticmethod(lambda job_id: False)})(),
+    )
+    monkeypatch.setattr(library_handlers, "complete_job", lambda *a, **k: None)
+
+    def fake_import(progress_callback=None, should_cancel=None):
+        progress_callback(40, 100, "preparing Plex snapshot")
+        progress_callback(10, 100, "downloading Plex database")
+        progress_callback(1, 3, "tracks")
+        return ImportResult(artists=1, albums=1, tracks=3, play_history=0)
+
+    monkeypatch.setattr(library_handlers, "import_library", fake_import)
+    library_handlers.run_import_job(1)
+
+    assert "preparing Plex snapshot…" in updates
+    assert "downloading Plex database…" in updates
+    assert "importing tracks…" in updates
+    assert not any(u.startswith("importing preparing") for u in updates)

@@ -14,8 +14,12 @@ database:
 
 plex:
   url: http://localhost:32400
-  # Required for playlist create / populate. Prefer an env var.
+  # Required for playlist create / populate. Leave empty and sign in with Plex in
+  # the web UI (or run `musicseed-cli plex-login`) — MusicSeed writes the token it
+  # receives here. An env var placeholder works too.
   token: ${PLEX_TOKEN}
+  # Stable Plex client identifier, generated once by the sign-in flow. Leave as is.
+  client_identifier: ""
   library: Music
   # Omit to auto-detect (macOS + Linux Plex data dirs). Override if discovery misses.
   db_path: >-

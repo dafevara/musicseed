@@ -59,12 +59,19 @@ Without a matching file, core uses model defaults. Environment variables and `~`
 in YAML values. Saving settings writes back to the resolved file, or to the canonical
 `~/.config/musicseed/config.yaml` if no file was found. Keep credentials out of tracked files.
 
-The Plex token is auto-detected when possible: discovery reads `PlexOnlineToken` from Plex's
-`Preferences.xml`, falling back to `.LocalAdminToken` (localhost-only). It probes the usual
-macOS path (`~/Library/Application Support/Plex Media Server/`) and Linux locations
-(`/var/lib/plexmediaserver/...`, snap, `~/.local/share/plexmediaserver/...`). Saving setup or
-settings persists the detected token into `config.yaml`; when none is found the UI shows how
-to retrieve one from app.plex.tv.
+Plex credentials come from a Plex account sign-in (the plex.tv PIN flow), not from a token the
+user has to find: the wizard and Settings offer **Sign in with Plex**, which writes the returned
+access token into `config.yaml`. `musicseed-cli plex-login` does the same from a terminal
+(`--open` sends the browser to Plex, otherwise MusicSeed prints a code to enter at
+`plex.tv/link`), and `plex-logout` clears it. A hidden **Advanced** field still accepts a manual
+token for installs that cannot reach plex.tv.
+
+None of that is required when Plex runs on the same machine: discovery auto-detects the token by
+reading `PlexOnlineToken` from Plex's `Preferences.xml`, falling back to `.LocalAdminToken`
+(localhost-only). It probes the usual macOS path (`~/Library/Application Support/Plex Media
+Server/`) and Linux locations (`/var/lib/plexmediaserver/...`, snap,
+`~/.local/share/plexmediaserver/...`). Saving setup or settings persists the detected token into
+`config.yaml`, which is written owner-only (`0600`) because it holds credentials.
 
 ## Remote Plex DB Access
 
@@ -78,6 +85,18 @@ plex:
   db_ssh_target: "admin@nas.local:/volume1/Plex/.../Databases"
   db_ssh_password: "your-password"   # optional — omit to use ~/.ssh keys
   db_ssh_port: 22                    # optional
+```
+
+The target is forgiving about real pastes: the path to the database file itself is accepted
+(its folder is used), `~` is expanded on the remote host, quotes around the target or the path
+are stripped, and spaces do not need escaping:
+
+```yaml
+  # all four are the same source
+  db_ssh_target: "admin@nas.local:/volume1/Plex/Plug-in Support/Databases"
+  db_ssh_target: "admin@nas.local:~/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db"
+  db_ssh_target: "admin@nas.local:\"/volume1/Plex/Plug-in Support/Databases\""
+  db_ssh_target: "admin@nas.local:/volume1/Plex/Plug-in\ Support/Databases/"
 ```
 
 The remote host needs **SSH command execution, `python3` with the standard-library
@@ -103,6 +122,31 @@ entry). Unknown or changed host keys fail closed. Never blindly accept a changed
 or use unverified `ssh-keyscan` output as proof of identity. When `db_ssh_password` is set,
 MusicSeed uses that password; otherwise it uses standard key files and the SSH agent. Paramiko
 does not interpret `~/.ssh/config` aliases: supply the actual host, user and port.
+
+**Non-interactive authentication matters.** paramiko never prompts. A key that only exists in
+your terminal's agent is invisible to a MusicSeed process that lacks `SSH_AUTH_SOCK`, which
+typically looks like "`scp` works, but the web UI cannot connect". Load the key with `ssh-add`
+and make sure whatever starts MusicSeed (shell, `systemd` unit, `launchd` agent, container)
+inherits `SSH_AUTH_SOCK` — or set `db_ssh_password`. MusicSeed reports authentication failure
+with that guidance instead of a generic connection error.
+
+**Remote failures report a reason, not a traceback.** The bundled helper returns one short
+code (`not_found`, `not_a_directory`, `database_not_found`, `unreadable`, `timeout`, `other`)
+which becomes an actionable message; host-local paths and tracebacks are never shown in the UI.
+
+**The long wait is visible.** A remote refresh reports progress in two phases, both as a
+percentage:
+
+- `preparing Plex snapshot` — the host is running SQLite's online backup. Nothing is transferred
+  during this window, and it is the slow part for a large library (minutes on a busy server).
+- `downloading Plex database` / `downloading Plex sonic-vector database` — the transfer of each
+  file back to this machine.
+
+The web job view shows a bar per phase; `musicseed-cli import` prints the same phases at 25%
+steps. Each database gets a five-minute backup budget on the host, after which the helper reports
+`timeout`: retry when Plex is idle. A phase that never advances at all means the remote work is
+not running (see `logs/latest.log` for the SSH probe result), while a phase that crawls is simply
+a large library over a slow link — the bar is real progress, not an estimate.
 
 Each refresh downloads into a private generation under
 `~/.cache/musicseed/plex-dbs/snapshots-v1/` (or `$XDG_CACHE_HOME/musicseed/plex-dbs/`).
@@ -138,16 +182,22 @@ hot reload (API + `next dev` on port 3000 + MCP on port 8790).
   manual URL), initializes the database, and optionally runs import and enrichment. Non-setup
   pages (dashboard, recommend, playlists) redirect back here while the library is missing or
   empty.
-- **Settings** (`/settings`): a persistent view for Plex URL/token/library, the MusicSeed
-  database path, Spotify credentials, and the local sonic-vector import action. Saving persists
-  config without starting any import, enrichment, or database initialization.
+- **Settings** (`/settings`): a persistent view for the Plex account sign-in (plus a manual token
+  under **Advanced**), Plex URL/library, the MusicSeed database path, Spotify credentials, and the
+  local sonic-vector import action. Saving persists config without starting any import,
+  enrichment, or database initialization.
 - **Plex discovery**: local-network discovery is passive and read-only — GDM multicast on
   `239.0.0.250:32414` with an SSDP fallback on `239.255.255.250:1900`
   (`urn:plex-com:service:pms:1`), stdlib-only. Multicast never crosses routers, so servers on
-  other subnets are found via `plex.tv/api/resources` when a Plex token is configured.
+  other subnets are found via `plex.tv/api/resources` once a Plex account is linked. Each
+  advertised address is then probed (`/identity`) and reported as `reachable`, because a server's
+  own LAN addresses are often unreachable from another machine — the picker sorts answerers first
+  and marks the address in use.
 
 Relevant API routes: `GET /discovery`, `GET /discovery/plex-servers`,
-`POST /discovery/check`, `POST /discovery/config` (save-only), `POST /discovery/init-db`.
+`POST /discovery/check`, `POST /discovery/config` (save-only), `POST /discovery/init-db`,
+`POST /auth/plex/pin`, `GET /auth/plex/pin/{pin_id}`, `GET /auth/plex/account`,
+`POST /auth/plex/unlink`.
 These paths are relative to the JSON base URL: prepend `/api` for the normal `musicseed`
 server. See [HTTP API modes](../api-reference/http-api.md#server-modes-and-openapi).
 

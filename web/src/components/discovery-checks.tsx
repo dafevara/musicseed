@@ -1,31 +1,59 @@
 import type { DiscoveryResult } from "@/lib/types";
-import { HelpIcon } from "@/components/help-icon";
 
-function StatusBadge({ ok }: { ok: boolean }) {
-  return ok ? (
-    <span className="badge badge-ok">ok</span>
-  ) : (
-    <span className="badge badge-problem">attention</span>
+function StatusIcon({ ok }: { ok: boolean }) {
+  return (
+    <>
+      <svg
+        className={`discovery-check-icon ${ok ? "text-[var(--status-ok)]" : "text-[var(--status-problem)]"}`}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d={ok ? "M5 12l4 4L19 6" : "M6 6l12 12M18 6L6 18"} />
+      </svg>
+      <span className="sr-only">{ok ? "Passed: " : "Failed: "}</span>
+    </>
   );
 }
 
-const SHORT_REASON: Record<string, string> = {
-  not_found: "not found",
-  not_a_file: "not a file",
-  not_readable: "not readable",
-  not_writable: "not writable",
-  invalid_sqlite: "not a SQLite file",
-  parent_missing: "folder missing",
-  parent_not_writable: "folder not writable",
-  unreachable: "unreachable",
-  missing_token: "needs a token",
-  unauthorized: "token rejected",
-  library_not_found: "library not found",
-  error: "error",
-  skipped: "not checked",
-};
+function CheckRow({
+  label,
+  ok,
+  detail,
+  guidance,
+}: {
+  label: string;
+  ok: boolean;
+  detail?: string | null;
+  guidance: string;
+}) {
+  const heading = <><StatusIcon ok={ok} /><strong>{label}</strong></>;
 
-function dbGuidance(reason: string | undefined, detail: string | null | undefined): string {
+  return (
+    <li>
+      {ok ? (
+        <div className="discovery-check-heading">{heading}</div>
+      ) : (
+        <details className="discovery-check-failed">
+          <summary className="discovery-check-heading">
+            {heading}
+            <span className="sr-only"> — show error details</span>
+          </summary>
+          <div className="discovery-check-explanation">
+            {detail && <p>{detail}</p>}
+            {guidance !== detail && <p>{guidance}</p>}
+          </div>
+        </details>
+      )}
+    </li>
+  );
+}
+
+function dbGuidance(reason: string | undefined): string {
   switch (reason) {
     case "not_found":
       return "No file at the usual location. If Plex lives somewhere custom, enter the path in Settings.";
@@ -36,22 +64,22 @@ function dbGuidance(reason: string | undefined, detail: string | null | undefine
     case "not_a_file":
       return "That path isn't a file — double-check the path.";
     default:
-      return detail || "";
+      return "No usable Plex database was found. Check the database location and permissions in Settings.";
   }
 }
 
-function plexGuidance(reason: string | null, detail: string | null): string {
+function plexGuidance(reason: string | null): string {
   switch (reason) {
     case "unreachable":
       return "Can't reach Plex at this address. Is Plex Media Server running? If it uses a different host or port, enter the URL in Settings.";
     case "missing_token":
-      return "Plex requires a token and none was found on this machine. To get one: sign in at app.plex.tv/desktop, open your browser's developer tools (Network tab), load any library, find a request with an X-Plex-Token header, and copy its value — then paste it in Settings.";
+      return "Plex needs a sign-in and none was found on this computer. Choose Sign in with Plex in the setup wizard or Settings (or run 'musicseed-cli plex-login' on the machine running MusicSeed).";
     case "unauthorized":
-      return "Plex rejected the configured token. Paste a valid token in Settings.";
+      return "Plex rejected the saved credentials. Sign in with Plex again in Settings — the account token may have been revoked or replaced.";
     case "library_not_found":
-      return detail || "Enter the exact library name in Settings.";
+      return "Enter the exact library name in Settings.";
     default:
-      return detail || "";
+      return "MusicSeed could not verify the Plex connection. Check the server URL, sign-in, and library name in Settings.";
   }
 }
 
@@ -74,108 +102,35 @@ export function DiscoveryChecks({
         Write playlists: {result.can_write_playlists ? "available" : "needs Plex connection"}
       </p>
       <ul className="list-none m-0 p-0 grid gap-2.5">
-        {/* MusicSeed DB */}
-        <li className="flex flex-wrap items-baseline gap-x-1.5">
-          <StatusBadge ok={dbOk} /> <strong>MusicSeed database</strong>
-          {dbOk ? (
-            <>
-              <code>{musicseed_db.path}</code>{" "}
-              <span className="text-[var(--muted)] text-sm">({musicseed_db.source})</span>
-              {!musicseed_db.exists && (
-                <span className="text-[var(--muted)] text-sm">(will be created)</span>
-              )}
-            </>
-          ) : (
-            <>
-              <span className="text-[var(--muted)] text-sm">
-                {SHORT_REASON[musicseed_db.reason] || ""}
-              </span>
-              <HelpIcon>
-                {musicseed_db.detail} Fix the permissions or choose a different location in
-                Settings.
-              </HelpIcon>
-            </>
-          )}
-        </li>
-
-        {/* Plex library DB */}
-        <li className="flex flex-wrap items-baseline gap-x-1.5">
-          <StatusBadge ok={plex_library_db.ok} /> <strong>Plex library database</strong>
-          {plex_library_db.selected ? (
-            <>
-              <code>{plex_library_db.selected.path}</code>{" "}
-              <span className="text-[var(--muted)] text-sm">({plex_library_db.selected.source})</span>
-            </>
-          ) : (
-            <>
-              <span className="text-[var(--muted)] text-sm">
-                {SHORT_REASON[plex_library_db.candidates[0]?.reason || ""] || "missing"}
-              </span>
-              <HelpIcon>
-                {dbGuidance(plex_library_db.candidates[0]?.reason, plex_library_db.candidates[0]?.detail)}
-              </HelpIcon>
-            </>
-          )}
-        </li>
-
-        {/* Plex blobs DB */}
-        <li className="flex flex-wrap items-baseline gap-x-1.5">
-          <StatusBadge ok={plex_blobs_db.ok} /> <strong>Plex blobs database</strong>
-          {plex_blobs_db.selected ? (
-            <>
-              <code>{plex_blobs_db.selected.path}</code>{" "}
-              <span className="text-[var(--muted)] text-sm">({plex_blobs_db.selected.source})</span>
-            </>
-          ) : (
-            <>
-              <span className="text-[var(--muted)] text-sm">
-                {SHORT_REASON[plex_blobs_db.candidates[0]?.reason || ""] || "missing"}
-              </span>
-              <HelpIcon>
-                {dbGuidance(plex_blobs_db.candidates[0]?.reason, plex_blobs_db.candidates[0]?.detail)}{" "}
-                Sonic vectors are imported into MusicSeed&apos;s local store, so the blobs
-                database is only needed when importing them. It normally sits next to the
-                library database with a <code>.blobs.db</code> suffix.
-              </HelpIcon>
-            </>
-          )}
-        </li>
-
-        {/* Sonic vectors (local) */}
-        <li className="flex flex-wrap items-baseline gap-x-1.5">
-          <StatusBadge ok={sonic_vectors.imported_count > 0} />
-          <strong>Sonic vectors (local)</strong>
-          <span className="text-[var(--muted)] text-sm">
-            {sonic_vectors.imported_count.toLocaleString()} imported
-          </span>
-          {sonic_vectors.imported_count === 0 && (
-            <HelpIcon>
-              Import Plex sonic vectors from Settings to enable the sonic similarity
-              signal in recommendations.
-            </HelpIcon>
-          )}
-        </li>
-
-        {/* Plex server */}
-        <li className="flex flex-wrap items-baseline gap-x-1.5">
-          <StatusBadge ok={plex_server.ok} /> <strong>Plex server</strong>
-          {plex_server.ok ? (
-            <>
-              <code>{plex_server.url}</code>{" "}
-              <span className="text-[var(--muted)] text-sm">({plex_server.source})</span>
-              <span className="text-[var(--muted)] text-sm">
-                Plex {plex_server.server_version} &middot; &ldquo;{plex_server.library}&rdquo;
-              </span>
-            </>
-          ) : (
-            <>
-              <span className="text-[var(--muted)] text-sm">
-                {SHORT_REASON[plex_server.reason || ""] || ""}
-              </span>
-              <HelpIcon>{plexGuidance(plex_server.reason, plex_server.detail)}</HelpIcon>
-            </>
-          )}
-        </li>
+        <CheckRow
+          label="MusicSeed database"
+          ok={dbOk}
+          detail={musicseed_db.detail}
+          guidance="Fix the permissions or choose a different location in Settings."
+        />
+        <CheckRow
+          label="Plex library database"
+          ok={plex_library_db.ok}
+          detail={plex_library_db.detail || plex_library_db.candidates[0]?.detail}
+          guidance={dbGuidance(plex_library_db.candidates[0]?.reason || plex_library_db.reason)}
+        />
+        <CheckRow
+          label="Plex blobs database"
+          ok={plex_blobs_db.ok}
+          detail={plex_blobs_db.detail || plex_blobs_db.candidates[0]?.detail}
+          guidance={`${dbGuidance(plex_blobs_db.candidates[0]?.reason || plex_blobs_db.reason)} Sonic vectors are imported into MusicSeed's local store, so the blobs database is only needed when importing them. It normally sits next to the library database with a .blobs.db suffix.`}
+        />
+        <CheckRow
+          label="Sonic vectors (local)"
+          ok={sonic_vectors.imported_count > 0}
+          guidance="No Plex sonic vectors have been imported. In Library → Coverage → Sonic vectors (local), choose Import vectors to enable the sonic similarity signal in recommendations."
+        />
+        <CheckRow
+          label="Plex server"
+          ok={plex_server.ok}
+          detail={plex_server.detail}
+          guidance={plexGuidance(plex_server.reason)}
+        />
       </ul>
     </section>
   );

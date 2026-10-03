@@ -13,7 +13,7 @@ from musicseed.context import MusicSeedContext, get_context
 from musicseed.db.session import IndexResult, create_indexes, ensure_schema, init_db
 from musicseed.exceptions import NotFoundError
 from musicseed.importers.plex import PlexImporter, import_from_plex
-from musicseed.plex_db_source import resolve_plex_dbs
+from musicseed.plex_db_source import PREPARE_PHASE, resolve_plex_dbs
 from musicseed.services.import_state import checkpoint, read_import_state, snapshot_id
 from musicseed.services.jobs import exclusive_writer
 
@@ -183,9 +183,13 @@ def import_library(
             checkpoint(ctx, "canceled")
             return ImportResult(artists=0, albums=0, tracks=0, play_history=0)
         if ctx.config.plex.db_ssh_target:
-            on_progress(0, 0, "downloading Plex database")
+            # Announced before the SSH round-trip so the wizard shows the phase
+            # immediately; resolve_plex_dbs then reports real progress in it.
+            on_progress(0, 100, PREPARE_PHASE)
         # Resolve the source (local file or SSH snapshot) and read its expected counts.
-        db_path = resolve_plex_dbs(ctx.config, refresh=True).library_db
+        db_path = resolve_plex_dbs(
+            ctx.config, refresh=True, on_progress=on_progress
+        ).library_db
         if not db_path.exists():
             raise NotFoundError(f"Plex database not found at {db_path}")
         with closing(PlexImporter(db_path, ctx.config.plex.library)) as importer:

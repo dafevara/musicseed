@@ -320,6 +320,58 @@ body {
   }
 }
 
+/* ── Discovery checks ───────────────────────── */
+.discovery-check-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2rem;
+}
+
+.discovery-check-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+}
+
+.discovery-check-failed summary {
+  cursor: pointer;
+  list-style: none;
+  border-radius: var(--ms-radius-sm);
+}
+
+.discovery-check-failed summary::-webkit-details-marker {
+  display: none;
+}
+
+.discovery-check-failed summary:hover strong {
+  text-decoration: underline;
+}
+
+.discovery-check-failed summary:focus-visible {
+  outline: 2px solid var(--ms-focus);
+  outline-offset: 2px;
+}
+
+.discovery-check-explanation {
+  margin: 0.5rem 0 0.25rem 1.75rem;
+  padding: 0.75rem;
+  background: var(--status-problem-bg);
+  border-radius: var(--ms-radius-sm);
+  color: var(--ms-text-muted);
+  font-size: 0.875rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.discovery-check-explanation p {
+  margin: 0;
+}
+
+.discovery-check-explanation p + p {
+  margin-top: 0.5rem;
+}
+
 /* ── Badges ─────────────────────────────────── */
 .badge {
   display: inline-block;

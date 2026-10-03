@@ -55,8 +55,10 @@ Good recommendations should be:
 ## Current User Flows
 
 The web UI is the default onboarding path (`./scripts/install.sh` then `musicseed`). The first-run wizard discovers the Plex
-server on the local network (GDM + SSDP), initializes the database, and optionally runs
-enrichment; a persistent settings view holds credentials (Plex token, ListenBrainz token, Spotify keys). The
+server on the local network (GDM + SSDP), signs the user in with their Plex account (plex.tv PIN
+flow — no token to copy), initializes the database, and optionally runs
+enrichment; a persistent settings view holds credentials (Plex sign-in or a manual token,
+ListenBrainz token, Spotify keys). The
 Recommend page walks seed selection → method and weights → filters → reviewed results, and can
 save the selection to Plex either as a new playlist or appended to an existing one. The CLI
 flows below remain the power-user path:

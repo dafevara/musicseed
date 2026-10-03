@@ -5,11 +5,12 @@ from pydantic import BaseModel
 from musicseed.clients.plex import Playlist, PlexClient
 from musicseed.context import MusicSeedContext, get_context
 from musicseed.db.models import Track
-from musicseed.exceptions import ConfigurationError, NotFoundError
+from musicseed.exceptions import NotFoundError
 from musicseed.recommender.playlist import Recommendation
 from musicseed.recommender.populate import PopulateMethod, populate_playlist_recommendations
 from musicseed.recommender.scoring import Weights
 from musicseed.services.playlist_tracks import resolve_track_selection
+from musicseed.services.plex_link import require_plex_token
 from musicseed.services.schemas import ServiceRecommendation, to_service_recommendation
 
 
@@ -32,11 +33,9 @@ class PopulateApplyResult(PopulateResult):
 
 def _plex_client(context: MusicSeedContext | None = None) -> PlexClient:
     config = (context or get_context()).config
-    if not config.plex.token:
-        raise ConfigurationError(
-            "plex.token is not configured. Add it to your config file."
-        )
-    return PlexClient(base_url=config.plex.url, token=config.plex.token)
+    return PlexClient(
+        base_url=config.plex.url, token=require_plex_token(config)
+    )
 
 
 def list_plex_playlists(context: MusicSeedContext | None = None) -> list[Playlist]:

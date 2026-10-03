@@ -23,6 +23,7 @@ from __future__ import annotations
 import re
 import socket
 import time
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse
 from xml.etree import ElementTree
 
@@ -31,6 +32,12 @@ from pydantic import BaseModel
 
 GDM_GROUP = ("239.0.0.250", 32414)
 SSDP_GROUP = ("239.255.255.250", 1900)
+
+#: Reachability probe used by ``verify_servers``: ``/identity`` is public on every
+#: Plex Media Server, so it answers without a token and cheaply.
+IDENTITY_PATH = "/identity"
+IDENTITY_PROBE_TIMEOUT = 2.5
+_PROBE_WORKERS = 8
 
 GDM_REQUEST = "M-SEARCH * HTTP/1.1\r\n\r\n"
 SSDP_REQUEST = (
@@ -48,7 +55,16 @@ _SSDP_SERVER_VERSION = re.compile(r"Plex Media Server/([\d.]+)")
 
 
 class DiscoveredPlexServer(BaseModel):
-    """One Plex server discovered on the local network or the Plex account."""
+    """One Plex server discovered on the local network or the Plex account.
+
+    A Plex server advertises several connections, and which of them work
+    depends on where MusicSeed runs: a server on another LAN reports its own
+    192.168.x addresses, which are unreachable from here, alongside the one
+    address that does work (a VPN/Tailscale address, say). ``reachable`` is the
+    result of probing the connection (``None`` when it was not probed), so a
+    picker can prefer addresses that actually answer instead of guessing from
+    Plex's ``local`` flag.
+    """
 
     model_config = {"frozen": True}
 
@@ -59,11 +75,52 @@ class DiscoveredPlexServer(BaseModel):
     version: str | None = None
     machine_identifier: str | None = None
     scheme: str = "http"
+    reachable: bool | None = None
 
     @property
     def url(self) -> str:
         """The server's base URL (``scheme://host:port``)."""
         return f"{self.scheme}://{self.host}:{self.port}"
+
+
+def _probe_reachable(server: DiscoveredPlexServer, timeout: float) -> bool:
+    """True when the server answers a plain ``/identity`` request."""
+    try:
+        resp = httpx.get(f"{server.url}{IDENTITY_PATH}", timeout=timeout)
+    except httpx.HTTPError:
+        return False
+    return resp.status_code < 500
+
+
+def verify_servers(
+    servers: list[DiscoveredPlexServer],
+    *,
+    timeout: float = IDENTITY_PROBE_TIMEOUT,
+) -> list[DiscoveredPlexServer]:
+    """Probe every candidate connection and sort answering ones first.
+
+    Probes run in parallel, so the total wait is bounded by ``timeout`` and not
+    by the number of advertised addresses (Plex lists several per server). The
+    order within each group is preserved, and unreachable entries are kept —
+    the picker needs to show them (as unreachable) rather than hide the server.
+
+    Args:
+        servers: candidate connections, typically one per advertised address.
+        timeout: per-probe timeout in seconds.
+
+    Returns:
+        The same entries with ``reachable`` set, reachable first.
+    """
+    if not servers:
+        return []
+    with ThreadPoolExecutor(max_workers=min(_PROBE_WORKERS, len(servers))) as pool:
+        results = list(pool.map(lambda s: _probe_reachable(s, timeout), servers))
+    probed = [
+        server.model_copy(update={"reachable": ok})
+        for server, ok in zip(servers, results)
+    ]
+    # sorted() is stable: each group keeps its discovery order.
+    return sorted(probed, key=lambda s: {True: 0, None: 1, False: 2}[s.reachable])
 
 
 def _open_discovery_socket() -> socket.socket:
@@ -201,8 +258,30 @@ def _is_network_junk(address: str) -> bool:
     return len(octets) == 4 and octets[3].isdigit() and int(octets[3]) in (0, 255)
 
 
+def _connection_rank(conn: ElementTree.Element) -> int:
+    """Plex's own connection preference, used only as an ordering hint."""
+    address = (conn.get("address") or "").strip()
+    local = str(conn.get("local")) == "1"
+    if local and not _is_network_junk(address) and not _is_docker_bridge(address):
+        return 0
+    if local:
+        return 1
+    return 2
+
+
 def _account_server_entries(device: ElementTree.Element) -> list[DiscoveredPlexServer]:
-    """Build one entry per best-ranked connection for a single account server."""
+    """Build one entry per usable connection of a single account server.
+
+    Every usable connection is returned, ordered by Plex's preference — not just
+    the preferred one. Plex's ``local`` flag describes the *server's* view of its
+    own interfaces, so the preferred address is frequently unreachable from the
+    machine running MusicSeed (a remote server reports its LAN addresses).
+    Callers that need the truth probe the addresses (:func:`verify_servers`)
+    instead of trusting the ranking.
+
+    Relay connections and addresses that cannot be a host (network/broadcast) or
+    that look like Docker's bridge range are still dropped.
+    """
     name = device.get("name") or ""
     product = device.get("product") or "Plex Media Server"
     version = device.get("productVersion")
@@ -211,23 +290,14 @@ def _account_server_entries(device: ElementTree.Element) -> list[DiscoveredPlexS
     connections = [
         c
         for c in device.findall("Connection")
-        if str(c.get("relay")) != "1" and (c.get("address") or "").strip()
+        if str(c.get("relay")) != "1"
+        and (c.get("address") or "").strip()
+        and not _is_network_junk((c.get("address") or "").strip())
+        and not _is_docker_bridge((c.get("address") or "").strip())
     ]
 
-    def rank(conn: ElementTree.Element) -> int:
-        address = (conn.get("address") or "").strip()
-        local = str(conn.get("local")) == "1"
-        if local and not _is_network_junk(address) and not _is_docker_bridge(address):
-            return 0
-        if local:
-            return 1
-        return 2
-
-    best = min((rank(c) for c in connections), default=2)
-    chosen = [c for c in connections if rank(c) == best]
-
     entries: list[DiscoveredPlexServer] = []
-    for conn in chosen:
+    for conn in sorted(connections, key=_connection_rank):
         address = (conn.get("address") or "").strip()
         try:
             port = int(conn.get("port") or 32400)
@@ -248,7 +318,7 @@ def _account_server_entries(device: ElementTree.Element) -> list[DiscoveredPlexS
 
 
 def discover_plex_account_servers(
-    token: str, timeout: float = 5.0
+    token: str, timeout: float = 5.0, *, verify: bool = False
 ) -> list[DiscoveredPlexServer]:
     """Discover servers linked to the Plex account via ``plex.tv/api/resources``.
 
@@ -259,6 +329,7 @@ def discover_plex_account_servers(
     Args:
         token: Plex account token used to authenticate against plex.tv.
         timeout: HTTP timeout in seconds for the plex.tv request.
+        verify: also probe each advertised address and set ``reachable``.
 
     Returns:
         One entry per best-ranked connection of each account server.
@@ -286,11 +357,11 @@ def discover_plex_account_servers(
         if "server" not in (device.get("provides") or "").split(","):
             continue
         servers.extend(_account_server_entries(device))
-    return servers
+    return verify_servers(servers) if verify else servers
 
 
 def discover_plex_servers(
-    timeout: float = 3.0, token: str | None = None
+    timeout: float = 3.0, token: str | None = None, *, verify: bool = False
 ) -> list[DiscoveredPlexServer]:
     """Discover Plex servers — local subnet via GDM/SSDP, plus the account.
 
@@ -302,9 +373,12 @@ def discover_plex_servers(
         timeout: seconds to listen for local multicast replies; also the
             plex.tv request timeout when ``token`` is set.
         token: optional Plex account token enabling cross-subnet discovery.
+        verify: also probe each address so callers can tell which connections
+            actually work from this machine (see :func:`verify_servers`).
 
     Returns:
-        Discovered servers sorted by ``(host, port, name)``.
+        Discovered servers sorted by ``(host, port, name)``, or with reachable
+        entries first when ``verify`` is set.
     """
     servers: dict[tuple[str, str, int], DiscoveredPlexServer] = {}
     _discover_local_servers(servers, timeout)
@@ -312,6 +386,5 @@ def discover_plex_servers(
         for server in discover_plex_account_servers(token, timeout=timeout):
             servers.setdefault(_server_key(server), server)
 
-    return sorted(
-        servers.values(), key=lambda s: (s.host, s.port, s.name)
-    )
+    found = sorted(servers.values(), key=lambda s: (s.host, s.port, s.name))
+    return verify_servers(found) if verify else found

@@ -39,6 +39,8 @@ export interface DiscoveredPlexServer {
   version: string | null;
   machine_identifier: string | null;
   scheme: string;
+  /** Result of probing this address from the API host; null when not probed. */
+  reachable: boolean | null;
 }
 
 export interface SpotifyCredentialsCheck {
@@ -103,6 +105,39 @@ export interface DiscoveryResponse {
 
 export interface PlexServersResponse {
   servers: DiscoveredPlexServer[];
+}
+
+// ── Plex sign-in (plex.tv PIN flow) ────────
+
+export interface PlexLinkStart {
+  pin_id: number;
+  code: string;
+  handoff: "forward" | "link";
+  auth_url: string;
+  link_url: string;
+  expires_in: number;
+}
+
+export interface PlexAccount {
+  id: number | null;
+  username: string | null;
+  title: string | null;
+  email: string | null;
+}
+
+export interface PlexLinkResult {
+  linked: boolean;
+  pending: boolean;
+  expired: boolean;
+  token_saved: boolean;
+  url_saved: string | null;
+  account: PlexAccount | null;
+  servers: DiscoveredPlexServer[];
+}
+
+export interface PlexAccountResponse {
+  linked: boolean;
+  account: PlexAccount | null;
 }
 
 // ── Dashboard ──────────────────────────────

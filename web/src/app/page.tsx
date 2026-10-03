@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
-import type { DashboardSnapshot, DiscoveryResponse, JobSummary, PlexServerCheck } from "@/lib/types";
+import type { DashboardSnapshot, DiscoveryResponse, PlexServerCheck } from "@/lib/types";
 import { HealthStrip } from "@/components/health-strip";
 import { JobList } from "@/components/job-list";
 import { PageHeader } from "@/components/page-header";
@@ -99,15 +99,6 @@ export default function DashboardPage() {
     }
   }
 
-  async function handleSonicRefresh() {
-    try {
-      await api.post("/sonic/refresh");
-      await fetchSnapshot();
-    } catch {
-      // ignore
-    }
-  }
-
   async function handleSonicImport() {
     try {
       await api.post<{ job_id: number }>("/sonic/import");
@@ -148,7 +139,6 @@ export default function DashboardPage() {
         activeJobs={snapshot.active_jobs}
         onEnrich={handleEnrich}
         onEnrichListenBrainz={handleEnrichListenBrainz}
-        onSonicRefresh={handleSonicRefresh}
         onSonicImport={handleSonicImport}
         plexServer={plexServer}
       />

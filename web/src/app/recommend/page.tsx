@@ -363,9 +363,9 @@ export default function RecommendPage() {
 
       {!loading && sonicCoverage && sonicCoverage.with_vector === 0 && (
         <div className="flash flash-warn">
-          No candidate tracks have Plex sonic analysis yet, so the Sonic dimension is
-          scoring neutrally. Run sonic analysis in Plex (or &ldquo;Refresh analysis&rdquo;
-          on the dashboard) to enable it.
+          No candidate tracks have local sonic vectors yet, so the Sonic dimension is
+          scoring neutrally. After Plex has analyzed your music, choose &ldquo;Import
+          vectors&rdquo; in Library → Coverage → Sonic vectors (local) to enable it.
         </div>
       )}
 

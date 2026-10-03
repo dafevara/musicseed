@@ -45,7 +45,7 @@ the **single place** that parses error bodies (`{detail}`) and form-encodes POST
 | `src/app/setup/page.tsx` | `GET /discovery`, `GET /discovery/plex-servers`, `POST /discovery/config`, `POST /discovery/init-db`, `GET /library/status`, `POST /library/import`, `POST /enrichment/spotify` |
 | `src/app/settings/page.tsx` | `GET /discovery`, `POST /discovery/config` |
 | `src/app/quick-start/page.tsx` | No API calls; installation and scenario guides, accessible before setup |
-| `src/app/page.tsx` (dashboard) | `GET /dashboard`, `GET /discovery`, `POST /library/import`, `POST /enrichment/spotify`, `POST /sonic/refresh`, `DELETE /jobs/{job_id}` |
+| `src/app/page.tsx` (dashboard) | `GET /dashboard`, `GET /discovery`, `POST /library/import`, `POST /enrichment/spotify`, `POST /enrichment/listenbrainz`, `POST /sonic/import`, `DELETE /jobs/{job_id}` |
 | `src/app/recommend/page.tsx` | `GET /recommend/presets`, `GET /recommend/typeahead`, `POST /recommend` |
 | `src/app/playlists/page.tsx` | `GET /playlists`, `POST /recommend` (create preview), `POST /playlists/create`, `GET /playlists/{playlist_id}/preview`, `POST /playlists/{playlist_id}/populate` |
 | `src/app/playlists/populate/page.tsx` | Advanced populate for one playlist (`?id=`): strategy, weights, preview, confirm |
@@ -62,11 +62,21 @@ API shapes are typed in `src/lib/types.ts`.
 - **Mutations require a preview + confirmation.** Playlist create and populate show a preview of
   the exact changes and require an explicit confirm before the mutating POST. Send approved
   `track_ids`; creation also sends the preview's resolved `seed_track_ids`, not a fresh scoring
-  request. Invalidate previews when seeds change and ignore outdated preview responses. Sonic
-  refresh explains its whole-backlog impact and requires a separate confirmation. Cancel leaves
-  Plex untouched.
+  request. Invalidate previews when seeds change and ignore outdated preview responses. Cancel
+  leaves Plex untouched.
 - **Secrets never render.** The Plex token and Spotify secret travel in POST bodies only; the UI
-  shows configured/not-set, never the value.
+  shows configured/not-set, never the value. Plex sign-in (`components/plex-signin.tsx`) is the
+  intended path: the browser only ever holds a PIN code and the pending `pin_id`
+  (`localStorage`, shared across this origin's tabs so returning from app.plex.tv resumes the
+  poll); the token is written to
+  `config.yaml` by core and never reaches the client.
+- **Server pickers show reachability.** A Plex server advertises addresses that only work on its
+  own network, so `plex-server-picker.tsx` labels and orders entries by the API's
+  `reachable` probe result and marks the address currently in use. Never present an unverified
+  address as if it works — that is what produced "Plex isn't responding" on a valid server.
+- **Config fields never hide behind a placeholder.** Where a URL or path is already in effect
+  (Plex server URL in `setup-form.tsx` and Settings), seed the input from the effective value so
+  the user can see and correct it; a placeholder alone looks greyed-out and cannot be submitted.
 - **Polling is back-off aware.** The dashboard only polls `/dashboard` while jobs are active and
   skips polls when `document.visibilityState` is hidden. The Plex server probe runs once on mount
   and on window focus, not every poll.

@@ -21,7 +21,8 @@ from pydantic import BaseModel
 
 from musicseed.clients.plex import LibrarySectionResult, MediaItem, PlexClient
 from musicseed.context import MusicSeedContext, get_context
-from musicseed.exceptions import ConfigurationError, NotFoundError
+from musicseed.exceptions import NotFoundError
+from musicseed.services.plex_link import require_plex_token
 
 BUTLER_SONIC_TASK = "MusicAnalysis"
 
@@ -115,11 +116,9 @@ def _plex_client(
     timeout: float = 120.0, context: MusicSeedContext | None = None
 ) -> PlexClient:
     config = (context or get_context()).config
-    if not config.plex.token:
-        raise ConfigurationError(
-            "plex.token is not configured. Add it to your config file."
-        )
-    return PlexClient(base_url=config.plex.url, token=config.plex.token, timeout=timeout)
+    return PlexClient(
+        base_url=config.plex.url, token=require_plex_token(config), timeout=timeout
+    )
 
 
 def _resolve_music_section(

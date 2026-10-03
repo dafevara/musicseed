@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { DiscoveryResult } from "@/lib/types";
 
 // Maps a machine-readable missing-input key to the form fields it needs.
@@ -45,6 +45,7 @@ export function SetupForm({
   missing?: string[];
 }) {
   const [plexUrl, setPlexUrl] = useState("");
+  const [plexUrlEdited, setPlexUrlEdited] = useState(false);
   const [plexToken, setPlexToken] = useState("");
   const [plexLibrary, setPlexLibrary] = useState("");
   const [plexDbPath, setPlexDbPath] = useState("");
@@ -61,6 +62,12 @@ export function SetupForm({
     missing && missing.length > 0
       ? new Set(missing.flatMap((key) => FIELD_FOR_MISSING[key] ?? []))
       : null;
+
+  // Mirror the URL discovery is actually using. A placeholder alone would hide
+  // the effective value and make a saved-but-wrong URL look unfixable.
+  useEffect(() => {
+    if (!plexUrlEdited) setPlexUrl(result.plex_server.url);
+  }, [result.plex_server.url, plexUrlEdited]);
 
   // Show a group only when at least one of its fields is currently needed.
   const shows = (...keys: string[]) => !visible || keys.some((key) => visible.has(key));
@@ -106,22 +113,42 @@ export function SetupForm({
                 <input
                   type="text"
                   value={plexUrl}
-                  onChange={(e) => setPlexUrl(e.target.value)}
-                  placeholder={result.plex_server.url}
+                  onChange={(e) => {
+                    setPlexUrl(e.target.value);
+                    setPlexUrlEdited(true);
+                  }}
+                  placeholder="http://192.168.1.10:32400"
                 />
+                <span className="text-[var(--muted)] text-xs">
+                  Currently probing {result.plex_server.url}. Change it here if that
+                  address does not work from this computer.
+                </span>
               </label>
             )}
             {shows("plexToken") && (
-              <label className="grid gap-1 text-sm">
-                Plex token
-                <input
-                  type="password"
-                  value={plexToken}
-                  onChange={(e) => setPlexToken(e.target.value)}
-                  autoComplete="off"
-                  placeholder={result.plex_server.token_configured ? "configured" : "not set"}
-                />
-              </label>
+              <details className="text-sm">
+                <summary className="cursor-pointer text-[var(--muted)]">
+                  Advanced: paste a Plex token instead of signing in
+                </summary>
+                <label className="grid gap-1 text-sm mt-2">
+                  Plex token{" "}
+                  <span className="text-[var(--muted)]">
+                    ({result.plex_server.token_configured ? "configured" : "not set"} —
+                    paste a new one to replace)
+                  </span>
+                  <input
+                    type="password"
+                    value={plexToken}
+                    onChange={(e) => setPlexToken(e.target.value)}
+                    autoComplete="off"
+                    placeholder={result.plex_server.token_configured ? "••••••••" : "not set"}
+                  />
+                </label>
+                <p className="muted text-sm m-0 mt-2">
+                  Only needed when this computer cannot reach plex.tv, or the code is
+                  unavailable — <strong>Sign in with Plex</strong> above is the normal path.
+                </p>
+              </details>
             )}
             {shows("plexLibrary") && (
               <label className="grid gap-1 text-sm">
@@ -168,6 +195,12 @@ export function SetupForm({
                         onChange={(e) => setPlexDbSsh(e.target.value)}
                         placeholder="user@nas.local:/volume1/Plex/…/Databases"
                       />
+                      <span className="text-[var(--muted)] text-xs">
+                        Point at the folder that holds {""}
+                        <code>com.plexapp.plugins.library.db</code> — pasting the database
+                        file&apos;s own path works too. <code>~</code> and quoted paths are fine;
+                        spaces do not need escaping.
+                      </span>
                     </label>
                     <label className="grid gap-1 text-sm">
                       SSH password{" "}

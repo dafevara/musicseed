@@ -108,6 +108,57 @@ def service_import(monkeypatch, tmp_path):
     return library, context
 
 
+def test_ssh_import_announces_snapshot_progress(service_import, tmp_path, monkeypatch):
+    """A remote import reports the snapshot phases, which are otherwise silent.
+
+    Regression: the UI showed a frozen "downloading Plex database" bar for
+    minutes because nothing reported the host's backup step or the transfer.
+    """
+    from musicseed.plex_db_source import PREPARE_PHASE, ResolvedPlexDbs
+    from musicseed.services import library
+
+    _library, context = service_import
+    source = tmp_path / "plex.db"
+    source.write_bytes(b"fixture Plex source")
+    context.config.plex.db_ssh_target = "u@nas:/Plex/Databases"
+
+    def fake_resolve(config, *, refresh=False, ssh_target=None, on_progress=None):
+        assert refresh is True, "the import must refresh the snapshot"
+        assert on_progress is not None, "the import must forward its progress callback"
+        on_progress(40, 100, PREPARE_PHASE)
+        on_progress(100, 100, "downloading Plex database")
+        return ResolvedPlexDbs(
+            library_db=source, blobs_db=source.with_name("blobs.db"), source="ssh"
+        )
+
+    monkeypatch.setattr(library, "resolve_plex_dbs", fake_resolve)
+    seen: list[tuple[int, int, str]] = []
+
+    library.import_library(
+        context=context, progress_callback=lambda c, t, p: seen.append((c, t, p))
+    )
+
+    # The phase is announced before the SSH round-trip, then updated with real
+    # numbers, then the import phases continue.
+    assert seen[0] == (0, 100, PREPARE_PHASE)
+    assert (40, 100, PREPARE_PHASE) in seen
+    assert (100, 100, "downloading Plex database") in seen
+    assert any(phase == "artists" for _c, _t, phase in seen)
+
+
+def test_local_import_reports_no_snapshot_phase(service_import, tmp_path):
+    """Local imports must not claim to be preparing a remote snapshot."""
+    from musicseed.plex_db_source import PREPARE_PHASE
+    from musicseed.services import library
+
+    _library, context = service_import
+    seen: list[str] = []
+
+    library.import_library(context=context, progress_callback=lambda c, t, p: seen.append(p))
+
+    assert PREPARE_PHASE not in seen
+
+
 def test_source_completion_survives_job_deletion_but_not_source_change(service_import):
     from musicseed.context import MusicSeedContext
     from musicseed.services import jobs
