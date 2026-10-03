@@ -1,4 +1,7 @@
 const API_BASE = "/api";
+const CSRF_HEADER = "X-MusicSeed-CSRF";
+
+let csrfToken: string | null = null;
 
 async function errorMessage(res: Response): Promise<string> {
   const body = await res.text();
@@ -12,11 +15,41 @@ async function errorMessage(res: Response): Promise<string> {
   return body;
 }
 
+async function getCsrfToken(): Promise<string> {
+  if (csrfToken) return csrfToken;
+  const res = await fetch(`${API_BASE}/security/csrf`);
+  if (!res.ok) throw new Error(await errorMessage(res));
+  const body = await res.json();
+  csrfToken = String(body.token);
+  return csrfToken;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: { "Content-Type": "application/json" },
     ...init,
   });
+  if (!res.ok) {
+    throw new Error(await errorMessage(res));
+  }
+  return res.json();
+}
+
+async function mutate<T>(path: string, init: RequestInit): Promise<T> {
+  const send = async (): Promise<Response> => {
+    const headers: Record<string, string> = {
+      ...(init.headers as Record<string, string> | undefined),
+    };
+    headers[CSRF_HEADER] = await getCsrfToken();
+    return fetch(`${API_BASE}${path}`, { ...init, headers });
+  };
+
+  let res = await send();
+  if (res.status === 403) {
+    // The token may predate an API restart; refetch once and retry.
+    csrfToken = null;
+    res = await send();
+  }
   if (!res.ok) {
     throw new Error(await errorMessage(res));
   }
@@ -35,7 +68,7 @@ export const api = {
         formBody.append(k, String(v));
       }
     }
-    return request<T>(path, {
+    return mutate<T>(path, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: formBody.toString(),
@@ -43,6 +76,6 @@ export const api = {
   },
 
   delete<T>(path: string): Promise<T> {
-    return request<T>(path, { method: "DELETE" });
+    return mutate<T>(path, { method: "DELETE" });
   },
 };

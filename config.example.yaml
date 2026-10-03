@@ -56,3 +56,10 @@ recommendation:
     genre: 0.15
     era: 0.05
     novelty: 0.10
+
+# Browser protections for the local API. Loopback and private (home-LAN)
+# addresses are always allowed; add a home-network DNS name here if you use
+# one. ``csrf_secret`` is generated automatically on first use — leave empty.
+security:
+  allowed_hosts: []
+  csrf_secret: ""

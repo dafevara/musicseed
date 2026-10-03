@@ -9,7 +9,10 @@ from musicseed_api.handlers.discovery import apply_config_and_init_db
 
 def _seed_config(tmp_path) -> None:
     cfg_path = tmp_path / "config.yaml"
-    cfg_path.write_text(f"database:\n  path: {tmp_path / 'original.db'}\n")
+    cfg_path.write_text(
+        f"database:\n  path: {tmp_path / 'original.db'}\n"
+        "security:\n  allowed_hosts:\n    - testserver\n"
+    )
     set_config(load_config(cfg_path))
 
 

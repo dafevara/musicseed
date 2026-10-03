@@ -157,6 +157,15 @@ class RecommendationConfig(BaseModel):
     max_tracks_per_artist: int = 3
 
 
+class SecurityConfig(BaseModel):
+    #: Extra hostnames (beyond loopback and private addresses) allowed to reach
+    #: the API, e.g. a home-network DNS name. Compared lowercased, no port.
+    allowed_hosts: list[str] = Field(default_factory=list)
+    #: Auto-generated CSRF secret. Written owner-only (0600) on first use so the
+    #: browser CSRF token survives restarts. Leave empty; never set by hand.
+    csrf_secret: str = ""
+
+
 class Config(BaseModel):
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     plex: PlexConfig = Field(default_factory=PlexConfig)
@@ -165,6 +174,7 @@ class Config(BaseModel):
     enrichment: EnrichmentConfig = Field(default_factory=EnrichmentConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     recommendation: RecommendationConfig = Field(default_factory=RecommendationConfig)
+    security: SecurityConfig = Field(default_factory=SecurityConfig)
 
 
 def load_config(config_path: Path | None = None) -> Config:

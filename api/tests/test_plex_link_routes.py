@@ -13,6 +13,7 @@ from musicseed.services.plex_link import (
     PlexLinkStart,
 )
 from musicseed_api.app import create_app
+from musicseed_api.security import CSRF_ENDPOINT, CSRF_HEADER
 
 ORIGIN = "http://localhost:8000"
 
@@ -38,10 +39,12 @@ def test_create_pin_returns_code_and_urls(monkeypatch):
         return START
 
     monkeypatch.setattr(plex_auth_handlers, "start_plex_link", fake_start)
-    resp = TestClient(create_app()).post(
+    client = TestClient(create_app())
+    token = client.get(CSRF_ENDPOINT).json()["token"]
+    resp = client.post(
         "/auth/plex/pin",
         data={"handoff": "link", "forward_url": f"{ORIGIN}/setup"},
-        headers={"origin": ORIGIN},
+        headers={"origin": ORIGIN, CSRF_HEADER: token},
     )
 
     assert resp.status_code == 200
@@ -73,10 +76,12 @@ def test_create_pin_rejects_a_foreign_forward_url(monkeypatch):
         raise AssertionError("plex.tv must not be called for a rejected URL")
 
     monkeypatch.setattr(plex_auth_handlers, "start_plex_link", fail)
-    resp = TestClient(create_app()).post(
+    client = TestClient(create_app())
+    token = client.get(CSRF_ENDPOINT).json()["token"]
+    resp = client.post(
         "/auth/plex/pin",
         data={"handoff": "forward", "forward_url": "https://evil.example.com/setup"},
-        headers={"origin": ORIGIN},
+        headers={"origin": ORIGIN, CSRF_HEADER: token},
     )
 
     assert resp.status_code == 400

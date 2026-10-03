@@ -72,6 +72,20 @@ Never paste into public issues, PRs, discussions, or screenshots:
 - Do not run MusicSeed against a Plex server or database you do not own or
   administer.
 
+## Browser protections
+
+The web API applies layered browser protections on every request:
+
+- **Host allowlist** — requests whose ``Host`` header names an unexpected
+  hostname are rejected (blocks DNS rebinding). Loopback and private
+  (home-LAN) addresses are allowed by default; add ``security.allowed_hosts``
+  entries for a home-network DNS name.
+- **Origin check** — state-changing requests whose ``Origin``/``Referer``
+  names an unrelated website are rejected.
+- **CSRF token** — browser-driven writes must include an ``X-MusicSeed-CSRF``
+  header obtained from ``GET /security/csrf``. Non-browser clients (CLI, curl,
+  MCP) are exempt.
+
 ## Scope notes
 
 Out of scope for security reports unless they create a concrete local exploit:
