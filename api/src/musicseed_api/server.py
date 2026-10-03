@@ -136,12 +136,36 @@ def main() -> None:
     import webbrowser
 
     parser = argparse.ArgumentParser(prog="musicseed", description="MusicSeed API and web UI")
-    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument(
+        "--host", default="127.0.0.1",
+        help="Interface to bind. Defaults to 127.0.0.1 (this machine only).",
+    )
     parser.add_argument("--port", type=int, default=8789)
+    parser.add_argument(
+        "--lan", action="store_true",
+        help="Listen on all interfaces (0.0.0.0) so other devices on the home "
+             "network can reach the UI. Equivalent to --host 0.0.0.0.",
+    )
     parser.add_argument("--open", action="store_true", help="Open the UI in a browser")
     parser.add_argument("--no-ui", action="store_true", help="Serve JSON only (no static UI)")
     args = parser.parse_args()
 
-    url = f"http://{args.host}:{args.port}"
-    on_started = (lambda: webbrowser.open(url)) if args.open else None
+    if args.lan:
+        args.host = "0.0.0.0"
+
+    local_url = f"http://127.0.0.1:{args.port}"
+    if args.host in ("0.0.0.0", "::"):
+        print(f"MusicSeed is listening on all interfaces at http://{args.host}:{args.port}.")
+        print("Any device that can reach this machine on your network can use the web UI, and")
+        print("therefore exercise MusicSeed's permissions (Plex, enrichment, playlists).")
+        print("Only expose it on a network you trust.")
+        on_started = (lambda: webbrowser.open(local_url)) if args.open else None
+    else:
+        print(
+            f"MusicSeed is listening at http://{args.host}:{args.port} "
+            "(this machine only)."
+        )
+        target = f"http://{args.host}:{args.port}"
+        on_started = (lambda: webbrowser.open(target)) if args.open else None
+
     serve(host=args.host, port=args.port, on_started=on_started, serve_ui=not args.no_ui)
