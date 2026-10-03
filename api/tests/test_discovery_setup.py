@@ -90,7 +90,7 @@ def test_init_db_route_forwards_plex_overrides(tmp_path):
     assert db_path.exists()
 
 
-def test_changing_address_clears_bound_secret(tmp_path):
+def test_selecting_a_server_keeps_the_token_but_changing_ssh_target_clears_password(tmp_path):
     from musicseed_api.handlers.discovery import save_config_overrides
 
     _seed_config(tmp_path)
@@ -99,15 +99,48 @@ def test_changing_address_clears_bound_secret(tmp_path):
         plex_db_ssh="user@old.local:/volume1/Plex", plex_db_ssh_password="pw1"
     )
 
-    # Changing the URL without a new token clears the stored token.
+    # The Plex token is account-wide: selecting a different server keeps it (the
+    # setup wizard saves the picked server URL without replaying the token).
     save_config_overrides(plex_url="http://new.local:32400")
-    # Changing the SSH target without a new password clears the stored password.
+    # An SSH password is target-specific: changing the target clears it.
     save_config_overrides(plex_db_ssh="user@new.local:/volume1/Plex")
 
     config_module._config = None
     config_module._config_path = None
     reloaded = load_config(tmp_path / "config.yaml")
     assert reloaded.plex.url == "http://new.local:32400"
-    assert reloaded.plex.token == ""
+    assert reloaded.plex.token == "tok1"
     assert reloaded.plex.db_ssh_target == "user@new.local:/volume1/Plex"
     assert reloaded.plex.db_ssh_password == ""
+
+
+def test_wizard_selecting_a_server_keeps_the_plex_signin(tmp_path, monkeypatch):
+    """Regression: picking a server after Plex sign-in must keep the token."""
+    import musicseed_api.handlers.discovery as discovery_handlers
+    from musicseed.clients.plex import ConnectionCheck, LibrarySectionResult
+    from musicseed.services import discovery as core_discovery
+
+    class FakeClient:
+        def __init__(self, url, token, timeout=15.0):
+            self._token = token
+
+        def check_connection(self):
+            return ConnectionCheck(
+                reachable=True, authorized=bool(self._token),
+                status_code=200 if self._token else 401,
+                server_version="1.41.0", error=None,
+            )
+
+        def list_library_sections(self):
+            return [LibrarySectionResult(key="1", title="Music", type="artist")]
+
+    monkeypatch.setattr(core_discovery, "PlexClient", FakeClient)
+    _seed_config(tmp_path)
+    discovery_handlers.save_config_overrides(plex_token="tok1")
+
+    # The wizard saves the picked server URL without replaying the token.
+    discovery_handlers.save_config_overrides(plex_url="http://192.168.1.5:32400")
+
+    result = core_discovery.discover()
+    assert result.plex_server.token_source == "config"
+    assert result.plex_server.ok, result.plex_server.detail

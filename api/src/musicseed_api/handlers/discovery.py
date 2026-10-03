@@ -99,14 +99,8 @@ def _apply_config_overrides(
         cfg.listenbrainz.token = listenbrainz_token
         changed = True
     if plex_url:
-        changed_url = plex_url.rstrip("/") != cfg.plex.url.rstrip("/")
         cfg.plex.url = plex_url
         changed = True
-        # The stored token belongs to the previously selected address. Changing
-        # the address clears it unless a new token is supplied in this same
-        # submission, so a server change never silently re-sends the token.
-        if changed_url and not plex_token.strip():
-            cfg.plex.token = ""
     if plex_token:
         cfg.plex.token = plex_token
         changed = True
