@@ -15,7 +15,7 @@ import { JobProgress } from "@/components/job-progress";
 import { PageHeader } from "@/components/page-header";
 
 const STEPS: { key: Step; label: string }[] = [
-  { key: "detect", label: "Connect Plex" },
+  { key: "detect", label: "Sign in & connect" },
   { key: "review", label: "Review & initialize" },
   { key: "importing", label: "Import & enrich" },
   { key: "done", label: "Done" },
@@ -63,6 +63,9 @@ export default function SetupPage() {
   const [saved, setSaved] = useState(false);
   const [jobId, setJobId] = useState<number | null>(null);
   const [jobKind, setJobKind] = useState<string | null>(null);
+  // Bumped after a Plex sign-in so the server picker re-scans with the account
+  // token and reveals servers that became reachable through the sign-in.
+  const [plexScanKey, setPlexScanKey] = useState(0);
 
   async function applyDiscovery(discover: () => Promise<DiscoveryResponse>) {
     const fresh = await refreshSetupState(
@@ -113,6 +116,7 @@ export default function SetupPage() {
     setSaved(false);
     try {
       await applyDiscovery(() => api.get<DiscoveryResponse>("/discovery"));
+      setPlexScanKey((key) => key + 1);
     } catch (e) {
       setSaveError(String(e).replace("Error: ", ""));
     }
@@ -211,19 +215,41 @@ export default function SetupPage() {
       {step === "detect" && (
         <>
           <section className="panel">
-            <h2 className="mt-0 text-lg font-semibold">Connect to Plex</h2>
+            <h2 className="mt-0 text-lg font-semibold">Sign in with Plex</h2>
             <p>
-              MusicSeed looks for your Plex Media Server on the local network. Pick a
-              server below, or enter its address manually.
+              Start here. Signing in tells MusicSeed which servers you can use —
+              including servers on other networks — and lets it save playlists to Plex
+              later. There is no token to copy, and your Plex password never reaches
+              MusicSeed.
             </p>
-            <PlexServerPicker onSelect={handleSelectServer} defaultUrl={plex.url} />
+            <PlexSignIn onLinked={handlePlexLinked} forwardPath="/setup" />
+            {plex.token_configured && (
+              <p className="mt-3 mb-0 text-sm muted">
+                A Plex token is already saved on this computer. Sign in again to
+                replace it.
+              </p>
+            )}
+          </section>
+
+          <section className="panel">
+            <h2 className="mt-0 text-lg font-semibold">Choose your Plex server</h2>
+            <p>
+              {plex.token_configured
+                ? "These are the servers available to your Plex account. Pick one — MusicSeed checks each address from this computer."
+                : "MusicSeed looks for Plex servers on the local network. Sign in above to also see servers on other networks. Pick one, or enter its address manually."}
+            </p>
+            <PlexServerPicker
+              key={plexScanKey}
+              onSelect={handleSelectServer}
+              defaultUrl={plex.url}
+            />
 
             <p className="text-sm muted">
               {data.result.plex_library_db.ok
                 ? "Plex database files were found. These let MusicSeed read library data, but do not authenticate the connection to Plex. "
                 : "Database access and the Plex server connection are checked separately. "}
-              Signing in with Plex below enables saving playlists to Plex. You can also
-              continue with local import and recommendations, and connect Plex later.
+              You can also continue with local import and recommendations, and connect
+              Plex later.
             </p>
 
             {plex.ok ? (
@@ -236,22 +262,12 @@ export default function SetupPage() {
                 {plex.reason === "unreachable" &&
                   `Plex isn't responding at ${plex.url}. Plex advertises addresses that may only work on its own network — pick one marked reachable above, or enter an address that works from this computer.`}
                 {plex.reason === "missing_token" &&
-                  "Plex needs a sign-in and none was found on this computer. Use Sign in with Plex below — or paste a token manually under Advanced."}
+                  "Plex needs a sign-in and none was found on this computer. Sign in with Plex above — or paste a token manually under Advanced."}
                 {plex.reason !== "unreachable" &&
                   plex.reason !== "missing_token" &&
                   (plex.detail || "Plex needs attention before continuing.")}
               </div>
             )}
-
-            <div className="grid gap-2 mt-4">
-              <h3 className="m-0 text-base font-semibold">Sign in with Plex</h3>
-              <p className="muted text-sm m-0">
-                {plex.token_configured
-                  ? "A Plex token is already saved on this computer. Sign in again to replace it."
-                  : "No token to copy: Plex handles the sign-in, and the token it returns is saved on this computer for the CLI and MCP server too."}
-              </p>
-              <PlexSignIn onLinked={handlePlexLinked} forwardPath="/setup" />
-            </div>
 
             <div className="flex flex-wrap gap-2 mt-3 items-baseline">
               {(plex.ok || data.result.can_import) && (
