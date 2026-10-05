@@ -5,6 +5,7 @@ from __future__ import annotations
 import heapq
 from collections import defaultdict
 from dataclasses import dataclass
+from typing import Sequence
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -104,17 +105,41 @@ def score_eligible_tracks(
     min_score: float | None = None,
     exclude_ids: set[int] | None = None,
 ) -> tuple[list[ScoredTrack], SonicCoverage]:
-    """Filter years, exclude all seeds, score scalar batches and retain exact top-k.
+    """Score one profile using the shared batched candidate scan."""
+    selections, coverage = score_eligible_profiles(
+        session, [seed], vectors, limit=limit, weights=weights,
+        year_min=year_min, year_max=year_max,
+        max_tracks_per_artist=max_tracks_per_artist, min_score=min_score,
+        exclude_ids=exclude_ids,
+    )
+    return selections[0], coverage
 
-    No candidate budget truncates eligibility. SQL reads only scoring columns,
-    stats and tag names. Seeds are excluded before tags/scoring/selection, using
-    membership rather than an unbounded SQL IN list. The caller materializes
-    only the final selected tracks. No artist/album/mood/history graphs are read.
+
+def score_eligible_profiles(
+    session: Session,
+    seeds: Sequence[SeedProfile],
+    vectors: SonicVectors,
+    *,
+    limit: int,
+    weights: Weights,
+    year_min: int | None = None,
+    year_max: int | None = None,
+    max_tracks_per_artist: int = 3,
+    min_score: float | None = None,
+    exclude_ids: set[int] | None = None,
+) -> tuple[list[list[ScoredTrack]], SonicCoverage]:
+    """Read each candidate batch once and retain exact top-k for every profile.
+
+    All profile seeds are excluded before tag reads and per-profile selection.
+    Memory retains one metadata/tag batch and at most limit scores per profile.
     """
-    selected = ConstrainedTopK(limit, max_tracks_per_artist)
-    seed_vector = prepare_vector(seed.embedding)
-    # Seeds are excluded by set membership, not an unbounded SQL IN list.
-    excluded = seed.track_ids | (exclude_ids or set())
+    profiles = [
+        (seed, prepare_vector(seed.embedding), ConstrainedTopK(limit, max_tracks_per_artist))
+        for seed in seeds
+    ]
+    if not profiles:
+        return [], SonicCoverage(candidates=0, with_vector=0)
+    excluded = set(exclude_ids or set()).union(*(seed.track_ids for seed in seeds))
     query = (
         select(
             Track.id,
@@ -157,17 +182,25 @@ def score_eligible_tracks(
             count += 1
             with_vector += vector is not None
             popularity = popularity_value(row.popularity_score, row.spotify_popularity)
-            score = score_signals(
-                candidate_styles=styles[row.id],
-                candidate_genres=genres[row.id],
-                play_count=row.play_count,
-                candidate_vector=None,
-                candidate_popularity=popularity,
-                candidate_year=row.year,
-                seed=seed,
-                weights=weights,
-                sonic_evidence=prepared_sonic_evidence(vector, seed_vector),
+            track_id, artist_id, year, play_count = (
+                row.id, row.artist_id, row.year, row.play_count,
             )
-            if min_score is None or score.total >= min_score:
-                selected.add(ScoredTrack(row.id, row.artist_id, score))
-    return selected.results(), SonicCoverage(candidates=count, with_vector=with_vector)
+            candidate_styles, candidate_genres = styles[track_id], genres[track_id]
+            for seed, seed_vector, selected in profiles:
+                score = score_signals(
+                    candidate_styles=candidate_styles,
+                    candidate_genres=candidate_genres,
+                    play_count=play_count,
+                    candidate_vector=None,
+                    candidate_popularity=popularity,
+                    candidate_year=year,
+                    seed=seed,
+                    weights=weights,
+                    sonic_evidence=prepared_sonic_evidence(vector, seed_vector),
+                )
+                if min_score is None or score.total >= min_score:
+                    selected.add(ScoredTrack(track_id, artist_id, score))
+    return (
+        [selected.results() for _, _, selected in profiles],
+        SonicCoverage(candidates=count, with_vector=with_vector),
+    )

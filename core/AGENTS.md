@@ -190,8 +190,8 @@ Service entry points:
 - **Retrieval is exact and deterministic.** Score all year-eligible non-seeds; no source budgets.
   Retain artist-constrained top-k using score, frequency vote count where relevant, then local ID.
   Normal/average sources say `eligible`; sonic coverage covers all eligible candidates before
-  score/artist constraints. Frequency excludes the whole playlist before voting and scans once
-  per distinct seed, so prefer average for large playlists. Component math is shared and unchanged.
+  score/artist constraints. Frequency excludes the whole playlist before voting, reads candidate batches once,
+  and scores each candidate against every distinct seed, so prefer average for large playlists. Component math is shared and unchanged.
 - **Recommendation signals are exactly six**: sonic, popularity, style, genre, era, novelty. There
   is no "mood" signal (it was removed). `Weights`/`ScoreBreakdown` are frozen Pydantic models.
 - **`rich` is a real core dependency** — the import/enrich pipelines render progress with it.

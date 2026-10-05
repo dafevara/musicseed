@@ -79,7 +79,8 @@ def populate_frequency(
     Each distinct playlist track is used as its own single-track seed to score
     all eligible candidates. The entire playlist is excluded before per-seed
     vote budgets, and one vector-cache snapshot is reused for the request.
-    This costs one scalar scan per seed; prefer average mode for large playlists.
+    Candidate batches are read once, then scored against every seed; prefer average
+    mode for large playlists.
     A candidate's score is the average of its per-seed scores
     across every seed that recommended it (its "votes"); results are ranked
     by that average score, with vote count as a tiebreaker, so --limit cuts

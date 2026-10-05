@@ -239,6 +239,62 @@ def test_recommend_frequency_matches_populate_and_exhaustive(tmp_path):
         context.engine.dispose()
 
 
+@pytest.mark.parametrize("name", [c.name for c in evaluation_cases()])
+def test_batched_frequency_preserves_exhaustive_scores_evidence_and_votes(tmp_path, name):
+    case = next(c for c in evaluation_cases() if c.name == name)
+    case = case.model_copy(update={"mode": "frequency"})
+    context = _context(tmp_path)
+    try:
+        vectors = _load_fixture(context, case)
+        with context.session() as session:
+            tracks = session.query(Track).options(*_track_load_options()).order_by(Track.id).all()
+            expected = _exhaustive(tracks, vectors, case, case.weights)
+            _, actual, _ = recommend_tracks(
+                session, seed_ids=case.seed_ids, method="frequency", vectors=vectors,
+                limit=case.limit, per_seed_limit=case.per_seed_limit, weights=case.weights,
+                year_min=case.year_min, year_max=case.year_max,
+                max_tracks_per_artist=case.artist_max, min_score=case.min_score,
+            )
+            assert [r.track.id for r in actual] == [r.track.id for r in expected]
+            for result, oracle in zip(actual, expected, strict=True):
+                assert result.score == oracle.score
+                assert result.sources == oracle.sources
+    finally:
+        context.engine.dispose()
+
+
+def test_frequency_reads_candidate_metadata_and_tags_once_across_seeds(tmp_path):
+    context = _context(tmp_path)
+    case = EvaluationCase(
+        name="frequency_batches", description="Shared reads across seeds",
+        seed_ids=list(range(1, 21)),
+        tracks=[FixtureTrack(id=i, artist_id=i % 70, year=2000) for i in range(1, 1601)],
+    )
+    queries = Counter()
+
+    def query(_conn, _cursor, statement, parameters, _context, _many):
+        assert len(parameters) <= FEATURE_BATCH_SIZE
+        if statement.startswith("SELECT tracks.id, tracks.artist_id, tracks.plex_id"):
+            queries["candidates"] += 1
+        elif statement.startswith("SELECT track_styles.track_id"):
+            queries["styles"] += 1
+        elif statement.startswith("SELECT track_genres.track_id"):
+            queries["genres"] += 1
+
+    try:
+        vectors = _load_fixture(context, case)
+        event.listen(context.engine, "before_cursor_execute", query)
+        with context.session() as session:
+            _, actual, coverage = recommend_tracks(
+                session, seed_ids=case.seed_ids, method="frequency", vectors=vectors, limit=10,
+            )
+            assert len(actual) == 10
+            assert coverage.candidates == 1580
+            assert queries == {"candidates": 1, "styles": 4, "genres": 4}
+    finally:
+        context.engine.dispose()
+
+
 def test_unknown_recommendation_method_and_per_seed_limit_fail(tmp_path):
     context = _context(tmp_path)
     case = next(c for c in evaluation_cases() if c.name == "perfect_style")

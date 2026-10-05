@@ -117,8 +117,8 @@ scales with eligible tracks and vector dimension. A wider library still costs a 
 without a year index, finding a narrow window also requires SQLite to inspect the wider table.
 
 **Limits:** timings are measurements on the recorded synthetic host, not an SLA or proof for all
-real libraries. Frequency performs one full pass per distinct seed and can be expensive for large
-playlists: prefer the default average mode there. No large-playlist frequency latency guarantee,
+real libraries. Frequency now reads candidate batches once and scores each against every distinct
+seed, so CPU work still scales with candidates times seeds and can be expensive for large playlists: prefer the default average mode there. No large-playlist frequency latency guarantee,
 cold-start guarantee, or musical-superiority claim is made. Re-measure an owner's workload before
 adding caching, vector indexes, or an approximate strategy.
 
