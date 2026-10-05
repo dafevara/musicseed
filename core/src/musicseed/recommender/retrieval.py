@@ -15,11 +15,11 @@ from musicseed.recommender.scoring import (
     SeedProfile,
     SonicCoverage,
     Weights,
-    has_usable_vector,
     popularity_value,
+    prepared_sonic_evidence,
     score_signals,
 )
-from musicseed.sonic import SonicVectors
+from musicseed.sonic import SonicVectors, prepare_vector
 
 FEATURE_BATCH_SIZE = 500  # Also stays below older SQLite's 999 bind-variable limit.
 
@@ -112,6 +112,7 @@ def score_eligible_tracks(
     only the final selected tracks. No artist/album/mood/history graphs are read.
     """
     selected = ConstrainedTopK(limit, max_tracks_per_artist)
+    seed_vector = prepare_vector(seed.embedding)
     # Seeds are excluded by set membership, not an unbounded SQL IN list.
     excluded = seed.track_ids | (exclude_ids or set())
     query = (
@@ -152,19 +153,20 @@ def score_eligible_tracks(
             genres[track_id].add(name)
         for row in rows:
             # Score from scalar facts; the top-k keeps only the best under the artist cap.
-            vector = vectors.get(row.plex_id)
+            vector = vectors.get_prepared(row.plex_id)
             count += 1
-            with_vector += has_usable_vector(vector)
+            with_vector += vector is not None
             popularity = popularity_value(row.popularity_score, row.spotify_popularity)
             score = score_signals(
                 candidate_styles=styles[row.id],
                 candidate_genres=genres[row.id],
                 play_count=row.play_count,
-                candidate_vector=vector,
+                candidate_vector=None,
                 candidate_popularity=popularity,
                 candidate_year=row.year,
                 seed=seed,
                 weights=weights,
+                sonic_evidence=prepared_sonic_evidence(vector, seed_vector),
             )
             if min_score is None or score.total >= min_score:
                 selected.add(ScoredTrack(row.id, row.artist_id, score))

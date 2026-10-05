@@ -61,6 +61,11 @@ than a bounded source shortlist. Years are filtered before scoring; all seed/exc
 removed before tags, scoring and selection budgets. Only seeds and selected tracks load ORM
 relationships. `recommend_from_profile()` is shared by normal and playlist recommendation flows.
 
+The sonic cache lazily retains validated float64 vectors and their norms for repeated scoring;
+each seed embedding is prepared once per scoring pass. Cosine scores and availability reuse the
+same comparison instead of repeating validation. Float64 retains the existing scalar arithmetic;
+this cache adds one float64 vector per visited stored vector and is replaced with the sonic snapshot.
+
 The historical `build_candidate_pool()` remains an offline diagnostic reference, not a production
 fallback. Its source limits can miss a perfect style match or consume a budget with seeds.
 See [the measured retrieval decision](retrieval-decision.md) for benchmarks, memory bounds,

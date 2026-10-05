@@ -8,7 +8,7 @@ import numpy as np
 from pydantic import BaseModel, Field
 
 from musicseed.db.models import Track
-from musicseed.sonic import SonicVectors
+from musicseed.sonic import PreparedVector, SonicVectors, prepare_vector
 
 
 class Weights(BaseModel):
@@ -112,17 +112,21 @@ class SonicCoverage(BaseModel):
 
 
 def _as_vector(value: object) -> np.ndarray | None:
-    if value is None:
-        return None
-    try:
-        vector = np.asarray(value, dtype=float)
-    except (ValueError, TypeError):
-        return None
-    if vector.ndim != 1 or vector.size == 0 or not np.isfinite(vector).all():
-        return None
-    with np.errstate(over="ignore", invalid="ignore"):
-        norm = float(np.linalg.norm(vector))
-    return vector if np.isfinite(norm) and norm > 0 else None
+    prepared = prepare_vector(value)
+    return prepared.values if prepared is not None else None
+
+
+def prepared_sonic_evidence(
+    left: PreparedVector | None, right: PreparedVector | None,
+) -> tuple[float, bool]:
+    """Return the existing cosine score and availability using cached validation."""
+    if left is None or right is None or left.values.shape != right.values.shape:
+        return 0.5, False
+    denominator = left.norm * right.norm
+    if not np.isfinite(denominator) or denominator <= 0:
+        return 0.5, False
+    raw = float(np.dot(left.values, right.values) / denominator)
+    return max(0.0, min(1.0, (raw + 1.0) / 2.0)), True
 
 
 def has_usable_vector(value: object) -> bool:
@@ -358,6 +362,7 @@ def score_signals(
     candidate_year: int | None,
     seed: SeedProfile,
     weights: Weights,
+    sonic_evidence: tuple[float, bool] | None = None,
 ) -> ScoreBreakdown:
     """Score scalar facts without an ORM graph; shared with ``calculate_score``.
 
@@ -365,7 +370,12 @@ def score_signals(
     streaming and ORM adapters. No scoring policy is changed by retrieval.
     """
     # cosine_similarity returns the 0.5 neutral when either side has no vector.
-    sonic = cosine_similarity(candidate_vector, seed.embedding)
+    if sonic_evidence is None:
+        sonic_evidence = (
+            cosine_similarity(candidate_vector, seed.embedding),
+            sonic_comparable(candidate_vector, seed.embedding),
+        )
+    sonic, sonic_observed = sonic_evidence
     popularity = popularity_proximity(seed.popularity, candidate_popularity)
     style = jaccard(seed.styles, candidate_styles) if seed.styles else 0.5
     genre = jaccard(seed.genres, candidate_genres) if seed.genres else 0.5
@@ -397,7 +407,7 @@ def score_signals(
     availability: dict[str, SignalStatus] = {
         "sonic": (
             "observed"
-            if sonic_comparable(candidate_vector, seed.embedding)
+            if sonic_observed
             else "neutral_missing"
         ),
         "popularity": (

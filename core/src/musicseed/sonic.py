@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import sqlite3
 import zlib
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -78,6 +79,29 @@ def decode_sonic_blob(blob: bytes) -> list[float] | None:
     return values
 
 
+@dataclass(frozen=True, slots=True)
+class PreparedVector:
+    """Finite float64 vector and its norm, preserving scalar scoring precision."""
+
+    values: np.ndarray
+    norm: float
+
+
+def prepare_vector(value: object) -> PreparedVector | None:
+    """Validate a vector once for repeated cosine comparisons."""
+    if value is None:
+        return None
+    try:
+        vector = np.asarray(value, dtype=float)
+    except (ValueError, TypeError):
+        return None
+    if vector.ndim != 1 or vector.size == 0 or not np.isfinite(vector).all():
+        return None
+    with np.errstate(over="ignore", invalid="ignore"):
+        norm = float(np.linalg.norm(vector))
+    return PreparedVector(vector, norm) if np.isfinite(norm) and norm > 0 else None
+
+
 class SonicVectors:
     """An in-memory view of a Plex music library's sonic vectors.
 
@@ -89,6 +113,7 @@ class SonicVectors:
         self._index_by_plex_id = {plex_id: i for i, plex_id in enumerate(plex_ids)}
         self._plex_ids = np.asarray(plex_ids, dtype=np.int64)
         self._matrix = matrix
+        self._prepared: dict[int, PreparedVector | None] = {}
         norms = np.linalg.norm(matrix, axis=1, keepdims=True)
         self._normalized = matrix / np.where(norms == 0, 1.0, norms)
 
@@ -111,6 +136,14 @@ class SonicVectors:
         if index is None:
             return None
         return self._matrix[index]
+
+    def get_prepared(self, plex_id: int | None) -> PreparedVector | None:
+        """Reuse validated vectors/norms for this vector-cache snapshot."""
+        if plex_id is None or plex_id not in self._index_by_plex_id:
+            return None
+        if plex_id not in self._prepared:
+            self._prepared[plex_id] = prepare_vector(self.get(plex_id))
+        return self._prepared[plex_id]
 
     def nearest(
         self, query: np.ndarray, limit: int, *, allowed: set[int] | None = None
