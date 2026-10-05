@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Iterable, Literal, Sequence
+from typing import Any, Iterable, Literal, NamedTuple, Sequence
 
 import numpy as np
 from pydantic import BaseModel, Field
@@ -369,13 +369,57 @@ def score_signals(
     Component formulas, availability and normalization are identical for the
     streaming and ORM adapters. No scoring policy is changed by retrieval.
     """
+    values = score_values(
+        candidate_styles=candidate_styles, candidate_genres=candidate_genres,
+        play_count=play_count, candidate_vector=candidate_vector,
+        candidate_popularity=candidate_popularity, candidate_year=candidate_year,
+        seed=seed, weights=weights, sonic_evidence=sonic_evidence,
+    )
+    return explain_score(
+        values, seed=seed, candidate_styles=candidate_styles,
+        candidate_genres=candidate_genres, candidate_popularity=candidate_popularity,
+        candidate_year=candidate_year,
+        sonic_observed=(sonic_evidence[1] if sonic_evidence is not None
+                        else sonic_comparable(candidate_vector, seed.embedding)),
+    )
+
+
+class ScoreValues(NamedTuple):
+    """Numeric components retained during selection, without explanation allocations."""
+
+    total: float
+    sonic: float
+    popularity: float
+    style: float
+    genre: float
+    era: float
+    novelty: float
+
+
+def weight_sum(weights: Weights) -> float:
+    """Return the existing guarded denominator for relative scoring weights."""
+    total = (weights.sonic + weights.popularity + weights.style + weights.genre
+             + weights.era + weights.novelty)
+    return 1.0 if total <= 0 else total
+
+
+def score_values(
+    *,
+    candidate_styles: set[str],
+    candidate_genres: set[str],
+    play_count: int | None,
+    candidate_vector: np.ndarray | None,
+    candidate_popularity: float | None,
+    candidate_year: int | None,
+    seed: SeedProfile,
+    weights: Weights,
+    sonic_evidence: tuple[float, bool] | None = None,
+    total_weight: float | None = None,
+) -> ScoreValues:
+    """Compute shared numeric scores; explanations are deferred until selection."""
     # cosine_similarity returns the 0.5 neutral when either side has no vector.
-    if sonic_evidence is None:
-        sonic_evidence = (
-            cosine_similarity(candidate_vector, seed.embedding),
-            sonic_comparable(candidate_vector, seed.embedding),
-        )
-    sonic, sonic_observed = sonic_evidence
+    sonic = (cosine_similarity(candidate_vector, seed.embedding)
+             if sonic_evidence is None else sonic_evidence[0])
     popularity = popularity_proximity(seed.popularity, candidate_popularity)
     style = jaccard(seed.styles, candidate_styles) if seed.styles else 0.5
     genre = jaccard(seed.genres, candidate_genres) if seed.genres else 0.5
@@ -383,16 +427,8 @@ def score_signals(
     novelty = novelty_score(play_count)
 
     # Normalize by the weight sum so only relative magnitudes matter.
-    total_weight = (
-        weights.sonic
-        + weights.popularity
-        + weights.style
-        + weights.genre
-        + weights.era
-        + weights.novelty
-    )
-    if total_weight <= 0:
-        total_weight = 1.0
+    if total_weight is None:
+        total_weight = weight_sum(weights)
 
     total = (
         sonic * weights.sonic
@@ -403,6 +439,20 @@ def score_signals(
         + novelty * weights.novelty
     ) / total_weight
 
+    return ScoreValues(total, sonic, popularity, style, genre, era, novelty)
+
+
+def explain_score(
+    values: ScoreValues,
+    *,
+    seed: SeedProfile,
+    candidate_styles: set[str],
+    candidate_genres: set[str],
+    candidate_popularity: float | None,
+    candidate_year: int | None,
+    sonic_observed: bool,
+) -> ScoreBreakdown:
+    """Attach the existing evidence labels to a retained numeric score."""
     # Availability labels whether each component reflects real evidence or a neutral fallback.
     availability: dict[str, SignalStatus] = {
         "sonic": (
@@ -428,12 +478,12 @@ def score_signals(
     }
 
     return ScoreBreakdown(
-        total=total,
-        sonic=sonic,
-        popularity=popularity,
-        style=style,
-        genre=genre,
-        era=era,
-        novelty=novelty,
+        total=values.total,
+        sonic=values.sonic,
+        popularity=values.popularity,
+        style=values.style,
+        genre=values.genre,
+        era=values.era,
+        novelty=values.novelty,
         availability=availability,
     )

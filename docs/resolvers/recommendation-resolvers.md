@@ -78,8 +78,10 @@ musical preference.
 
 ## Scoring
 
-`score_signals()` computes component scores and a weighted total; `calculate_score()` is the
-ORM adapter to the same function:
+`score_values()` computes component scores and a weighted total. Streaming selection retains
+these lightweight numeric values, then `explain_score()` creates `ScoreBreakdown` objects and
+availability dictionaries only for each profile's final selections. `score_signals()` combines
+both steps; `calculate_score()` is the ORM adapter to that same math:
 
 - `sonic`: cosine similarity normalized to 0-1.
 - `popularity`: proximity to seed popularity.

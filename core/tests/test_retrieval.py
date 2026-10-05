@@ -295,6 +295,41 @@ def test_frequency_reads_candidate_metadata_and_tags_once_across_seeds(tmp_path)
         context.engine.dispose()
 
 
+def test_explanation_models_are_created_only_for_each_profiles_final_selection(
+    tmp_path, monkeypatch,
+):
+    import musicseed.recommender.scoring as scoring
+    from musicseed.recommender.retrieval import score_eligible_profiles
+
+    context = _context(tmp_path)
+    case = EvaluationCase(
+        name="deferred_explanations", description="Final selections only", seed_ids=[1, 2],
+        tracks=[FixtureTrack(id=i, artist_id=i % 70) for i in range(1, 1601)],
+    )
+    original = scoring.ScoreBreakdown
+    explanations = []
+
+    def explain(**kwargs):
+        explanations.append(kwargs)
+        return original(**kwargs)
+
+    monkeypatch.setattr(scoring, "ScoreBreakdown", explain)
+    try:
+        vectors = _load_fixture(context, case)
+        with context.session() as session:
+            seeds = resolve_seed_tracks(session, seed_ids=case.seed_ids)
+            records, coverage = score_eligible_profiles(
+                session, [build_seed_profile([seed], vectors) for seed in seeds], vectors,
+                limit=10, weights=Weights(),
+            )
+            assert coverage.candidates == 1598
+            assert len(explanations) == 20
+            assert all(len(selection) == 10 for selection in records)
+            assert all(isinstance(record.score, original) for rows in records for record in rows)
+    finally:
+        context.engine.dispose()
+
+
 def test_unknown_recommendation_method_and_per_seed_limit_fail(tmp_path):
     context = _context(tmp_path)
     case = next(c for c in evaluation_cases() if c.name == "perfect_style")
