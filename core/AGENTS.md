@@ -163,11 +163,13 @@ Service entry points:
   (used only by `import_plex_sonic`); `sonic_vectors_from_mapping` rebuilds the in-memory
   L2-normalized `SonicVectors` matrix (keyed by `plex_id`) from the local `track_vectors` table.
   `get_sonic_vectors()` / `reset_sonic_vectors()` are thin wrappers over the default context.
-- `recommender/`: `scoring.py` (`Weights`, `ScoreBreakdown`, `SeedProfile`, shared `score_signals`
-  and ORM adapter `calculate_score`); `retrieval.py` (`score_eligible_tracks`, `ConstrainedTopK`)
+- `recommender/`: `scoring.py` (`Weights`, `ScoreBreakdown`, `SeedProfile`, shared `score_values`,
+  deferred `explain_score`, `score_signals` and ORM adapter `calculate_score`);
+  `retrieval.py` (`score_eligible_tracks`, `score_eligible_profiles`, `ConstrainedTopK`)
   streams eligible scalar facts and retains exact constrained top-k scores. `playlist.py`
   (`Recommendation`, `recommend_tracks`, `recommend_from_profile`, `resolve_seed_tracks`) loads
-  ORM graphs only for seeds/selected tracks; ID lookup lists are bounded. `populate.py`
+  ORM scoring metadata for seeds and artist/album relationships for final selections only;
+  ID lookup lists are bounded. `populate.py`
   (`PopulateMethod = "average" | "frequency"`, `populate_playlist_recommendations`) reuses this
   pipeline. `candidates.py` / `build_candidate_pool` is an offline historical reference, not a
   production fallback. See `docs/resolvers/retrieval-decision.md` for measurements and limits.

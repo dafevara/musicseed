@@ -330,6 +330,48 @@ def test_explanation_models_are_created_only_for_each_profiles_final_selection(
         context.engine.dispose()
 
 
+@pytest.mark.parametrize("limit,per_seed_limit", [(10, 30), (600, 700)])
+def test_frequency_loads_only_seeds_and_final_tracks_in_bounded_queries(
+    tmp_path, limit, per_seed_limit,
+):
+    from musicseed.services.schemas import to_service_recommendation
+
+    context = _context(tmp_path)
+    case = EvaluationCase(
+        name="final_hydration", description="No per-seed ORM hydration", seed_ids=[1, 2],
+        tracks=[FixtureTrack(id=i, artist_id=i % 700) for i in range(1, 1601)],
+    )
+    loaded = []
+    statements = []
+
+    def object_loaded(_session, obj):
+        if isinstance(obj, Track):
+            loaded.append(obj.id)
+
+    def query(_conn, _cursor, statement, parameters, _context, _many):
+        assert len(parameters) <= FEATURE_BATCH_SIZE
+        statements.append(statement)
+
+    try:
+        vectors = _load_fixture(context, case)
+        event.listen(context.engine, "before_cursor_execute", query)
+        with context.session() as session:
+            event.listen(session, "loaded_as_persistent", object_loaded)
+            _, actual, _ = recommend_tracks(
+                session, seed_ids=case.seed_ids, method="frequency", vectors=vectors,
+                limit=limit, per_seed_limit=per_seed_limit,
+            )
+            assert len(actual) == limit
+            assert set(loaded) == {1, 2, *(rec.track.id for rec in actual)}
+            assert len(loaded) == limit + 2
+            assert not any("track_moods" in statement for statement in statements)
+            projected = [to_service_recommendation(rec) for rec in actual]
+        context.engine.dispose()
+        assert all(rec.model_dump(mode="json")["track"]["artist"] for rec in projected)
+    finally:
+        context.engine.dispose()
+
+
 def test_unknown_recommendation_method_and_per_seed_limit_fail(tmp_path):
     context = _context(tmp_path)
     case = next(c for c in evaluation_cases() if c.name == "perfect_style")

@@ -68,7 +68,6 @@ def _track_load_options():
     return (
         selectinload(Track.artist),
         selectinload(Track.album),
-        selectinload(Track.moods),
         selectinload(Track.styles),
         selectinload(Track.genres),
         selectinload(Track.stats),
@@ -207,6 +206,15 @@ def recommend_from_profile(
 def _materialize_recommendations(
     session: Session, selected: Sequence[ScoredTrack],
 ) -> list[Recommendation]:
+    tracks = _load_selected_tracks(session, selected)
+    return [
+        Recommendation(track=tracks[r.id], score=r.score, sources=["eligible"]) for r in selected
+    ]
+
+
+def _load_selected_tracks(
+    session: Session, selected: Sequence[ScoredTrack],
+) -> dict[int, Track]:
     # Scalar scan done; now materialize full ORM graphs only for the selected ids.
     ids = [record.id for record in selected]
     tracks: dict[int, Track] = {}
@@ -214,13 +222,11 @@ def _materialize_recommendations(
         tracks.update(
             (track.id, track)
             for track in session.query(Track)
-            .options(*_track_load_options())
+            .options(selectinload(Track.artist), selectinload(Track.album))
             .filter(Track.id.in_(ids[start : start + FEATURE_BATCH_SIZE]))
             .all()
         )
-    return [
-        Recommendation(track=tracks[r.id], score=r.score, sources=["eligible"]) for r in selected
-    ]
+    return tracks
 
 
 def recommend_frequency(
@@ -273,7 +279,7 @@ def recommend_frequency(
     # Exclude every seed (and caller ids) before the shared scan and per-seed budgets.
     excluded = set(exclude_ids or set()) | {track.id for track in seed_tracks}
     selected = ConstrainedTopK(limit, max_tracks_per_artist)
-    votes: dict[int, list[tuple[int, ScoreBreakdown, Track]]] = defaultdict(list)
+    votes: dict[int, list[tuple[int, ScoredTrack]]] = defaultdict(list)
     selections, coverage = score_eligible_profiles(
         session,
         [build_seed_profile([seed], vectors) for seed in seed_tracks],
@@ -286,21 +292,23 @@ def recommend_frequency(
         exclude_ids=excluded,
     )
     for seed_track, records in zip(seed_tracks, selections, strict=True):
-        for rec in _materialize_recommendations(session, records):
-            votes[rec.track.id].append((seed_track.id, rec.score, rec.track))
+        for record in records:
+            votes[record.id].append((seed_track.id, record))
 
     # A candidate's score is the mean of its per-seed scores; vote count is the tiebreaker.
     for track_id, entries in votes.items():
-        score = _average_score([score for _, score, _ in entries])
+        score = _average_score([record.score for _, record in entries])
         if min_score is None or score.total >= min_score:
-            selected.add(ScoredTrack(track_id, entries[0][2].artist_id, score, len(entries)))
+            selected.add(ScoredTrack(track_id, entries[0][1].artist_id, score, len(entries)))
+    final = selected.results()
+    tracks = _load_selected_tracks(session, final)
     return [
         Recommendation(
-            track=votes[record.id][0][2],
+            track=tracks[record.id],
             score=record.score,
-            sources=[str(seed_id) for seed_id, _, _ in votes[record.id]],
+            sources=[str(seed_id) for seed_id, _ in votes[record.id]],
         )
-        for record in selected.results()
+        for record in final
     ], coverage
 
 

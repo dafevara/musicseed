@@ -59,8 +59,10 @@ cutoff; `min_score` applies after per-seed votes are averaged in frequency mode.
 
 `score_eligible_tracks()` scores every eligible non-seed track using scalar SQL batches rather
 than a bounded source shortlist. Years are filtered before scoring; all seed/excluded IDs are
-removed before tags, scoring and selection budgets. Only seeds and selected tracks load ORM
-relationships. `recommend_from_profile()` is shared by normal and playlist recommendation flows.
+removed before tags, scoring and selection budgets. Seeds load scoring metadata. Frequency votes
+retain scalar IDs, artist IDs and scores; only the final selected tracks load ORM objects with
+artist/album relationships for service output. Unused moods are not loaded.
+`recommend_from_profile()` is shared by normal and playlist recommendation flows.
 
 The sonic cache lazily retains validated float64 vectors and their norms for repeated scoring;
 each seed embedding is prepared once per scoring pass. Cosine scores and availability reuse the
