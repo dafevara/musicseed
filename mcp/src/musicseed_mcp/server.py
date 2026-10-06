@@ -14,8 +14,8 @@ from __future__ import annotations
 
 from anyio import to_thread
 from mcp.server.mcpserver import MCPServer
-from musicseed.logging_config import get_logger, resolve_log_level, setup_logging
 from mcp.server.transport_security import TransportSecuritySettings
+from musicseed.logging_config import get_logger, resolve_log_level, setup_logging
 
 from musicseed_mcp import tools
 
