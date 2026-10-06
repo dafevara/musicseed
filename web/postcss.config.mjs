@@ -1,8 +1,7 @@
-/** @type {import('postcss-load-config').Config} */
+// Tailwind handles CSS imports and vendor prefixes.
 const config = {
   plugins: {
-    tailwindcss: {},
-    autoprefixer: {},
+    "@tailwindcss/postcss": {},
   },
 };
 

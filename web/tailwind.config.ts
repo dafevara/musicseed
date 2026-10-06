@@ -26,12 +26,12 @@ export default {
         },
       },
       fontSize: {
-        xs: "0.72rem",
-        sm: "0.85rem",
-        base: "0.95rem",
-        lg: "1.1rem",
-        xl: "1.25rem",
-        "2xl": "1.5rem",
+        xs: ["0.72rem", { lineHeight: "1.5" }],
+        sm: ["0.85rem", { lineHeight: "1.5" }],
+        base: ["0.95rem", { lineHeight: "1.5" }],
+        lg: ["1.1rem", { lineHeight: "1.5" }],
+        xl: ["1.25rem", { lineHeight: "1.5" }],
+        "2xl": ["1.5rem", { lineHeight: "1.5" }],
       },
       borderRadius: {
         DEFAULT: "var(--ms-radius-sm)",

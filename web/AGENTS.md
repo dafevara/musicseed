@@ -11,7 +11,7 @@ the API contract this app consumes. This file covers the web app only.
 ## Identity
 
 - Distribution name: `musicseed-web`. Node/TypeScript app (no Python package).
-- Stack: **Next.js 15 (App Router) + React 19 + TypeScript**, Tailwind CSS, all pages
+- Stack: **Next.js 15 (App Router) + React 19 + TypeScript**, Tailwind CSS 4, all pages
   `"use client"` (client-rendered SPA — no server components, SSR, or server actions).
 - Runtime: Node (`npm`) is a **build/dev** tool. `npm run dev` rewrites `/api/*` to the
   standalone API at `http://127.0.0.1:8789`. `npm run build` writes a static export to
@@ -60,6 +60,17 @@ then GET `/playlists/preview-jobs/{job_id}/result`. The spinner is accessible an
 reduced motion. Same-tab session storage retains request/job identity across refreshes;
 parameter changes cancel and await the old job before replacement. Stale callers cannot publish
 results. Offline runner tests cover recovery and cancellation with fake clients and timers.
+
+Tailwind 4 runs through `@tailwindcss/postcss`; it handles imports and prefixing itself.
+`globals.css` explicitly imports the theme, preflight, and utilities and loads the existing
+`tailwind.config.ts` with `@config`. Preflight/utilities stay unlayered to preserve the app's
+existing CSS cascade. Custom font sizes specify line-height to retain the original spacing.
+Tailwind 4 requires Safari 16.4+, Chrome 111+, or Firefox 128+.
+
+Next.js 15 still pins an older PostCSS internally. The scoped `next.postcss` npm override uses
+the patched direct PostCSS dependency; remove it only once upstream resolves a patched version.
+Keep `package-lock.json` in sync and verify `npm ci` then `npm audit --audit-level=high` after
+dependency changes. Do not lower the CI audit threshold to accommodate vulnerable packages.
 
 ## Particularities to respect
 

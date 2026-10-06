@@ -1,8 +1,10 @@
+/* Keep preflight and utilities unlayered to preserve the existing CSS cascade. */
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/preflight.css";
+@import "tailwindcss/utilities.css" source("../");
 @import "./tokens.css";
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@config "../../tailwind.config.ts";
 
 body {
   background: var(--bg);

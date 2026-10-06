@@ -66,7 +66,7 @@ export function RecommendResults({
                 </div>
               )}
             </div>
-            <div className="flex-shrink-0 text-right">
+            <div className="shrink-0 text-right">
               <div className="result-score">
                 {pct}
                 <span className="result-score-unit">%</span>

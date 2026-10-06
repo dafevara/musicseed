@@ -21,7 +21,7 @@ export function SeedChips({
           </span>
           <button
             onClick={() => onRemove(s.id)}
-            className="inline-flex items-center justify-center w-5 h-5 border-none rounded-full text-sm cursor-pointer bg-transparent text-[var(--muted)] hover:bg-[var(--status-problem)] hover:text-white flex-shrink-0"
+            className="inline-flex items-center justify-center w-5 h-5 border-none rounded-full text-sm cursor-pointer bg-transparent text-[var(--muted)] hover:bg-[var(--status-problem)] hover:text-white shrink-0"
             title={`Remove ${s.title}`}
             aria-label={`Remove ${s.title}`}
           >

@@ -46,7 +46,7 @@ export function WeightControls({
           const totalWeight = Object.values(weights).reduce((a, b) => a + b, 0) || 1;
           return Object.entries(WEIGHT_LABELS).map(([key, label]) => (
             <div key={key} className="flex items-center gap-3">
-              <span className="text-sm text-[var(--muted)] w-32 flex-shrink-0">{label}</span>
+              <span className="text-sm text-[var(--muted)] w-32 shrink-0">{label}</span>
               <input
                 type="range"
                 min={0}
