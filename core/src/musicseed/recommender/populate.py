@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Literal
 
 from sqlalchemy.orm import Session
@@ -26,6 +27,8 @@ def populate_average(
     max_tracks_per_artist: int = 3,
     min_score: float | None = None,
     vectors: SonicVectors | None = None,
+    on_progress: Callable[[int, int], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> list[Recommendation]:
     """Recommend tracks against the mean sonic/metadata profile of a playlist.
 
@@ -43,6 +46,8 @@ def populate_average(
         min_score: drop recommendations with a total score below this value.
         vectors: Plex sonic vectors to score against; defaults to the default
             context's cached vectors.
+        on_progress: optional completed/total library-row callback at batch boundaries.
+        should_cancel: optional cancellation check at batch boundaries.
 
     Returns:
         Scored recommendations, best first.
@@ -56,7 +61,7 @@ def populate_average(
         year_max=year_max,
         max_tracks_per_artist=max_tracks_per_artist,
         min_score=min_score,
-        vectors=vectors,
+        vectors=vectors, on_progress=on_progress, should_cancel=should_cancel,
     )
     return recommendations
 
@@ -73,6 +78,8 @@ def populate_frequency(
     max_tracks_per_artist: int = 3,
     min_score: float | None = None,
     vectors: SonicVectors | None = None,
+    on_progress: Callable[[int, int], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> list[Recommendation]:
     """Recommend tracks voted for by multiple individual playlist tracks.
 
@@ -101,6 +108,8 @@ def populate_frequency(
         min_score: drop recommendations with a total score below this value.
         vectors: Plex sonic vectors to score against; defaults to the default
             context's cached vectors.
+        on_progress: optional completed/total library-row callback at batch boundaries.
+        should_cancel: optional cancellation check at batch boundaries.
 
     Returns:
         Aggregated recommendations, best first; each recommendation's
@@ -121,7 +130,7 @@ def populate_frequency(
         year_max=year_max,
         max_tracks_per_artist=max_tracks_per_artist,
         min_score=min_score,
-        vectors=vectors,
+        vectors=vectors, on_progress=on_progress, should_cancel=should_cancel,
     )
     return recommendations
 
@@ -139,6 +148,8 @@ def populate_playlist_recommendations(
     max_tracks_per_artist: int = 3,
     min_score: float | None = None,
     vectors: SonicVectors | None = None,
+    on_progress: Callable[[int, int], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> list[Recommendation]:
     """Dispatch to the requested populate strategy.
 
@@ -156,6 +167,8 @@ def populate_playlist_recommendations(
         min_score: drop recommendations with a total score below this value.
         vectors: Plex sonic vectors to score against; defaults to the default
             context's cached vectors.
+        on_progress: optional completed/total library-row callback at batch boundaries.
+        should_cancel: optional cancellation check at batch boundaries.
 
     Returns:
         Scored recommendations, best first.
@@ -173,7 +186,7 @@ def populate_playlist_recommendations(
             year_max=year_max,
             max_tracks_per_artist=max_tracks_per_artist,
             min_score=min_score,
-            vectors=vectors,
+            vectors=vectors, on_progress=on_progress, should_cancel=should_cancel,
         )
     if method == "frequency":
         return populate_frequency(
@@ -186,6 +199,6 @@ def populate_playlist_recommendations(
             year_max=year_max,
             max_tracks_per_artist=max_tracks_per_artist,
             min_score=min_score,
-            vectors=vectors,
+            vectors=vectors, on_progress=on_progress, should_cancel=should_cancel,
         )
     raise ValueError(f"Unknown populate method: {method}")

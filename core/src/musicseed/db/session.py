@@ -127,6 +127,8 @@ _ADDITIVE_COLUMNS = [
     ("tracks", "listenbrainz_listener_count", "INTEGER"),
     ("tracks", "listenbrainz_matched", "BOOLEAN DEFAULT FALSE"),
     ("jobs", "result_summary", "TEXT"),
+    ("jobs", "result_payload", "JSON"),
+    ("jobs", "request_key", "VARCHAR(128)"),
     ("jobs", "pid", "INTEGER"),
     ("jobs", "progress_phases", "TEXT"),
 ]
@@ -155,6 +157,9 @@ def ensure_schema(context: MusicSeedContext | None = None) -> None:
                 conn.execute(
                     text(f"ALTER TABLE {table} ADD COLUMN {column} {column_ddl}")
                 )
+        conn.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_request_key ON jobs(request_key)"
+        ))
         conn.commit()
 
 

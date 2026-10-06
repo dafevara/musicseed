@@ -88,6 +88,9 @@ Service entry points:
   without recommending again; validates the entire selection before any Plex write.
 - `services/populate.py`: `list_plex_playlists`, `get_populate_recommendations`,
   `populate_playlist` — keyed by Plex playlist `rating_key`, not title.
+- `services/preview_jobs.py`: `start_preview`, `get_preview_result` — background playlist
+  previews with idempotent submission, scan progress, cooperative cancellation, and persisted
+  JSON results. Both average and frequency use the existing synchronous scoring pipeline.
 - `services/plex_analysis.py`: `get_sonic_status`, `probe_sonic_trigger`,
   `probe_butler_trigger`, `refresh_album`, `refresh_sonic_analysis` — inspect Plex sonic
   analysis coverage over the HTTP API (`musicAnalysisVersion`) and trigger it on demand via
@@ -102,6 +105,8 @@ Service entry points:
   `use_context` so work, callbacks, cancellation and job writes cannot switch databases.
   `pending`, `running`, and `cancel_requested` all reserve the writer. Dead-owner rows become
   `interrupted`; terminal results from targets are deferred until the target returns.
+  Playlist preview jobs reserve a separate slot (one per database), permitting one calculation
+  alongside a writer. Completed result payloads are deferred ORM fields, excluded from polling.
 - `services/import_state.py`: source/library-specific completion and phase checkpoints,
   independent of deletable job history. Matching aggregate counts alone do not verify an import.
 

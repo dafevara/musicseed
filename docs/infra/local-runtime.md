@@ -203,9 +203,14 @@ server. See [HTTP API modes](../api-reference/http-api.md#server-modes-and-opena
 
 ### Import state and recovery
 
-- Import/enrichment services and API background jobs share **one writer per MusicSeed database**.
+- Import/enrichment services and API import/enrichment jobs share **one writer per MusicSeed database**.
   A SQLite transaction checks and claims the writer atomically. Pending jobs and cancellation
   requests still reserve it; completion is published after the worker target returns.
+- Playlist population previews use a separate calculation slot, with at most one active preview
+  per database. The UI starts a job, polls small progress responses, and fetches the persisted
+  result after success. Average and frequency both show a spinner and update automatically.
+  Parameter changes stop the previous job before starting its replacement. Refreshing the page
+  reconnects to the same job from session storage. See [background previews](../api-reference/http-api.md#background-playlist-previews).
 - Each job captures a deep copy of its runtime configuration. Work, progress callbacks, and job
   state writes use that context even if the process default later changes. Settings rejects
   changes while jobs are active; it saves a copy before replacing the default context.

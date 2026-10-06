@@ -54,14 +54,41 @@ from the nested service/MCP DTOs (`recommendations[].track.id`).
 | Recommendations | `GET /recommend/presets`, `GET /recommend/typeahead`, `POST /recommend` | Presets, seed search, and read-only recommendations |
 | Playlists | `GET /playlists`, `POST /playlists/create` | List Plex audio playlists or write an approved selection |
 | Population | `GET /playlists/{playlist_id}/preview`, `POST /playlists/{playlist_id}/populate` | Preview complements or append approved IDs |
+| Background population preview | `POST /playlists/{playlist_id}/preview-jobs`, `GET /playlists/preview-jobs/{job_id}/result` | Start a calculation (202) and fetch its completed preview |
 | Sonic | `GET /sonic/status`, `POST /sonic/refresh`, `POST /sonic/import` | Plex coverage, trigger/watch analysis, or submit local vector import |
 | Dashboard | `GET /dashboard` | Snapshot; `check_server=true` also probes Plex |
 | Jobs | `GET /jobs/{job_id}`, `POST /jobs/{job_id}/cancel`, `DELETE /jobs/{job_id}` | Poll, request cooperative cancellation, or delete terminal history |
 
 Import, enrichment, and sonic import return `{"job_id": ...}`; poll the job route for progress.
-One persisted writer claim per database prevents overlapping managed jobs. Pending and
-cancel-requested jobs keep the claim until the worker finishes. Settings changes are rejected
-while a managed writer is active. See [recovery](../infra/troubleshooting.md).
+One persisted writer claim per database prevents overlapping import/enrichment jobs. Playlist
+previews have a separate slot, allowing one calculation alongside one writer. Pending and
+cancel-requested jobs keep their slot until the worker finishes. Settings changes are rejected
+while either kind of job is active. See [recovery](../infra/troubleshooting.md).
+
+### Background playlist previews
+
+The web UI uses background jobs for both average and frequency playlist population previews:
+
+1. `POST /playlists/{playlist_id}/preview-jobs` accepts the same query parameters as the
+   synchronous preview and a required form field `request_id` (1–128 characters). It returns
+   HTTP 202 with `{"job_id": ...}` before scoring finishes. Retries with the same request ID
+   and inputs reuse the original job; changed inputs or a deliberate retry use a new job.
+2. `GET /jobs/{job_id}` returns state, elapsed-time timestamps and library scan progress,
+   without the recommendation payload. The browser polls about every two seconds and updates
+   the spinner automatically; no page refresh is required. Progress counts checked library
+   rows, including excluded seed rows, rather than predicting time remaining.
+3. Once state is `succeeded`, `GET /playlists/preview-jobs/{job_id}/result` returns the same
+   preview shape as the synchronous endpoint. It returns 409 before success and 404 for an
+   unknown job or a different job kind. The completed payload is persisted in the job row;
+   deleting that terminal job also deletes its result.
+
+Changing strategy or weights cancels the previous calculation and waits for it to stop before
+starting its replacement. Cancellation is checked between scoring batches; an in-flight Plex
+read finishes before the worker can stop. A session-storage record lets the same browser tab
+reconnect after a page refresh, including when the initial POST response was lost. A stopped,
+failed or interrupted calculation offers a retry. API restart interrupts unfinished work;
+completed previews remain available. Seed recommendations (`POST /recommend`) and CLI/MCP
+previews retain their synchronous interfaces.
 
 `POST /sonic/refresh` is synchronous and triggers Plex's **whole pending MusicAnalysis backlog**.
 Its `days` parameter scopes watching/reporting, not the remote work.
@@ -74,7 +101,7 @@ Its `days` parameter scopes watching/reporting, not the remote work.
   `playlist_id` is Plex's string rating key, not a local track ID or playlist title.
 - Writes preserve approved order, deduplicate IDs, and reject stale/unmapped selections before
   any Plex write. Weights and filters belong to preview requests. Approval is enforced by the
-  client workflow; routes do not store a preview or verify an approval token.
+  client workflow; write routes do not verify an approval token or require a job ID.
 - Create retries reuse a playlist only when its name and ordered contents match exactly.
   A name collision with different contents raises `PlexAPIError` (HTTP 502).
 - Populate skips tracks already in Plex. The HTTP response currently reports `added_count`;

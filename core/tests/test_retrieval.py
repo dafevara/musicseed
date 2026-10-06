@@ -7,6 +7,7 @@ import pytest
 from musicseed.config import Config
 from musicseed.context import MusicSeedContext
 from musicseed.db.models import Track, TrackVector
+from musicseed.exceptions import CalculationCanceledError
 from musicseed.recommender.playlist import (
     _track_load_options,
     recommend_from_profile,
@@ -29,6 +30,42 @@ from musicseed.services.evaluation import (
     evaluation_cases,
 )
 from sqlalchemy import event
+
+
+@pytest.mark.parametrize("method", ["average", "frequency"])
+def test_progress_counts_scanned_rows_and_cancellation_stops_next_batch(tmp_path, method):
+    context = _context(tmp_path)
+    case = EvaluationCase(
+        name="progress", description="Cancelable batch scan", seed_ids=[1, 2],
+        tracks=[FixtureTrack(id=i, artist_id=i % 70, year=2000) for i in range(1, 1101)],
+    )
+    try:
+        vectors = _load_fixture(context, case)
+        with context.session() as session:
+            updates = []
+            _, actual, _ = recommend_tracks(
+                session, seed_ids=case.seed_ids, method=method, vectors=vectors, limit=5,
+                on_progress=lambda current, total: updates.append((current, total)),
+            )
+            assert updates[0] == (0, 1100)
+            assert updates[-1] == (1100, 1100)
+            assert [current for current, _ in updates] == sorted(current for current, _ in updates)
+            _, expected, _ = recommend_tracks(
+                session, seed_ids=case.seed_ids, method=method, vectors=vectors, limit=5,
+            )
+            assert [(r.track.id, r.score) for r in actual] == [
+                (r.track.id, r.score) for r in expected
+            ]
+            canceled_updates = []
+            with pytest.raises(CalculationCanceledError):
+                recommend_tracks(
+                    session, seed_ids=case.seed_ids, method=method, vectors=vectors, limit=5,
+                    on_progress=lambda current, total: canceled_updates.append((current, total)),
+                    should_cancel=lambda: len(canceled_updates) >= 2,
+                )
+            assert canceled_updates[-1] == (FEATURE_BATCH_SIZE, 1100)
+    finally:
+        context.engine.dispose()
 
 
 def _context(tmp_path):

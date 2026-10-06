@@ -314,6 +314,8 @@ class Job(Base):
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     result_summary: Mapped[Optional[str]] = mapped_column(Text)
+    result_payload: Mapped[Optional[dict]] = mapped_column(JSON, deferred=True)
+    request_key: Mapped[Optional[str]] = mapped_column(String(128))
     pid: Mapped[Optional[int]] = mapped_column(Integer)
 
 

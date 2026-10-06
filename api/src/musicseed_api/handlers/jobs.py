@@ -16,8 +16,7 @@ def submit_job(kind: str, target: Callable[..., None], *args, **kwargs) -> int:
     ``target(job_id, *args, **kwargs)``, and reconciles its terminal state.
 
     Args:
-        kind: job kind (see core ``JobKind``); only one active job of any kind
-            is allowed across processes sharing the database.
+        kind: one writer and one playlist preview may run per database.
         target: blocking callable to run in the worker thread.
         *args (object): positional arguments forwarded to ``target`` after ``job_id``.
         **kwargs (object): keyword arguments forwarded to ``target``.
@@ -41,6 +40,7 @@ def get_job_progress(job_id: int) -> dict | None:
     Returns:
         The job's fields as a plain dict, or None for an unknown id.
     """
+    jobs_service.reconcile_running_jobs()
     return jobs_service.get_job(job_id)
 
 

@@ -440,6 +440,12 @@ so publishing MusicSeed as open source means a new user needs as little as possi
 </svg>
 <figcaption><code>musicseed-cli recommend</code> previews; <code>playlist</code> / <code>populate</code> confirm and apply the exact approved IDs over Plex HTTP, without recomputing. Full retrieval hydrates only seeds and selected tracks. <code>sonic-refresh</code> is a separate, explicitly confirmed remote-analysis mutation.</figcaption>
 </figure>
+<p>Web playlist population uses an in-process background preview job: POST starts the calculation,
+GET polls small status snapshots, and a final GET fetches the persisted recommendations. The UI
+shows a spinner and updates without refreshing. Parameter changes cancel the old calculation
+before starting its replacement; refreshing reconnects from session storage. One preview slot
+per SQLite database can run alongside its import/enrichment writer. No external queue or service
+is required.</p>
 
 <!-- ============================ NEW USER PATH ============================ -->
 <h2>4. What a brand-new user needs (open-source readiness)</h2>

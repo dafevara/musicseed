@@ -4,18 +4,13 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
+import { CalculationProgress } from "@/components/calculation-progress";
+import { previewQuery, usePlaylistPreview } from "@/lib/use-playlist-preview";
+import { browserPreviewStorage, readSavedPreview } from "@/lib/preview-job";
 import { useSetupGate } from "@/lib/use-setup-gate";
 import type { PopulateMethod, PopulatePreview, RecommendationItem } from "@/lib/types";
 import { RecommendResults } from "@/components/recommend-results";
 import { WeightControls } from "@/components/weight-controls";
-
-function previewQuery(weights: Record<string, number>, method: PopulateMethod): string {
-  const parts = [`method=${method}`];
-  for (const [k, v] of Object.entries(weights)) {
-    parts.push(`w_${k}=${v}`);
-  }
-  return parts.join("&");
-}
 
 export default function PopulatePlaylistPage() {
   return (
@@ -36,13 +31,16 @@ function PopulatePlaylistPageInner() {
   const [preset, setPreset] = useState("balanced");
   const [method, setMethod] = useState<PopulateMethod>("average");
   const [presets, setPresets] = useState<Record<string, Record<string, number>>>({});
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [initialized, setInitialized] = useState(false);
+  const [restoredQuery, setRestoredQuery] = useState<string | null>(null);
+  const [revision, setRevision] = useState(0);
   const [populating, setPopulating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const removedIdsRef = useRef<Set<number>>(new Set());
-  const previewGenRef = useRef(0);
-  const readyRef = useRef(false);
+  const calculation = usePlaylistPreview(initialized && playlistId && gate === "ready"
+    ? { playlistId, query: restoredQuery ?? previewQuery(weights, method) } : null, revision);
+  const loading = !initialized || (calculation.busy && !preview);
+  const refreshing = calculation.busy && !!preview;
 
   useEffect(() => {
     if (!playlistId) {
@@ -51,70 +49,50 @@ function PopulatePlaylistPageInner() {
   }, [playlistId, router]);
 
   useEffect(() => {
+    let active = true;
+    setInitialized(false);
+    setPreview(null);
+    setItems([]);
+    removedIdsRef.current.clear();
+    const saved = readSavedPreview(browserPreviewStorage);
+    const restored = saved?.playlistId === playlistId ? saved.query : null;
     api.get<Record<string, Record<string, number>>>("/recommend/presets")
       .then((data) => {
+        if (!active) return;
         setPresets(data);
-        if (data.balanced) setWeights({ ...data.balanced });
+        const query = new URLSearchParams(restored ?? "");
+        const nextWeights = { ...data.balanced };
+        for (const key of Object.keys(nextWeights)) {
+          const value = query.get(`w_${key}`);
+          if (value !== null && Number.isFinite(Number(value))) nextWeights[key] = Number(value);
+        }
+        setWeights(nextWeights);
+        setMethod(query.get("method") === "frequency" ? "frequency" : "average");
+        setRestoredQuery(restored);
+        if (restored) setPreset("custom");
       })
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    if (!playlistId) return;
-    const gen = ++previewGenRef.current;
-    setLoading(true);
-    setError(null);
-    api.get<PopulatePreview>(
-      `/playlists/${encodeURIComponent(playlistId)}/preview?limit=40&method=average`
-    )
-      .then((data) => {
-        if (previewGenRef.current !== gen) return;
-        setPreview(data);
-        setItems(data.recommendations);
-        readyRef.current = true;
-      })
-      .catch((e) => {
-        if (previewGenRef.current !== gen) return;
-        setError(String(e).replace("Error: ", ""));
-      })
-      .finally(() => {
-        if (previewGenRef.current === gen) setLoading(false);
-      });
+      .catch((e) => { if (active) setError(String(e).replace("Error: ", "")); })
+      .finally(() => { if (active) setInitialized(true); });
+    return () => { active = false; };
   }, [playlistId]);
 
   useEffect(() => {
-    if (!playlistId || !readyRef.current) return;
-    const gen = ++previewGenRef.current;
-    setRefreshing(true);
-    const timer = setTimeout(async () => {
-      try {
-        const qs = previewQuery(weights, method);
-        const data = await api.get<PopulatePreview>(
-          `/playlists/${encodeURIComponent(playlistId)}/preview?limit=40&${qs}`
-        );
-        if (previewGenRef.current !== gen) return;
-        setPreview(data);
-        setItems(
-          data.recommendations.filter((r) => !removedIdsRef.current.has(r.track_id))
-        );
-      } catch (e) {
-        if (previewGenRef.current !== gen) return;
-        setError(String(e).replace("Error: ", ""));
-      } finally {
-        if (previewGenRef.current === gen) setRefreshing(false);
-      }
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [playlistId, weights, method]);
+    if (!calculation.result) return;
+    setPreview(calculation.result);
+    setItems(calculation.result.recommendations.filter((r) => !removedIdsRef.current.has(r.track_id)));
+  }, [calculation.result]);
 
   function setPresetWeights(name: string) {
+    if (populating) return;
+    setRestoredQuery(null);
     setPreset(name);
     if (presets[name]) setWeights({ ...presets[name] });
   }
 
   async function handleConfirm() {
     const trackIds = items.map((r) => r.track_id);
-    if (trackIds.length === 0 || !playlistId) return;
+    if (trackIds.length === 0 || !playlistId || !calculation.result || calculation.busy
+      || preview !== calculation.result) return;
     setPopulating(true);
     setError(null);
     try {
@@ -125,6 +103,7 @@ function PopulatePlaylistPageInner() {
       }>(`/playlists/${encodeURIComponent(playlistId)}/populate`, {
         track_ids: trackIds.join(","),
       });
+      calculation.forget();
       router.push(
         `/playlists?added=${result.added_count}&name=${encodeURIComponent(result.playlist_name)}`
       );
@@ -158,7 +137,13 @@ function PopulatePlaylistPageInner() {
         </p>
       )}
 
-      {error && <div className="flash flash-error">{error}</div>}
+      {(error || calculation.error) && (
+        <div className="flash flash-error" role="alert">
+          {error || calculation.error}
+          {calculation.error && <button className="btn btn-secondary text-sm ml-3"
+            onClick={() => setRevision((value) => value + 1)}>Retry calculation</button>}
+        </div>
+      )}
 
       <div className="mt-3 mb-4 p-3 border border-[var(--border)] rounded-lg bg-[var(--bg)]">
         <p className="text-sm font-semibold mb-2">Strategy</p>
@@ -168,24 +153,18 @@ function PopulatePlaylistPageInner() {
               <button
                 key={value}
                 type="button"
-                disabled={refreshing || loading}
+                disabled={populating}
                 className={`text-xs px-3 py-1 rounded-full font-medium border-0 ${
                   method === value
                     ? "bg-[var(--brand)] text-white"
                     : "bg-transparent text-[var(--muted)]"
-                } ${refreshing || loading ? "opacity-60 cursor-wait" : "cursor-pointer"}`}
-                onClick={() => setMethod(value)}
+                } ${populating ? "opacity-60 cursor-wait" : "cursor-pointer"}`}
+                onClick={() => { setRestoredQuery(null); setMethod(value); }}
               >
                 {value === "average" ? "Average" : "Frequency"}
               </button>
             ))}
           </div>
-          {refreshing && (
-            <span className="inline-flex items-center gap-1.5 text-xs text-[var(--muted)]" aria-live="polite">
-              <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-[var(--border)] border-t-[var(--brand)] animate-spin" />
-              Updating preview…
-            </span>
-          )}
         </div>
         <p className="text-sm font-semibold mb-2">Scoring weights</p>
         <WeightControls
@@ -194,6 +173,8 @@ function PopulatePlaylistPageInner() {
           preset={preset}
           onPresetChange={setPresetWeights}
           onWeightChange={(key, value) => {
+            if (populating) return;
+            setRestoredQuery(null);
             setPreset("custom");
             setWeights((prev) => ({ ...prev, [key]: value }));
           }}
@@ -201,10 +182,10 @@ function PopulatePlaylistPageInner() {
       </div>
 
       {loading || refreshing ? (
-        <p className="text-sm text-[var(--muted)] inline-flex items-center gap-2">
-          <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-[var(--border)] border-t-[var(--brand)] animate-spin" />
-          {loading ? "Loading preview…" : "Recalculating recommendations…"}
-        </p>
+        <CalculationProgress job={calculation.job} notice={calculation.notice}
+          onCancel={() => { void calculation.cancel(); }} />
+      ) : !calculation.result ? (
+        <p className="text-sm text-[var(--muted)]">No recommendations ready yet.</p>
       ) : items.length === 0 ? (
         <p className="text-sm text-[var(--muted)]">No tracks selected — nothing to add.</p>
       ) : (
@@ -222,13 +203,19 @@ function PopulatePlaylistPageInner() {
         <button
           className="btn btn-primary"
           onClick={handleConfirm}
-          disabled={populating || loading || refreshing || items.length === 0}
+          disabled={populating || loading || refreshing || !!calculation.error
+            || !calculation.result || preview !== calculation.result || items.length === 0}
         >
           {populating ? "Adding…" : "Confirm & add"}
         </button>
-        <Link href="/playlists" className="btn btn-secondary no-underline">
+        <button className="btn btn-secondary" disabled={populating}
+          onClick={async () => {
+            if (calculation.busy) await calculation.cancel();
+            calculation.forget();
+            router.push("/playlists");
+          }}>
           Cancel
-        </Link>
+        </button>
       </div>
     </section>
   );

@@ -139,6 +139,13 @@ The API's create and populate write routes now require `track_ids`; seed-only/se
 clients must preview first. Core retains explicit generate-and-write entry points for callers
 that intentionally do not implement a preview workflow.
 
+Web playlist-populate previews run through `services/preview_jobs.py` in an in-process job
+thread. The HTTP start response returns immediately; the browser shows a spinner, polls
+progress, and fetches the persisted result after success. Scoring checks cancellation between
+library batches and reports scanned-row counts. Progress callbacks do not change scores or
+selection, and synchronous callers need no callbacks. See
+[background playlist previews](../api-reference/http-api.md#background-playlist-previews).
+
 ## Selection
 
 After scoring:

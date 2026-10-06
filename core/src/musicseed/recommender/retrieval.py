@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import heapq
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Generic, Sequence, TypeVar
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from musicseed.db.models import Genre, Style, Track, TrackGenre, TrackStats, TrackStyle
+from musicseed.exceptions import CalculationCanceledError
 from musicseed.recommender.scoring import (
     ScoreBreakdown,
     ScoreValues,
@@ -131,13 +133,15 @@ def score_eligible_tracks(
     max_tracks_per_artist: int = 3,
     min_score: float | None = None,
     exclude_ids: set[int] | None = None,
+    on_progress: Callable[[int, int], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> tuple[list[ScoredTrack], SonicCoverage]:
     """Score one profile using the shared batched candidate scan."""
     selections, coverage = score_eligible_profiles(
         session, [seed], vectors, limit=limit, weights=weights,
         year_min=year_min, year_max=year_max,
         max_tracks_per_artist=max_tracks_per_artist, min_score=min_score,
-        exclude_ids=exclude_ids,
+        exclude_ids=exclude_ids, on_progress=on_progress, should_cancel=should_cancel,
     )
     return selections[0], coverage
 
@@ -154,6 +158,8 @@ def score_eligible_profiles(
     max_tracks_per_artist: int = 3,
     min_score: float | None = None,
     exclude_ids: set[int] | None = None,
+    on_progress: Callable[[int, int], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> tuple[list[list[ScoredTrack]], SonicCoverage]:
     """Read each candidate batch once and retain exact top-k for every profile.
 
@@ -186,12 +192,22 @@ def score_eligible_profiles(
         query = query.where(Track.year >= year_min)
     if year_max is not None:
         query = query.where(Track.year <= year_max)
+    total = processed = 0
+    if on_progress:
+        count_query = query.with_only_columns(func.count(Track.id)).order_by(None)
+        total = session.execute(count_query).scalar_one()
+        on_progress(0, total)
     count = with_vector = 0
     for batch in session.execute(
         query.execution_options(yield_per=FEATURE_BATCH_SIZE)
     ).partitions():
+        if should_cancel and should_cancel():
+            raise CalculationCanceledError("Calculation canceled.")
+        processed += len(batch)
         rows = [row for row in batch if row.id not in excluded]
         if not rows:
+            if on_progress:
+                on_progress(processed, total)
             continue
         ids = [row.id for row in rows]
         # Fetch tag names for the whole batch in two joins, then map them back per track.
@@ -234,6 +250,10 @@ def score_eligible_profiles(
                     selected.add(
                         _ScoredCandidate(track_id, artist_id, score, facts, sonic_evidence[1]),
                     )
+        if on_progress:
+            on_progress(processed, total)
+    if should_cancel and should_cancel():
+        raise CalculationCanceledError("Calculation canceled.")
     return (
         [
             [

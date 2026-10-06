@@ -1,5 +1,7 @@
 """Populate service — fill an existing Plex playlist with complementary recommendations."""
 
+from collections.abc import Callable
+
 from pydantic import BaseModel
 
 from musicseed.clients.plex import Playlist, PlexClient
@@ -102,6 +104,8 @@ def get_populate_recommendations(
     max_tracks_per_artist: int = 3,
     min_score: float | None = None,
     context: MusicSeedContext | None = None,
+    on_progress: Callable[[int, int], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> PopulateResult:
     """Preview complementary recommendations for an existing Plex playlist.
 
@@ -117,6 +121,8 @@ def get_populate_recommendations(
         max_tracks_per_artist: artist diversity cap applied during selection.
         min_score: drop recommendations with a total score below this value.
         context: runtime context to use; defaults to the default context.
+        on_progress: optional completed/total library-row callback.
+        should_cancel: optional cancellation check at scoring batch boundaries.
 
     Returns:
         The playlist identity, how many of its tracks matched the local
@@ -146,7 +152,7 @@ def get_populate_recommendations(
             year_max=year_max,
             max_tracks_per_artist=max_tracks_per_artist,
             min_score=min_score,
-            vectors=ctx.sonic_vectors,
+            vectors=ctx.sonic_vectors, on_progress=on_progress, should_cancel=should_cancel,
         )
 
         return PopulateResult(
