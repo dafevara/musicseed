@@ -7,6 +7,7 @@ import pytest
 from musicseed.config import Config
 from musicseed.context import MusicSeedContext
 from musicseed.db.models import Track, TrackVector
+from musicseed.exceptions import CalculationCanceledError
 from musicseed.recommender.playlist import (
     _track_load_options,
     recommend_from_profile,
@@ -29,6 +30,42 @@ from musicseed.services.evaluation import (
     evaluation_cases,
 )
 from sqlalchemy import event
+
+
+@pytest.mark.parametrize("method", ["average", "frequency"])
+def test_progress_counts_scanned_rows_and_cancellation_stops_next_batch(tmp_path, method):
+    context = _context(tmp_path)
+    case = EvaluationCase(
+        name="progress", description="Cancelable batch scan", seed_ids=[1, 2],
+        tracks=[FixtureTrack(id=i, artist_id=i % 70, year=2000) for i in range(1, 1101)],
+    )
+    try:
+        vectors = _load_fixture(context, case)
+        with context.session() as session:
+            updates = []
+            _, actual, _ = recommend_tracks(
+                session, seed_ids=case.seed_ids, method=method, vectors=vectors, limit=5,
+                on_progress=lambda current, total: updates.append((current, total)),
+            )
+            assert updates[0] == (0, 1100)
+            assert updates[-1] == (1100, 1100)
+            assert [current for current, _ in updates] == sorted(current for current, _ in updates)
+            _, expected, _ = recommend_tracks(
+                session, seed_ids=case.seed_ids, method=method, vectors=vectors, limit=5,
+            )
+            assert [(r.track.id, r.score) for r in actual] == [
+                (r.track.id, r.score) for r in expected
+            ]
+            canceled_updates = []
+            with pytest.raises(CalculationCanceledError):
+                recommend_tracks(
+                    session, seed_ids=case.seed_ids, method=method, vectors=vectors, limit=5,
+                    on_progress=lambda current, total: canceled_updates.append((current, total)),
+                    should_cancel=lambda: len(canceled_updates) >= 2,
+                )
+            assert canceled_updates[-1] == (FEATURE_BATCH_SIZE, 1100)
+    finally:
+        context.engine.dispose()
 
 
 def _context(tmp_path):
@@ -235,6 +272,139 @@ def test_recommend_frequency_matches_populate_and_exhaustive(tmp_path):
                 vectors=vectors,
             )
             assert [r.track.id for r in populate] == [r.track.id for r in actual]
+    finally:
+        context.engine.dispose()
+
+
+@pytest.mark.parametrize("name", [c.name for c in evaluation_cases()])
+def test_batched_frequency_preserves_exhaustive_scores_evidence_and_votes(tmp_path, name):
+    case = next(c for c in evaluation_cases() if c.name == name)
+    case = case.model_copy(update={"mode": "frequency"})
+    context = _context(tmp_path)
+    try:
+        vectors = _load_fixture(context, case)
+        with context.session() as session:
+            tracks = session.query(Track).options(*_track_load_options()).order_by(Track.id).all()
+            expected = _exhaustive(tracks, vectors, case, case.weights)
+            _, actual, _ = recommend_tracks(
+                session, seed_ids=case.seed_ids, method="frequency", vectors=vectors,
+                limit=case.limit, per_seed_limit=case.per_seed_limit, weights=case.weights,
+                year_min=case.year_min, year_max=case.year_max,
+                max_tracks_per_artist=case.artist_max, min_score=case.min_score,
+            )
+            assert [r.track.id for r in actual] == [r.track.id for r in expected]
+            for result, oracle in zip(actual, expected, strict=True):
+                assert result.score == oracle.score
+                assert result.sources == oracle.sources
+    finally:
+        context.engine.dispose()
+
+
+def test_frequency_reads_candidate_metadata_and_tags_once_across_seeds(tmp_path):
+    context = _context(tmp_path)
+    case = EvaluationCase(
+        name="frequency_batches", description="Shared reads across seeds",
+        seed_ids=list(range(1, 21)),
+        tracks=[FixtureTrack(id=i, artist_id=i % 70, year=2000) for i in range(1, 1601)],
+    )
+    queries = Counter()
+
+    def query(_conn, _cursor, statement, parameters, _context, _many):
+        assert len(parameters) <= FEATURE_BATCH_SIZE
+        if statement.startswith("SELECT tracks.id, tracks.artist_id, tracks.plex_id"):
+            queries["candidates"] += 1
+        elif statement.startswith("SELECT track_styles.track_id"):
+            queries["styles"] += 1
+        elif statement.startswith("SELECT track_genres.track_id"):
+            queries["genres"] += 1
+
+    try:
+        vectors = _load_fixture(context, case)
+        event.listen(context.engine, "before_cursor_execute", query)
+        with context.session() as session:
+            _, actual, coverage = recommend_tracks(
+                session, seed_ids=case.seed_ids, method="frequency", vectors=vectors, limit=10,
+            )
+            assert len(actual) == 10
+            assert coverage.candidates == 1580
+            assert queries == {"candidates": 1, "styles": 4, "genres": 4}
+    finally:
+        context.engine.dispose()
+
+
+def test_explanation_models_are_created_only_for_each_profiles_final_selection(
+    tmp_path, monkeypatch,
+):
+    import musicseed.recommender.scoring as scoring
+    from musicseed.recommender.retrieval import score_eligible_profiles
+
+    context = _context(tmp_path)
+    case = EvaluationCase(
+        name="deferred_explanations", description="Final selections only", seed_ids=[1, 2],
+        tracks=[FixtureTrack(id=i, artist_id=i % 70) for i in range(1, 1601)],
+    )
+    original = scoring.ScoreBreakdown
+    explanations = []
+
+    def explain(**kwargs):
+        explanations.append(kwargs)
+        return original(**kwargs)
+
+    monkeypatch.setattr(scoring, "ScoreBreakdown", explain)
+    try:
+        vectors = _load_fixture(context, case)
+        with context.session() as session:
+            seeds = resolve_seed_tracks(session, seed_ids=case.seed_ids)
+            records, coverage = score_eligible_profiles(
+                session, [build_seed_profile([seed], vectors) for seed in seeds], vectors,
+                limit=10, weights=Weights(),
+            )
+            assert coverage.candidates == 1598
+            assert len(explanations) == 20
+            assert all(len(selection) == 10 for selection in records)
+            assert all(isinstance(record.score, original) for rows in records for record in rows)
+    finally:
+        context.engine.dispose()
+
+
+@pytest.mark.parametrize("limit,per_seed_limit", [(10, 30), (600, 700)])
+def test_frequency_loads_only_seeds_and_final_tracks_in_bounded_queries(
+    tmp_path, limit, per_seed_limit,
+):
+    from musicseed.services.schemas import to_service_recommendation
+
+    context = _context(tmp_path)
+    case = EvaluationCase(
+        name="final_hydration", description="No per-seed ORM hydration", seed_ids=[1, 2],
+        tracks=[FixtureTrack(id=i, artist_id=i % 700) for i in range(1, 1601)],
+    )
+    loaded = []
+    statements = []
+
+    def object_loaded(_session, obj):
+        if isinstance(obj, Track):
+            loaded.append(obj.id)
+
+    def query(_conn, _cursor, statement, parameters, _context, _many):
+        assert len(parameters) <= FEATURE_BATCH_SIZE
+        statements.append(statement)
+
+    try:
+        vectors = _load_fixture(context, case)
+        event.listen(context.engine, "before_cursor_execute", query)
+        with context.session() as session:
+            event.listen(session, "loaded_as_persistent", object_loaded)
+            _, actual, _ = recommend_tracks(
+                session, seed_ids=case.seed_ids, method="frequency", vectors=vectors,
+                limit=limit, per_seed_limit=per_seed_limit,
+            )
+            assert len(actual) == limit
+            assert set(loaded) == {1, 2, *(rec.track.id for rec in actual)}
+            assert len(loaded) == limit + 2
+            assert not any("track_moods" in statement for statement in statements)
+            projected = [to_service_recommendation(rec) for rec in actual]
+        context.engine.dispose()
+        assert all(rec.model_dump(mode="json")["track"]["artist"] for rec in projected)
     finally:
         context.engine.dispose()
 

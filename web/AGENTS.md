@@ -47,13 +47,19 @@ the **single place** that parses error bodies (`{detail}`) and form-encodes POST
 | `src/app/quick-start/page.tsx` | No API calls; installation and scenario guides, accessible before setup |
 | `src/app/page.tsx` (dashboard) | `GET /dashboard`, `GET /discovery`, `POST /library/import`, `POST /enrichment/spotify`, `POST /enrichment/listenbrainz`, `POST /sonic/import`, `DELETE /jobs/{job_id}` |
 | `src/app/recommend/page.tsx` | `GET /recommend/presets`, `GET /recommend/typeahead`, `POST /recommend` |
-| `src/app/playlists/page.tsx` | `GET /playlists`, `POST /recommend` (create preview), `POST /playlists/create`, `GET /playlists/{playlist_id}/preview`, `POST /playlists/{playlist_id}/populate` |
+| `src/app/playlists/page.tsx` | `GET /playlists`, `POST /recommend` (create preview), `POST /playlists/create`, background population preview jobs, `POST /playlists/{playlist_id}/populate` |
 | `src/app/playlists/populate/page.tsx` | Advanced populate for one playlist (`?id=`): strategy, weights, preview, confirm |
 
 Shared components live in `src/components/` (`health-strip`, `job-list`, `job-progress`,
 `typeahead`, `seed-chips`, `recommend-results`, `discovery-checks`, `setup-form`,
 `plex-server-picker`, `weight-controls`, `nav`).
 API shapes are typed in `src/lib/types.ts`.
+`src/lib/use-playlist-preview.ts` connects both population screens to `PreviewRunner` in
+`src/lib/preview-job.ts`: POST `/playlists/{playlist_id}/preview-jobs`, poll GET `/jobs/{job_id}`,
+then GET `/playlists/preview-jobs/{job_id}/result`. The spinner is accessible and respects
+reduced motion. Same-tab session storage retains request/job identity across refreshes;
+parameter changes cancel and await the old job before replacement. Stale callers cannot publish
+results. Offline runner tests cover recovery and cancellation with fake clients and timers.
 
 ## Particularities to respect
 
@@ -99,5 +105,5 @@ npm run build        # static export to web/out/ (not committed)
 ```
 
 After a build, `cd ../api && uv run musicseed` serves the UI and JSON together. There is no
-separate web test suite — the API contract is covered by `api/tests/`, and the UI is type-checked
-with `tsc`.
+browser test framework dependency — offline state and job runner tests use Node's test runner,
+the API contract is covered by `api/tests/`, and the UI is type-checked with `tsc`.

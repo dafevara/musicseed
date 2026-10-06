@@ -28,6 +28,12 @@ from musicseed_api.routes import (
     recommend,
     sonic,
 )
+from musicseed_api.security import (
+    CSRF_ENDPOINT,
+    get_csrf_secret,
+    issue_csrf_token,
+    security_filter,
+)
 
 
 def create_app() -> FastAPI:
@@ -48,6 +54,17 @@ def create_app() -> FastAPI:
         at ``/api`` when a web UI is served alongside the JSON API.
     """
     app = FastAPI(title="MusicSeed API", version="0.1.0")
+
+    # Browser protections: Host allowlist + origin check + CSRF token. Runs
+    # before routing so rejected requests never reach a handler.
+    @app.middleware("http")
+    async def _security(request: Request, call_next):
+        return await security_filter(request, call_next)
+
+    @app.get(CSRF_ENDPOINT, tags=["security"])
+    def csrf_token() -> dict:
+        """Issue the browser CSRF token for state-changing requests."""
+        return {"token": issue_csrf_token(get_csrf_secret())}
 
     # Single error contract: typed core exceptions map to HTTP status codes
     # here so route modules never translate exceptions themselves.

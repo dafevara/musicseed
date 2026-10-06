@@ -15,3 +15,7 @@ class NotFoundError(MusicSeedError):
 
 class JobConflictError(MusicSeedError):
     """A job of the requested kind is already running."""
+
+
+class CalculationCanceledError(MusicSeedError):
+    """A recommendation calculation stopped at a cooperative checkpoint."""

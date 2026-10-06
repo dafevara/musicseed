@@ -72,6 +72,81 @@ Never paste into public issues, PRs, discussions, or screenshots:
 - Do not run MusicSeed against a Plex server or database you do not own or
   administer.
 
+## Browser protections
+
+The web API and the MCP HTTP transports apply browser protections on every
+request. The MCP server (``streamable-http``/``sse``) uses the SDK's built-in
+DNS-rebinding protection on loopback, and enforces ``security.allowed_hosts``
+on a non-loopback bind.
+
+- **Host allowlist** — requests whose ``Host`` header names an unexpected
+  hostname are rejected (blocks DNS rebinding). Loopback and private
+  (home-LAN) addresses are allowed by default; add ``security.allowed_hosts``
+  entries for a home-network DNS name.
+- **Origin check** — state-changing requests whose ``Origin``/``Referer``
+  names an unrelated website are rejected.
+- **CSRF token** — browser-driven writes must include an ``X-MusicSeed-CSRF``
+  header obtained from ``GET /security/csrf``. Non-browser clients (CLI, curl,
+  MCP) are exempt.
+
+These protections keep a trusted home-LAN surface usable without accounts.
+They are **not** authentication: any client that can reach the server can
+still exercise MusicSeed's permissions (Plex playlists, enrichment, import).
+Only expose the server on a network you trust. If you expose it to a public or
+untrusted network, put an authenticating reverse proxy (or the equivalent) in
+front of it — MusicSeed does not ship a login.
+
+## Credential routing
+
+An SSH password is bound to its SSH target: probing a *different* target sends
+no stored password, and changing the configured target clears the password
+unless a new one is supplied in the same submission, so changing servers cannot
+silently re-send a password elsewhere. The Plex token is account-wide, so
+selecting a different server on the same account keeps it — and the server
+picker verifies candidate addresses without sending any token.
+
+## Transport encryption
+
+Local, home-LAN, and VPN ``http://`` Plex connections are supported — loopback,
+RFC1918 private, link-local, CGNAT/Tailscale (``100.64.0.0/10``), IPv6 ULA, and
+``.local``/``.home.arpa``/``.ts.net`` hostnames. A plain ``http://`` connection
+to a *globally routable* host would send the Plex token in cleartext, so
+MusicSeed refuses it unless ``plex.allow_cleartext_remote`` is set explicitly —
+prefer ``https://`` or a VPN/tunnel. HTTPS keeps certificate verification
+enabled (httpx defaults); it is never disabled.
+
+## Private file handling
+
+- The config file is written owner-only (``0600``) from its very first write:
+  it is dumped to an owner-only temp file in the same directory and atomically
+  moved into place, so an interruption cannot leave a half-written config.
+- The MusicSeed SQLite database is created owner-only (``0600``); its WAL/SHM
+  sidecars inherit that mode.
+- Log files are created owner-only (``0600``) before their first write, and a
+  redaction filter replaces any configured token/secret that reaches a log line
+  with ``[REDACTED]``.
+
+## Resource limits
+
+Expensive work is bounded by default and can be raised deliberately via the
+``limits`` config section for large libraries: request body size, seed count,
+approved selection size, typeahead/recommendation result counts, and the total
+size of a remote Plex database snapshot (which is also refused when the
+destination lacks free disk space). Plex sonic-vector blobs are decompressed
+under a fixed per-blob cap, so a malformed blob cannot expand into a zip bomb.
+
+## Installations and releases
+
+- CI covers every app (core, cli, api, and mcp), runs a per-app dependency
+  audit (``uv audit``), a gitleaks secret scan, and an ``npm audit`` on a
+  schedule and on every push/PR.
+- CI actions are pinned to immutable commit SHAs.
+- Releases are only cut after the ``CI`` workflow passes on ``main`` (or via an
+  explicit manual dispatch).
+- End-user installs (``scripts/install.sh``) install against a pinned,
+  CI-tested dependency set (``constraints.txt``), regenerated from the
+  lockfiles with ``scripts/export-constraints.sh``.
+
 ## Scope notes
 
 Out of scope for security reports unless they create a concrete local exploit:

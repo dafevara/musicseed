@@ -26,6 +26,7 @@ from musicseed.config import (
     get_config_path,
     plex_data_dir_candidates,
     plex_library_db_candidates,
+    url_is_remote_cleartext,
 )
 from musicseed.exceptions import NotFoundError
 from musicseed.logging_config import get_logger
@@ -118,6 +119,7 @@ class Reason(StrEnum):
     MISSING_TOKEN = "missing_token"
     UNREACHABLE = "unreachable"
     UNAUTHORIZED = "unauthorized"
+    INSECURE_TRANSPORT = "insecure_transport"
     LIBRARY_NOT_FOUND = "library_not_found"
     ERROR = "error"
 
@@ -497,6 +499,10 @@ def discover(
         to import sonic vectors). The Plex token is never included.
     """
     cfg = (config if config is not None else get_config()).model_copy(deep=True)
+    # Capture the deliberately selected addresses before any override mutates the
+    # copy, so credential routing compares probes against them (not the overrides).
+    selected_url = cfg.plex.url
+    selected_ssh_target = cfg.plex.db_ssh_target
     # One effective configuration for probes AND coverage; never change the caller.
     if musicseed_db_path:
         cfg.database.path = musicseed_db_path
@@ -525,13 +531,23 @@ def discover(
     # overridden) the source is remote; otherwise use the local filesystem.
     ssh_target = (plex_db_ssh or cfg.plex.db_ssh_target).strip() or None
     if ssh_target:
+        # A stored SSH password is bound to the target it was saved for. Probing
+        # a *different* target must not send it there unless the caller also
+        # supplied a password for that probe (there is no per-probe password
+        # override; the configured one is sent only to its own target).
+        configured_target = selected_ssh_target.strip()
+        ssh_password = (
+            cfg.plex.db_ssh_password
+            if not plex_db_ssh or plex_db_ssh.strip() == configured_target
+            else ""
+        )
         plex_library_db = _discover_ssh_file(
             ssh_target, PLEX_LIBRARY_DB_NAME,
-            password=cfg.plex.db_ssh_password, port=cfg.plex.db_ssh_port,
+            password=ssh_password, port=cfg.plex.db_ssh_port,
         )
         plex_blobs_db = _discover_ssh_file(
             ssh_target, PLEX_BLOBS_DB_NAME,
-            password=cfg.plex.db_ssh_password, port=cfg.plex.db_ssh_port,
+            password=ssh_password, port=cfg.plex.db_ssh_port,
         )
     else:
         # Plex library database (candidates: override/config value, then the default)
@@ -555,14 +571,42 @@ def discover(
     url = plex_url or cfg.plex.url
     url_source = _source(plex_url, cfg.plex.url, default_plex.url)
     library = plex_library or cfg.plex.library
+    # A stored token is only sent to the address it was associated with. Probing
+    # a *different* address must not leak the token (or a local install's token)
+    # to it, unless the caller supplied an explicit token for that probe.
+    probing_different_url = bool(plex_url) and plex_url.rstrip("/") != selected_url.rstrip("/")
     if plex_token is not None:
         token, token_source = plex_token, "override"
+    elif probing_different_url:
+        token, token_source = "", "none"
     elif cfg.plex.token:
         token, token_source = cfg.plex.token, "config"
     else:
         local_token = read_plex_token()
         token, token_source = (local_token, "local") if local_token else ("", "none")
-    if check_server:
+    # A remote cleartext URL would send the token over the public internet.
+    # Report it and hold the token back unless the operator opted in explicitly.
+    insecure_remote = url_is_remote_cleartext(url) and not cfg.plex.allow_cleartext_remote
+    if insecure_remote:
+        token, token_source = "", "none"
+    if check_server and insecure_remote:
+        plex_server = PlexServerDiscovery(
+            url=url,
+            source=url_source,
+            token_configured=False,
+            token_source=token_source,
+            server_version=None,
+            library=library,
+            library_found=False,
+            reason=Reason.INSECURE_TRANSPORT,
+            detail=(
+                "This Plex address uses plain http:// to a remote host, which would "
+                "send your Plex token in cleartext. Use https:// (or a VPN/tunnel), "
+                "or set plex.allow_cleartext_remote: true to opt in."
+            ),
+            ok=False,
+        )
+    elif check_server:
         plex_server = _discover_server(
             url, url_source, token, library, timeout, token_source
         )

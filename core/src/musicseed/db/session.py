@@ -8,6 +8,7 @@ default ``MusicSeedContext`` (see ``musicseed.context``).
 from __future__ import annotations
 
 from contextlib import contextmanager
+from pathlib import Path
 from typing import TYPE_CHECKING, Generator
 
 from pydantic import BaseModel
@@ -89,6 +90,10 @@ def get_session() -> Generator[Session, None, None]:
 def init_db(context: MusicSeedContext | None = None) -> None:
     """Initialize the database schema, creating the DB file's parent dir if needed.
 
+    The database file is created (or tightened) owner-only (0600) before any
+    connection writes schema or data, so a music-history database is never
+    world-readable.
+
     Args:
         context: runtime context to operate on; defaults to the default
             context.
@@ -96,10 +101,23 @@ def init_db(context: MusicSeedContext | None = None) -> None:
     from musicseed.context import get_context
 
     ctx = context or get_context()
-    ctx.config.database.path_expanded.parent.mkdir(parents=True, exist_ok=True)
+    db_path = ctx.config.database.path_expanded
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    _restrict_file_mode(db_path)
 
     Base.metadata.create_all(ctx.engine)
     ensure_schema(ctx)
+
+
+def _restrict_file_mode(path: Path) -> None:
+    """Create or tighten ``path`` to owner-only (0600) before data is written."""
+    try:
+        if path.exists():
+            path.chmod(0o600)
+        else:
+            path.touch(mode=0o600)
+    except OSError:  # pragma: no cover - non-POSIX filesystems
+        pass
 
 
 # (table, column, column DDL) for lightweight additive migrations on existing files.
@@ -109,6 +127,8 @@ _ADDITIVE_COLUMNS = [
     ("tracks", "listenbrainz_listener_count", "INTEGER"),
     ("tracks", "listenbrainz_matched", "BOOLEAN DEFAULT FALSE"),
     ("jobs", "result_summary", "TEXT"),
+    ("jobs", "result_payload", "JSON"),
+    ("jobs", "request_key", "VARCHAR(128)"),
     ("jobs", "pid", "INTEGER"),
     ("jobs", "progress_phases", "TEXT"),
 ]
@@ -137,6 +157,9 @@ def ensure_schema(context: MusicSeedContext | None = None) -> None:
                 conn.execute(
                     text(f"ALTER TABLE {table} ADD COLUMN {column} {column_ddl}")
                 )
+        conn.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_request_key ON jobs(request_key)"
+        ))
         conn.commit()
 
 

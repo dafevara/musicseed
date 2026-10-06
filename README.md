@@ -65,6 +65,10 @@ core library and API installed, builds the static UI, and puts `musicseed` on yo
 symlink in `~/.local/bin`. After that, runtime is Python only — Node is not required to start
 the app.
 
+The server listens on `127.0.0.1` (this machine only) by default. To let other devices on your
+home network reach the UI, run `musicseed --lan`; the command prints who can reach it and warns
+that those clients can exercise MusicSeed's permissions. Only expose it on a network you trust.
+
 Open **Quick Start** in the web navigation (`/quick-start`) for step-by-step installation,
 connection, and import guides, including Plex on a remote server or NAS over SSH and manually
 copied database backups. The guides are available before setup is complete.

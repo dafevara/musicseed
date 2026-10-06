@@ -5,6 +5,10 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { playlistCreateBody } from "@/lib/playlist-preview";
+import { CalculationProgress } from "@/components/calculation-progress";
+import { previewQuery, usePlaylistPreview } from "@/lib/use-playlist-preview";
+import { browserPreviewStorage, readSavedPreview } from "@/lib/preview-job";
+import type { PreviewInput } from "@/lib/preview-job";
 import { useSetupGate } from "@/lib/use-setup-gate";
 import type { RecommendationItem, PopulatePreview, RecommendResponse, TypeaheadTrack } from "@/lib/types";
 import { Typeahead } from "@/components/typeahead";
@@ -47,10 +51,13 @@ function PlaylistsPageInner() {
   const [populatePreview, setPopulatePreview] = useState<PopulatePreview | null>(null);
   const [populateItems, setPopulateItems] = useState<RecommendationItem[]>([]);
   const [populating, setPopulating] = useState<string | null>(null);
-  const [previewingPlaylist, setPreviewingPlaylist] = useState<string | null>(null);
+  const [previewInput, setPreviewInput] = useState<PreviewInput | null>(null);
+  const [previewRevision, setPreviewRevision] = useState(0);
   const [populateResult, setPopulateResult] = useState<string | null>(null);
   const [populateError, setPopulateError] = useState<string | null>(null);
   const gate = useSetupGate();
+  const calculation = usePlaylistPreview(gate === "ready" ? previewInput : null, previewRevision);
+  const previewingPlaylist = calculation.busy ? previewInput?.playlistId : null;
   const addedCount = addedNotice.get("added");
   const addedName = addedNotice.get("name");
 
@@ -135,23 +142,24 @@ function PlaylistsPageInner() {
     }
   }
 
-  async function handlePreviewPopulate(playlistId: string) {
+  useEffect(() => {
+    const saved = readSavedPreview(browserPreviewStorage);
+    if (saved) setPreviewInput({ playlistId: saved.playlistId, query: saved.query });
+  }, []);
+
+  useEffect(() => {
+    if (!calculation.result) return;
+    setPopulatePreview(calculation.result);
+    setPopulateItems(calculation.result.recommendations);
+  }, [calculation.result]);
+
+  function handlePreviewPopulate(playlistId: string) {
     setPopulatePreview(null);
     setPopulateItems([]);
     setPopulateResult(null);
     setPopulateError(null);
-    setPreviewingPlaylist(playlistId);
-    try {
-      const data = await api.get<PopulatePreview>(
-        `/playlists/${encodeURIComponent(playlistId)}/preview?limit=40&method=average`
-      );
-      setPopulatePreview(data);
-      setPopulateItems(data.recommendations);
-    } catch (e) {
-      setPopulateError(String(e).replace("Error: ", ""));
-    } finally {
-      setPreviewingPlaylist(null);
-    }
+    setPreviewInput({ playlistId, query: previewQuery({}, "average") });
+    setPreviewRevision((value) => value + 1);
   }
 
   function removePopulateItem(trackId: number) {
@@ -160,7 +168,8 @@ function PlaylistsPageInner() {
 
   async function handleConfirmPopulate(playlistId: string) {
     const trackIds = populateItems.map((r) => r.track_id);
-    if (trackIds.length === 0) return;
+    if (trackIds.length === 0 || calculation.busy || !calculation.result
+      || populatePreview !== calculation.result) return;
 
     setPopulating(playlistId);
     setPopulateResult(null);
@@ -173,6 +182,7 @@ function PlaylistsPageInner() {
       }>(`/playlists/${encodeURIComponent(playlistId)}/populate`, {
         track_ids: trackIds.join(","),
       });
+      calculation.forget();
       setPopulateResult(
         `Added ${result.added_count} tracks to "${result.playlist_name}" ` +
         `(now ${result.playlist_track_count + result.added_count} tracks).`
@@ -236,8 +246,12 @@ function PlaylistsPageInner() {
             {populateResult || `Added ${addedCount} tracks to “${addedName}”.`}
           </div>
         )}
-        {populateError && (
-          <div className="flash flash-error mt-3">{populateError}</div>
+        {(populateError || calculation.error) && (
+          <div className="flash flash-error mt-3" role="alert">
+            {populateError || calculation.error}
+            {calculation.error && <button className="btn btn-secondary text-sm ml-3"
+              onClick={() => setPreviewRevision((value) => value + 1)}>Retry calculation</button>}
+          </div>
         )}
 
         {showCreate && (
@@ -309,7 +323,7 @@ function PlaylistsPageInner() {
             {playlists.map((p) => {
               const isPreviewing = previewingPlaylist === p.rating_key;
               const isPopulating = populating === p.rating_key;
-              const showPreview = populatePreview?.playlist_id === p.rating_key;
+              const showPreview = !!calculation.result && populatePreview?.playlist_id === p.rating_key;
 
               return (
                 <li
@@ -332,7 +346,9 @@ function PlaylistsPageInner() {
                     </button>
                   </div>
 
-                  {showPreview && (
+                  {isPreviewing && <CalculationProgress job={calculation.job}
+                    notice={calculation.notice} onCancel={() => { void calculation.cancel(); }} />}
+                  {showPreview && !isPreviewing && (
                     <div className="mt-3 p-3 border border-[var(--border)] rounded-lg">
                       <h3 className="mt-0 text-base font-semibold">
                         Preview additions to &ldquo;{populatePreview.playlist_name}&rdquo;
@@ -357,13 +373,17 @@ function PlaylistsPageInner() {
                         <button
                           className="btn btn-primary"
                           onClick={() => handleConfirmPopulate(populatePreview.playlist_id)}
-                          disabled={isPopulating || populateItems.length === 0}
+                          disabled={isPopulating || calculation.busy || !!calculation.error
+                            || !calculation.result || populatePreview !== calculation.result
+                            || populateItems.length === 0}
                         >
                           {isPopulating ? "Adding…" : "Confirm & add"}
                         </button>
                         <button
                           className="btn btn-secondary"
                           onClick={() => {
+                            calculation.forget();
+                            setPreviewInput(null);
                             setPopulatePreview(null);
                             setPopulateItems([]);
                           }}

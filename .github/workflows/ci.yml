@@ -5,6 +5,12 @@ on:
     branches: [main, dev]
   pull_request:
     branches: [main, dev]
+  schedule:
+    # Recurring lightweight dependency and secret scans even when nothing is pushed.
+    - cron: "23 4 * * 1"
+
+permissions:
+  contents: read
 
 jobs:
   python:
@@ -14,18 +20,17 @@ jobs:
       fail-fast: false
       matrix:
         python: ["3.12", "3.13"]
-        app: [core, cli, api]
+        app: [core, cli, api, mcp]
     defaults:
       run:
         working-directory: ${{ matrix.app }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081 # v5
         with:
           python-version: ${{ matrix.python }}
       - run: uv sync
       - run: uv run ruff check src tests
-        if: matrix.app != 'cli'
       - run: uv run pytest tests -q
 
   web:
@@ -35,8 +40,8 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
           cache: npm
@@ -44,3 +49,34 @@ jobs:
       - run: npm ci
       - run: npx tsc --noEmit
       - run: npm run build
+
+  security:
+    name: dependency and secret scans
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@dcedce43c6f43de0b836d1fe38946645c9c638dc # v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081 # v5
+      - name: Python dependency audit
+        run: |
+          set -euo pipefail
+          for app in core cli api mcp; do
+            echo "::group::audit $app"
+            (cd "$app" && uv audit)
+            echo "::endgroup::"
+          done
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: npm dependency audit
+        run: |
+          cd web
+          npm ci
+          npm audit --audit-level=high

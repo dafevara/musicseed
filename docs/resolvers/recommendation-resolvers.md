@@ -45,11 +45,12 @@ flow and playlist populate. Average is the default.
 
 - **Average** scores every eligible track against the seeds' combined `SeedProfile` in one
   library scan. Fast and stable, but a single strong seed can dominate the profile.
-- **Frequency** scores each seed as its own single-track profile (one scan per seed), then ranks
-  each candidate by the average of its per-seed scores, with vote count as a tiebreaker. The
+- **Frequency** scores each seed as its own single-track profile during one shared candidate scan,
+  then ranks each candidate by the average of its per-seed scores, with vote count as a tiebreaker. The
   whole seed set is excluded before per-seed vote budgets (`per_seed_limit`, default 30), and
   the result's `sources` lists the voting seed IDs. Prefer average for large seed sets; this
-  costs one scalar scan per seed.
+  still computes one score per candidate/seed pair. Candidate metadata and tags are read once
+  per batch, with a separate top-k selection for each seed.
 
 Both methods share the same candidate eligibility, year filters, artist cap, and `min_score`
 cutoff; `min_score` applies after per-seed votes are averaged in frequency mode.
@@ -58,8 +59,15 @@ cutoff; `min_score` applies after per-seed votes are averaged in frequency mode.
 
 `score_eligible_tracks()` scores every eligible non-seed track using scalar SQL batches rather
 than a bounded source shortlist. Years are filtered before scoring; all seed/excluded IDs are
-removed before tags, scoring and selection budgets. Only seeds and selected tracks load ORM
-relationships. `recommend_from_profile()` is shared by normal and playlist recommendation flows.
+removed before tags, scoring and selection budgets. Seeds load scoring metadata. Frequency votes
+retain scalar IDs, artist IDs and scores; only the final selected tracks load ORM objects with
+artist/album relationships for service output. Unused moods are not loaded.
+`recommend_from_profile()` is shared by normal and playlist recommendation flows.
+
+The sonic cache lazily retains validated float64 vectors and their norms for repeated scoring;
+each seed embedding is prepared once per scoring pass. Cosine scores and availability reuse the
+same comparison instead of repeating validation. Float64 retains the existing scalar arithmetic;
+this cache adds one float64 vector per visited stored vector and is replaced with the sonic snapshot.
 
 The historical `build_candidate_pool()` remains an offline diagnostic reference, not a production
 fallback. Its source limits can miss a perfect style match or consume a budget with seeds.
@@ -72,8 +80,10 @@ musical preference.
 
 ## Scoring
 
-`score_signals()` computes component scores and a weighted total; `calculate_score()` is the
-ORM adapter to the same function:
+`score_values()` computes component scores and a weighted total. Streaming selection retains
+these lightweight numeric values, then `explain_score()` creates `ScoreBreakdown` objects and
+availability dictionaries only for each profile's final selections. `score_signals()` combines
+both steps; `calculate_score()` is the ORM adapter to that same math:
 
 - `sonic`: cosine similarity normalized to 0-1.
 - `popularity`: proximity to seed popularity.
@@ -128,6 +138,13 @@ collisions fail. Populate skips tracks already present in Plex. Core and MCP ret
 The API's create and populate write routes now require `track_ids`; seed-only/selection-free
 clients must preview first. Core retains explicit generate-and-write entry points for callers
 that intentionally do not implement a preview workflow.
+
+Web playlist-populate previews run through `services/preview_jobs.py` in an in-process job
+thread. The HTTP start response returns immediately; the browser shows a spinner, polls
+progress, and fetches the persisted result after success. Scoring checks cancellation between
+library batches and reports scanned-row counts. Progress callbacks do not change scores or
+selection, and synchronous callers need no callbacks. See
+[background playlist previews](../api-reference/http-api.md#background-playlist-previews).
 
 ## Selection
 

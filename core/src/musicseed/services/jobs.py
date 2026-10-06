@@ -25,7 +25,7 @@ from sqlalchemy import case, text, update
 from musicseed.context import MusicSeedContext, get_context, use_context
 from musicseed.db.models import ImportState, Job
 from musicseed.db.session import ensure_schema, get_session
-from musicseed.exceptions import JobConflictError
+from musicseed.exceptions import JobConflictError, NotFoundError
 
 
 class JobKind(StrEnum):
@@ -33,6 +33,7 @@ class JobKind(StrEnum):
 
     IMPORT = "import"
     ENRICH = "enrich"
+    PLAYLIST_PREVIEW = "playlist_preview"
 
 
 class JobState(StrEnum):
@@ -52,6 +53,9 @@ _configuration_lock = threading.RLock()
 _worker_job: ContextVar[tuple[str, int] | None] = ContextVar("musicseed_worker_job", default=None)
 _managed_worker: ContextVar[bool] = ContextVar("musicseed_managed_worker", default=False)
 _requested_result: ContextVar[str] = ContextVar("musicseed_requested_result", default="")
+_requested_payload: ContextVar[dict | None] = ContextVar(
+    "musicseed_requested_payload", default=None,
+)
 _requested_failure: ContextVar[str | None] = ContextVar("musicseed_requested_failure", default=None)
 
 
@@ -73,23 +77,33 @@ def configuration_change():
 
 
 def current_job_id() -> int | None:
-    """The operation-bound job ID, if called from a claimed writer."""
+    """The operation-bound job ID, if called from a claimed worker."""
     owned = _worker_job.get()
     return owned[1] if owned else None
 
 
-def _claim_job(kind: str, context: MusicSeedContext) -> int:
+def _claim_job(
+    kind: str, context: MusicSeedContext, request_key: str | None = None,
+) -> tuple[int, bool]:
     ensure_schema(context)
     reconcile_running_jobs()
     with context.session() as session:
         # Atomic across processes: reserve SQLite's writer before checking.
         session.execute(text("BEGIN IMMEDIATE"))
-        if session.query(Job).filter(Job.state.in_(ACTIVE_STATES)).first():
+        if request_key:
+            existing = session.query(Job).filter(Job.request_key == request_key).first()
+            if existing is not None:
+                if existing.kind != kind:
+                    raise JobConflictError("This request belongs to a different operation.")
+                return existing.id, False
+        lane = (Job.kind == JobKind.PLAYLIST_PREVIEW if kind == JobKind.PLAYLIST_PREVIEW
+                else Job.kind != JobKind.PLAYLIST_PREVIEW)
+        if session.query(Job).filter(Job.state.in_(ACTIVE_STATES), lane).first():
             raise JobConflictError("A job is already active; wait for it to finish.")
-        job = Job(kind=kind, state=JobState.PENDING, pid=os.getpid())
+        job = Job(kind=kind, state=JobState.PENDING, pid=os.getpid(), request_key=request_key)
         session.add(job)
         session.flush()
-        return job.id
+        return job.id, True
 
 
 def exclusive_writer(kind: str):
@@ -111,12 +125,14 @@ def exclusive_writer(kind: str):
                 if owned[0] != context.config.database.url:
                     raise JobConflictError("A worker cannot change its database.")
                 job_id = owned[1]
+                if get_job(job_id)["kind"] == JobKind.PLAYLIST_PREVIEW:
+                    raise JobConflictError("Calculation jobs cannot perform library writes.")
             else:
                 with _configuration_lock:
                     # Deep-copy so callbacks stay bound to this database, not a later one.
                     context = MusicSeedContext(context.config.model_copy(deep=True))
                     with use_context(context):
-                        job_id = _claim_job(kind, context)
+                        job_id, _created = _claim_job(kind, context)
             with use_context(context):
                 bound.arguments["context"] = context
                 original_cancel = bound.arguments.get("should_cancel")
@@ -235,16 +251,20 @@ def update_progress(
             job.progress_phases = phases
 
 
-def complete_job(job_id: int, result_summary: str = "") -> None:
+def complete_job(
+    job_id: int, result_summary: str = "", *, result_payload: dict | None = None,
+) -> None:
     """Mark a job ``succeeded`` and stamp its completion time.
 
     Args:
         job_id: id of the job row to update. Unknown ids are ignored.
         result_summary: optional JSON-serialized outcome summary; only stored
             when non-empty. Managed targets defer completion until they return.
+        result_payload: optional completed result; excluded from status snapshots.
     """
     if _managed_worker.get() and _worker_job.get()[1] == job_id:
         _requested_result.set(result_summary)
+        _requested_payload.set(result_payload)
         return
     with get_session() as session:
         session.execute(update(Job).where(Job.id == job_id, Job.state.in_(ACTIVE_STATES)).values(
@@ -252,6 +272,24 @@ def complete_job(job_id: int, result_summary: str = "") -> None:
                        else_=JobState.SUCCEEDED),
             completed_at=_now(), result_summary=result_summary or None,
         ))
+        if result_payload is not None:
+            session.execute(update(Job).where(
+                Job.id == job_id, Job.state == JobState.SUCCEEDED,
+            ).values(result_payload=result_payload))
+
+
+def get_job_result(job_id: int, kind: str) -> dict:
+    """Fetch a completed payload separately from the small progress snapshot."""
+    with get_session() as session:
+        ensure_schema()
+        row = session.query(Job.kind, Job.state, Job.result_payload).filter(
+            Job.id == job_id,
+        ).first()
+        if row is None or row.kind != kind:
+            raise NotFoundError(f"Calculation {job_id} not found.")
+        if row.state != JobState.SUCCEEDED or row.result_payload is None:
+            raise JobConflictError("Calculation results are not available yet.")
+        return row.result_payload
 
 
 def fail_job(job_id: int, error_summary: str) -> None:
@@ -369,7 +407,7 @@ def get_latest_job(kind: str) -> dict | None:
 
 
 def get_active_jobs() -> list[dict]:
-    """Return pending/running/cancel-requested jobs; all still reserve the writer.
+    """Return pending/running/cancel-requested writer and calculation jobs.
 
     Returns:
         Job snapshots as plain dicts.
@@ -434,27 +472,31 @@ class JobManager:
     """
 
     def __init__(self, max_concurrent: int = 1) -> None:
-        """Create a manager that runs at most ``max_concurrent`` jobs at once.
+        """Create a manager with a writer limit and a separate preview slot.
 
         Args:
-            max_concurrent: maximum number of worker threads allowed to be
-                active simultaneously; further submissions are rejected.
+            max_concurrent: maximum active writer threads in this process.
+                Each database also allows one playlist preview thread.
         """
         self._max = max_concurrent
         self._active: dict[tuple[str, int], tuple[threading.Thread, MusicSeedContext]] = {}
+        self._kinds: dict[tuple[str, int], str] = {}
         self._lock = threading.Lock()
 
-    def submit(self, kind: str, target: Callable[..., None], *args, **kwargs) -> int:
+    def submit(
+        self, kind: str, target: Callable[..., None], *args,
+        request_key: str | None = None, **kwargs,
+    ) -> int:
         """Create a job and run ``target`` for it in a daemon thread.
 
         The target is called as ``target(job_id, *args, **kwargs)`` — the job
         id is always the first positional argument.
 
         Args:
-            kind: job kind (see ``JobKind``); only one active job of any kind
-                is allowed across all processes sharing the database.
+            kind: one writer and one playlist preview may run per database.
             target: blocking callable to run in the worker thread.
             *args (Any): extra positional arguments forwarded to ``target``.
+            request_key: stable client key; retries reuse the original job.
             **kwargs (Any): keyword arguments forwarded to ``target``.
 
         Returns:
@@ -465,12 +507,21 @@ class JobManager:
                 the concurrency pool is full.
         """
         with _configuration_lock, self._lock:
-            if len(self._active) >= self._max:
+            active_writers = sum(kind != JobKind.PLAYLIST_PREVIEW
+                                 for kind in self._kinds.values())
+            if kind != JobKind.PLAYLIST_PREVIEW and active_writers >= self._max:
                 raise JobConflictError("An operation is still running; wait for it to finish.")
             # A deep copy isolates both the config and all legacy callback lookups.
             context = MusicSeedContext(get_context().config.model_copy(deep=True))
-            with use_context(context):
-                job_id = _claim_job(kind, context)
+            try:
+                with use_context(context):
+                    job_id, created = _claim_job(kind, context, request_key)
+            except BaseException:
+                context.engine.dispose()
+                raise
+            if not created:
+                context.engine.dispose()
+                return job_id
             key = (context.config.database.url, job_id)
             thread = threading.Thread(
                 target=self._worker,
@@ -478,12 +529,15 @@ class JobManager:
                 daemon=True,
             )
             self._active[key] = (thread, context)
+            self._kinds[key] = kind
             try:
                 thread.start()
             except Exception:
                 self._active.pop(key, None)
+                self._kinds.pop(key, None)
                 with use_context(context):
                     fail_job(job_id, "Could not start worker thread")
+                context.engine.dispose()
                 raise
             return job_id
 
@@ -538,7 +592,8 @@ class JobManager:
                     if failure is not None:
                         fail_job(job_id, failure)
                     else:
-                        complete_job(job_id, _requested_result.get())
+                        complete_job(job_id, _requested_result.get(),
+                                     result_payload=_requested_payload.get())
             except BaseException as e:
                 if isinstance(e, KeyboardInterrupt) or self.should_cancel(job_id):
                     cancel_job(job_id)
@@ -549,6 +604,7 @@ class JobManager:
                 context.engine.dispose()
                 with self._lock:
                     self._active.pop(key, None)
+                    self._kinds.pop(key, None)
 
 
 # Module-level singleton (lazy, reconciled on first access)

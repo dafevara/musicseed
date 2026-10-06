@@ -430,7 +430,7 @@ so publishing MusicSeed as open source means a new user needs as little as possi
   <line x1="615" y1="75" x2="665" y2="75" stroke="#6ea8fe" stroke-width="1.5" marker-end="url(#a4)"/>
   <rect x="670" y="48" rx="8" width="160" height="54" fill="#1d212b" stroke="#6ea8fe"/>
   <text x="750" y="66" text-anchor="middle" class="box-label">ConstrainedTopK</text>
-  <text x="750" y="82" text-anchor="middle" class="box-sub">shared score_signals · artist cap</text>
+  <text x="750" y="82" text-anchor="middle" class="box-sub">shared score_values · artist cap</text>
   <line x1="830" y1="75" x2="880" y2="75" stroke="#6ea8fe" stroke-width="1.5" marker-end="url(#a4)"/>
   <rect x="885" y="48" rx="8" width="115" height="54" fill="#1d212b" stroke="#b48ead"/>
   <text x="942" y="66" text-anchor="middle" class="box-label">playlist</text>
@@ -440,6 +440,12 @@ so publishing MusicSeed as open source means a new user needs as little as possi
 </svg>
 <figcaption><code>musicseed-cli recommend</code> previews; <code>playlist</code> / <code>populate</code> confirm and apply the exact approved IDs over Plex HTTP, without recomputing. Full retrieval hydrates only seeds and selected tracks. <code>sonic-refresh</code> is a separate, explicitly confirmed remote-analysis mutation.</figcaption>
 </figure>
+<p>Web playlist population uses an in-process background preview job: POST starts the calculation,
+GET polls small status snapshots, and a final GET fetches the persisted recommendations. The UI
+shows a spinner and updates without refreshing. Parameter changes cancel the old calculation
+before starting its replacement; refreshing reconnects from session storage. One preview slot
+per SQLite database can run alongside its import/enrichment writer. No external queue or service
+is required.</p>
 
 <!-- ============================ NEW USER PATH ============================ -->
 <h2>4. What a brand-new user needs (open-source readiness)</h2>

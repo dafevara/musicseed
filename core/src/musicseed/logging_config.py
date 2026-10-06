@@ -10,6 +10,54 @@ from musicseed.config import default_log_dir
 LOG_LEVEL_ENV = "MUSICSEED_LOG_LEVEL"
 
 
+def _restrict_log_file(path: Path) -> None:
+    """Create or tighten a log file to owner-only (0600) before it is written."""
+    try:
+        if path.exists():
+            path.chmod(0o600)
+        else:
+            path.touch(mode=0o600)
+    except OSError:  # pragma: no cover - non-POSIX filesystems
+        pass
+
+
+def _configured_secrets() -> set[str]:
+    """Return the non-empty secret values that must never reach a log line."""
+    from musicseed.config import get_config
+
+    try:
+        cfg = get_config()
+    except Exception:  # pragma: no cover - redaction must never break logging
+        return set()
+    secrets = {
+        cfg.plex.token,
+        cfg.plex.db_ssh_password,
+        cfg.spotify.client_id,
+        cfg.spotify.client_secret,
+        cfg.listenbrainz.token,
+    }
+    return {s for s in secrets if s}
+
+
+class SecretRedactionFilter(logging.Filter):
+    """Replace configured secret values with ``[REDACTED]`` in log messages.
+
+    Attached to the ``musicseed`` logger so any ``musicseed.*`` record that
+    accidentally carries a token, provider secret, or SSH password is scrubbed
+    before it reaches a handler.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        original = record.getMessage()
+        message = original
+        for secret in _configured_secrets():
+            message = message.replace(secret, "[REDACTED]")
+        if message != original:
+            record.msg = message
+            record.args = ()
+        return True
+
+
 def parse_log_level(level: str | int) -> int:
     """Parse a logging level name or numeric value."""
     if isinstance(level, int):
@@ -66,6 +114,11 @@ def setup_logging(
     # Also keep a "latest" symlink/file for convenience
     latest_log = log_dir / "latest.log"
 
+    # Logs may contain library paths and (rarely) secrets; keep them owner-only
+    # from creation rather than tightening them after the first write.
+    _restrict_log_file(log_file)
+    _restrict_log_file(latest_log)
+
     resolved_level = parse_log_level(level)
 
     # Configure root logger for musicseed
@@ -75,6 +128,9 @@ def setup_logging(
 
     # Clear any existing handlers
     logger.handlers.clear()
+
+    # Never let a configured secret reach a log line, whatever the handler.
+    logger.addFilter(SecretRedactionFilter())
 
     if console:
         console_handler = logging.StreamHandler()

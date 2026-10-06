@@ -12,15 +12,17 @@ errors relative to the existing scoring objective, not a reason to introduce ano
 
 `score_eligible_tracks()` reads only scoring columns, stats and tag names in 500-row batches.
 Year eligibility is applied in SQL. All seed/excluded IDs are removed before tags, scores and
-selection budgets. There is no per-source truncation. `score_signals()` is shared with the ORM
-`calculate_score()` adapter, including the same missing-data evidence and popularity precedence.
+selection budgets. There is no per-source truncation. `score_values()` supplies numeric math for
+streaming retrieval and the ORM `calculate_score()` adapter. `explain_score()` attaches the same
+missing-data evidence to retained selections, preserving popularity precedence.
 
 `ConstrainedTopK` retains at most the requested count. When an artist group is full, a better
 candidate replaces that group's worst; otherwise it can replace the global worst. This gives the
 same answer as globally sorting then applying the artist cap, without retaining every scored
 track. Stale heap keys are bounded too. Unknown artists share one cap group, as before.
-Only seeds and final selected tracks load ORM relationships, and services still project their
-DTOs inside the session. Large seed-ID lookups and selected-track hydration use bounded SQL lists.
+Only seeds load ORM scoring metadata. Votes use scalar records; final selected tracks load
+artist/album relationships, and services still project their DTOs inside the session. Large seed-ID
+lookups and selected-track hydration use bounded SQL lists. Unused moods are not eagerly loaded.
 
 ### Observable behavior
 
@@ -111,14 +113,15 @@ recorded before a separate, untimed `tracemalloc` pass. That pass measures trace
 allocations, not every native allocation and not the already-resident vector cache. SQL and ORM
 object counts are also recorded. Do not equate a small traced peak with total process memory.
 
-The selector retains O(limit) scores, plus a scalar/tag batch. The existing cache retains raw and
-normalized vector matrices and ID mappings; seed ORM metadata is also retained. Scoring CPU work
+The selector retains O(limit) scores per profile, plus a shared scalar/tag batch. The cache retains
+raw and normalized vector matrices, ID mappings, and lazily prepared float64 vectors/norms;
+seed ORM metadata is also retained. Scoring CPU work
 scales with eligible tracks and vector dimension. A wider library still costs a full scalar scan;
 without a year index, finding a narrow window also requires SQLite to inspect the wider table.
 
 **Limits:** timings are measurements on the recorded synthetic host, not an SLA or proof for all
-real libraries. Frequency performs one full pass per distinct seed and can be expensive for large
-playlists: prefer the default average mode there. No large-playlist frequency latency guarantee,
+real libraries. Frequency now reads candidate batches once and scores each against every distinct
+seed, so CPU work still scales with candidates times seeds and can be expensive for large playlists: prefer the default average mode there. No large-playlist frequency latency guarantee,
 cold-start guarantee, or musical-superiority claim is made. Re-measure an owner's workload before
 adding caching, vector indexes, or an approximate strategy.
 

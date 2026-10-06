@@ -1,9 +1,12 @@
 """Configuration loading and management."""
 
+import ipaddress
 import os
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import yaml
 from pydantic import BaseModel, Field
@@ -72,6 +75,54 @@ def _expand_env_vars(value: Any) -> Any:
     return value
 
 
+_LOCAL_HOST_SUFFIXES = (
+    ".local", ".lan", ".home", ".home.arpa", ".internal", ".localhost",
+    ".localdomain", ".ts.net",
+)
+
+
+def _ip(host: str):
+    """Parse ``host`` as an IP address, or return None for a hostname."""
+    try:
+        return ipaddress.ip_address(host)
+    except ValueError:
+        return None
+
+
+def _is_local_hostname(host: str) -> bool:
+    """True for a home-network or VPN hostname (mDNS / single-label / known suffixes)."""
+    host = host.lower()
+    if host == "localhost":
+        return True
+    if "." not in host:
+        return True
+    return host.endswith(_LOCAL_HOST_SUFFIXES)
+
+
+def url_is_remote_cleartext(url: str) -> bool:
+    """True when ``url`` is plain ``http://`` to a globally routable host.
+
+    Local, home-LAN, and VPN addresses — loopback, RFC1918 private, link-local,
+    CGNAT/Tailscale (100.64.0.0/10), IPv6 ULA, and ``.local``/``.ts.net``
+    hostnames — keep working over ``http://``. Only a *publicly routable* host
+    is treated as remote, where cleartext would expose the token to the internet.
+    """
+    parsed = urlparse(url)
+    if (parsed.scheme or "").lower() != "http":
+        return False
+    host = (parsed.hostname or "").lower()
+    if not host:
+        return False
+    if _is_local_hostname(host):
+        return False
+    ip = _ip(host)
+    if ip is None:
+        return True  # a non-local hostname is remote by default
+    # ``is_global`` is False for private/loopback/link-local/CGNAT/ULA and True
+    # only for globally routable addresses — exactly the remote case.
+    return ip.is_global
+
+
 class DatabaseConfig(BaseModel):
     path: str = "~/.local/share/musicseed/musicseed.db"
 
@@ -108,6 +159,10 @@ class PlexConfig(BaseModel):
     # and agent instead.
     db_ssh_password: str = ""
     db_ssh_port: int = 22
+    # Opt-in for a plain http:// connection to a remote (non-local) Plex host.
+    # Defaults False so a remote cleartext connection is a deliberate choice;
+    # prefer https:// or a VPN/tunnel instead.
+    allow_cleartext_remote: bool = False
 
     @property
     def db_path_expanded(self) -> Path:
@@ -157,6 +212,30 @@ class RecommendationConfig(BaseModel):
     max_tracks_per_artist: int = 3
 
 
+class SecurityConfig(BaseModel):
+    #: Extra hostnames (beyond loopback and private addresses) allowed to reach
+    #: the API, e.g. a home-network DNS name. Compared lowercased, no port.
+    allowed_hosts: list[str] = Field(default_factory=list)
+    #: Auto-generated CSRF secret. Written owner-only (0600) on first use so the
+    #: browser CSRF token survives restarts. Leave empty; never set by hand.
+    csrf_secret: str = ""
+
+
+class LimitsConfig(BaseModel):
+    #: Maximum request body (form data) the JSON API will accept, in bytes.
+    max_request_body_bytes: int = 1_048_576
+    #: Maximum seed tracks accepted per recommendation/preview request.
+    max_seeds: int = 50
+    #: Maximum approved tracks accepted per playlist create/populate.
+    max_selection_tracks: int = 500
+    #: Maximum matches returned by a single typeahead search.
+    max_search_results: int = 50
+    #: Maximum recommendations returned by a single recommendation/preview call.
+    max_recommendations: int = 200
+    #: Upper bound on the total size of a remote Plex database snapshot, in bytes.
+    max_snapshot_bytes: int = 20 * 1024**3
+
+
 class Config(BaseModel):
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     plex: PlexConfig = Field(default_factory=PlexConfig)
@@ -165,6 +244,8 @@ class Config(BaseModel):
     enrichment: EnrichmentConfig = Field(default_factory=EnrichmentConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     recommendation: RecommendationConfig = Field(default_factory=RecommendationConfig)
+    security: SecurityConfig = Field(default_factory=SecurityConfig)
+    limits: LimitsConfig = Field(default_factory=LimitsConfig)
 
 
 def load_config(config_path: Path | None = None) -> Config:
@@ -264,10 +345,25 @@ def save_config(config: Config, path: Path | None = None) -> Path:
     global _config_path
     target = Path(path) if path is not None else (_config_path or default_config_path())
     target.parent.mkdir(parents=True, exist_ok=True)
-    with open(target, "w") as f:
-        yaml.safe_dump(config.model_dump(), f, sort_keys=False)
+    # Write to an owner-only temp file in the same directory, then atomically
+    # replace the target. ``mkstemp`` creates the temp with mode 0600, so secrets
+    # are never written to a world-readable file; ``os.replace`` means an
+    # interruption cannot leave a half-written configuration behind.
+    fd, tmp_name = tempfile.mkstemp(
+        dir=target.parent, prefix=f".{target.name}.", suffix=".tmp"
+    )
+    tmp_path = Path(tmp_name)
     try:
-        # An existing file keeps its old mode through open(), so tighten it here.
+        with os.fdopen(fd, "w") as f:
+            yaml.safe_dump(config.model_dump(), f, sort_keys=False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, target)
+    except BaseException:
+        tmp_path.unlink(missing_ok=True)
+        raise
+    try:
+        # Belt-and-suspenders on filesystems that ignore the temp mode.
         target.chmod(0o600)
     except OSError:  # pragma: no cover - non-POSIX filesystems
         pass

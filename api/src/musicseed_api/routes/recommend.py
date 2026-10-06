@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Form, Query
+from fastapi import APIRouter, Form, HTTPException, Query
+from musicseed.config import get_config
 from musicseed.recommender.scoring import Weights
 
 from musicseed_api.handlers.recommend import (
@@ -24,7 +25,7 @@ def presets() -> dict[str, dict[str, float]]:
 
 @router.get("/recommend/typeahead")
 def typeahead(
-    q: str = Query(default="", min_length=1),
+    q: str = Query(default="", min_length=1, max_length=200),
     exclude: str = Query(default=""),
 ) -> list[dict]:
     exclude_ids = parse_seed_ids(exclude)
@@ -51,6 +52,17 @@ def recommend(
 ) -> dict:
     """Parse seeds/weights from the form, score, and reshape to the wire contract."""
     ids = parse_seed_ids(seed_ids)
+    limits = get_config().limits
+    if len(ids) > limits.max_seeds:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Too many seed tracks (max {limits.max_seeds}).",
+        )
+    if limit <= 0 or limit > limits.max_recommendations:
+        raise HTTPException(
+            status_code=400,
+            detail=f"limit must be between 1 and {limits.max_recommendations}.",
+        )
     y_min = int(year_min) if year_min.strip() else None
     y_max = int(year_max) if year_max.strip() else None
     ms = float(min_score) if min_score.strip() else None

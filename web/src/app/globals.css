@@ -372,6 +372,23 @@ body {
   margin-top: 0.5rem;
 }
 
+/* An optional, non-failing note (e.g. sonic vectors not imported yet). */
+.discovery-check-note {
+  margin: 0.25rem 0 0.25rem 1.75rem;
+  color: var(--ms-text-muted);
+  font-size: 0.875rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.discovery-check-note p {
+  margin: 0;
+}
+
+.discovery-check-note p + p {
+  margin-top: 0.25rem;
+}
+
 /* ── Badges ─────────────────────────────────── */
 .badge {
   display: inline-block;

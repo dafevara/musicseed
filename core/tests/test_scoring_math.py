@@ -14,8 +14,10 @@ from musicseed.recommender.scoring import (
     jaccard,
     novelty_score,
     popularity_proximity,
+    prepared_sonic_evidence,
+    sonic_comparable,
 )
-from musicseed.sonic import SonicVectors
+from musicseed.sonic import SonicVectors, prepare_vector
 
 
 @pytest.mark.parametrize(
@@ -77,3 +79,46 @@ def test_weight_normalization_matches_independent_weighted_formula():
     assert calculate_score(track, profile, scaled, vectors).total == pytest.approx(expected)
     zero = Weights(**dict.fromkeys(weights.model_dump(), 0))
     assert calculate_score(track, profile, zero, vectors).total == 0
+
+
+@pytest.mark.parametrize(
+    "left,right",
+    [
+        ([1, 0], [1, 0]), ([1, 0], [-1, 0]), ([1, 0], [0, 1]),
+        (None, [1, 0]), ([0, 0], [1, 0]), ([float("nan"), 1], [1, 0]),
+        ([float("inf"), 1], [1, 0]), ([1e308, 1], [1, 0]),
+        ([1e-300, 0], [1, 0]), ([1, 0], [1]), ([], [1]),
+        ([[1, 0]], [1, 0]), (["invalid"], [1]),
+    ],
+)
+def test_prepared_cosine_preserves_score_and_missing_evidence(left, right):
+    assert prepared_sonic_evidence(prepare_vector(left), prepare_vector(right)) == (
+        cosine_similarity(left, right), sonic_comparable(left, right),
+    )
+
+
+def test_prepared_cosine_preserves_float32_scalar_precision():
+    rng = np.random.default_rng(13)
+    for _ in range(100):
+        left, right = rng.normal(size=(2, 50)).astype(np.float32)
+        assert prepared_sonic_evidence(prepare_vector(left), prepare_vector(right)) == (
+            cosine_similarity(left, right), True,
+        )
+
+
+def test_vector_snapshot_reuses_preparation_including_invalid_vectors(monkeypatch):
+    vectors = SonicVectors([1, 2], np.array([[1, 2], [0, 0]], dtype=np.float32))
+    original = np.linalg.norm
+    calls = []
+
+    def norm(*args, **kwargs):
+        calls.append(1)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(np.linalg, "norm", norm)
+    first = vectors.get_prepared(1)
+    for _ in range(10):
+        assert vectors.get_prepared(1) is first
+        assert vectors.get_prepared(2) is None
+        assert vectors.get_prepared(99) is None
+    assert len(calls) == 2

@@ -317,6 +317,7 @@ def _fetch_snapshot(
     helper = Path(__file__).with_name("_plex_snapshot.py").read_text()
     command = shlex.join(["python3", "-c", helper, remote_dir])
     reported: dict[str, int] = {}
+    max_snapshot_bytes = config.limits.max_snapshot_bytes
 
     def emit(done: int, total: int, phase: str) -> None:
         """Report whole-percent steps only; one job update per percent, at most."""
@@ -365,10 +366,32 @@ def _fetch_snapshot(
         reader.start()
         try:
             seen: set[str] = set()
+            total_seen = 0
             with tarfile.open(fileobj=stdout, mode="r|") as archive:
                 for member in archive:
                     if member.name not in _DB_NAMES or not member.isfile() or member.name in seen:
                         raise NotFoundError("Unexpected file in remote Plex snapshot")
+                    # Bound the transfer before streaming: a snapshot larger than
+                    # the configured limit (or larger than the free space on the
+                    # destination) is refused before bytes are pulled down.
+                    if member.size > max_snapshot_bytes:
+                        raise NotFoundError(
+                            "Remote Plex snapshot is larger than the configured limit "
+                            f"({member.size:,} bytes > {max_snapshot_bytes:,}). "
+                            "Raise limits.max_snapshot_bytes to allow it."
+                        )
+                    total_seen += member.size
+                    if total_seen > max_snapshot_bytes:
+                        raise NotFoundError(
+                            "Remote Plex snapshot exceeds the configured size limit "
+                            f"({total_seen:,} bytes > {max_snapshot_bytes:,})."
+                        )
+                    free = shutil.disk_usage(dest_dir).free
+                    if free < member.size:
+                        raise NotFoundError(
+                            "Not enough free disk space for the Plex snapshot "
+                            f"(need {member.size:,} bytes, have {free:,})."
+                        )
                     seen.add(member.name)
                     phase = _DOWNLOAD_PHASES[member.name]
                     emit(0, member.size, phase)

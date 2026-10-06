@@ -62,6 +62,7 @@ JSON. Handlers are the reusable part — routes are the HTTP-specific projection
 | `handlers/sonic.run_sonic_import_job` | `services.jobs.update_progress` → `services.sonic_vectors.import_plex_sonic` |
 | `handlers/jobs.submit_job` | `services.jobs.get_manager` → `JobManager.submit` |
 | `handlers/jobs.get_job_progress` | `services.jobs.get_job` |
+| `handlers/playlists.start_preview_job` / `get_preview_job_result` | `services.preview_jobs.start_preview` / `get_preview_result` |
 | `handlers/jobs.cancel_job` | `services.jobs.get_manager` → `JobManager.request_cancel` |
 | `handlers/jobs.delete_job` | `services.jobs.get_job` → `services.jobs.delete_job` |
 
@@ -121,6 +122,9 @@ JSON. Handlers are the reusable part — routes are the HTTP-specific projection
   runs them in daemon threads with a captured context. Do not replace config inside a worker.
   One persisted writer claim is shared by API and CLI imports/enrichment, including pending and
   cancel-requested jobs. Terminal target results are published only after the target returns.
+  Background playlist previews have a separate claim, one per database. POST
+  `/playlists/{playlist_id}/preview-jobs` returns 202 with a job ID; status uses `/jobs/{job_id}`
+  and the completed payload uses GET `/playlists/preview-jobs/{job_id}/result`.
 - **Route prefixes are applied by the consumer.** API routes have no URL prefix. `create_ui_app()`
   mounts them at `/api`; `next dev` still rewrites `/api/*` to the unprefixed server. Do not add
   a prefix to route modules.

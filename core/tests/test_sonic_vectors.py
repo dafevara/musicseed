@@ -1,12 +1,28 @@
 """The sonic-vector import persists Plex vectors locally (MUS-83)."""
 
+import gzip
+
 import numpy as np
 from musicseed.config import Config
 from musicseed.context import MusicSeedContext
 from musicseed.db.models import TrackVector
 from musicseed.db.session import init_db
 from musicseed.services import sonic_vectors as svc
-from musicseed.sonic import SonicVectors
+from musicseed.sonic import MAX_SONIC_BLOB_BYTES, SonicVectors, decode_sonic_blob
+
+
+def test_decode_sonic_blob_decodes_a_valid_vector():
+    vector = [0.5] * 50
+    blob = gzip.compress(",".join(str(v) for v in vector).encode("ascii"))
+    assert decode_sonic_blob(blob) == vector
+
+
+def test_decode_sonic_blob_rejects_a_zip_bomb():
+    # A tiny gzip payload that would expand far past the cap must not allocate.
+    payload = b"0.1," * 1_000_000  # ~4 MB uncompressed, ~KBs compressed
+    bomb = gzip.compress(payload)
+    assert len(bomb) < MAX_SONIC_BLOB_BYTES
+    assert decode_sonic_blob(bomb) is None
 
 
 def _context_for(tmp_path) -> MusicSeedContext:

@@ -55,6 +55,40 @@ def test_main_help_exits_zero(monkeypatch):
         raise AssertionError("expected --help to SystemExit")
 
 
+def test_main_default_binds_loopback(monkeypatch):
+    import sys
+
+    from musicseed_api import server
+
+    captured: dict = {}
+
+    def fake_serve(host, port, on_started=None, *, serve_ui=True):
+        captured["host"] = host
+
+    monkeypatch.setattr(server, "serve", fake_serve)
+    monkeypatch.setattr(sys, "argv", ["musicseed"])
+    server.main()
+    assert captured["host"] == "127.0.0.1"
+
+
+def test_main_lan_flag_binds_all_interfaces(monkeypatch):
+    import sys
+
+    from musicseed_api import server
+
+    captured: dict = {}
+
+    def fake_serve(host, port, on_started=None, *, serve_ui=True):
+        captured["host"] = host
+        captured["port"] = port
+
+    monkeypatch.setattr(server, "serve", fake_serve)
+    monkeypatch.setattr(sys, "argv", ["musicseed", "--lan", "--port", "9000"])
+    server.main()
+    assert captured["host"] == "0.0.0.0"
+    assert captured["port"] == 9000
+
+
 def test_resolve_static_dir_honors_env(tmp_path: Path, monkeypatch):
     (tmp_path / "index.html").write_text("ok")
     monkeypatch.setenv("MUSICSEED_STATIC_DIR", str(tmp_path))

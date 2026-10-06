@@ -12,6 +12,7 @@ from musicseed.services.populate import (
     list_plex_playlists,
     populate_playlist,
 )
+from musicseed.services.preview_jobs import get_preview_result, start_preview
 from musicseed.services.recommend import PlaylistCreateResult, create_playlist
 
 
@@ -107,13 +108,28 @@ def preview_populate(
         year_max=year_max,
         max_tracks_per_artist=max_tracks_per_artist,
     )
+    return _preview_response(result, method, weights or Weights())
+
+
+def start_preview_job(playlist_id: str, *, request_id: str, **options) -> dict:
+    """Start or reconnect to a background playlist preview."""
+    return {"job_id": start_preview(playlist_id, request_id=request_id, **options)}
+
+
+def get_preview_job_result(job_id: int) -> dict:
+    """Project a completed preview into the same JSON shape as synchronous previews."""
+    result = get_preview_result(job_id)
+    return _preview_response(result, result.method, result.weights)
+
+
+def _preview_response(result: PopulateResult, method: PopulateMethod, weights: Weights) -> dict:
     return {
         "playlist_id": result.playlist_id,
         "playlist_name": result.playlist_name,
         "method": method,
         "playlist_track_count": result.playlist_track_count,
         "matched_track_count": result.matched_track_count,
-        "weights": (weights or Weights()).model_dump(),
+        "weights": weights.model_dump(),
         "recommendations": [
             {
                 "track_id": r.track.id,

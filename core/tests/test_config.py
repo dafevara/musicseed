@@ -13,12 +13,34 @@ from musicseed.config import (
     reload_config,
     save_config,
     set_config,
+    url_is_remote_cleartext,
 )
 
 
 def _reset_globals() -> None:
     config_module._config = None
     config_module._config_path = None
+
+
+def test_url_is_remote_cleartext() -> None:
+    # Local and home-LAN HTTP stay supported.
+    assert not url_is_remote_cleartext("http://localhost:32400")
+    assert not url_is_remote_cleartext("http://127.0.0.1:32400")
+    assert not url_is_remote_cleartext("http://192.168.1.5:32400")
+    assert not url_is_remote_cleartext("http://nas.lan:32400")
+    assert not url_is_remote_cleartext("http://plex.local:32400")
+    # VPN / CGNAT / Tailscale and link-local addresses are local, not public.
+    assert not url_is_remote_cleartext("http://100.73.64.125:32400")
+    assert not url_is_remote_cleartext("http://100.100.100.100:32400")
+    assert not url_is_remote_cleartext("http://myhost.ts.net:32400")
+    assert not url_is_remote_cleartext("http://plex.home.arpa:32400")
+    assert not url_is_remote_cleartext("http://169.254.1.1:32400")
+    assert not url_is_remote_cleartext("http://10.8.0.2:32400")
+    # https:// to any host keeps certificate verification; not cleartext.
+    assert not url_is_remote_cleartext("https://plex.example.com")
+    # Plain http:// to a publicly routable host is cleartext.
+    assert url_is_remote_cleartext("http://plex.example.com")
+    assert url_is_remote_cleartext("http://8.8.8.8:32400")
 
 
 def test_save_config_round_trips_values(tmp_path) -> None:
@@ -77,6 +99,14 @@ def test_save_config_is_owner_only(tmp_path) -> None:
     path.chmod(0o644)
     save_config(Config(), path)
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+
+def test_save_config_is_atomic_without_temp_leftovers(tmp_path) -> None:
+    path = tmp_path / "config.yaml"
+    save_config(Config(), path)
+    # Atomic replace writes a same-directory temp then moves it into place.
+    assert list(tmp_path.glob("*.tmp")) == []
+    assert path.is_file()
 
 
 def test_reload_config_rereads_the_same_file(tmp_path) -> None:

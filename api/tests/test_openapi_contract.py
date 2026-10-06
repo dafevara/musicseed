@@ -24,6 +24,8 @@ EXPECTED_OPERATIONS = {
     ("get", "/playlists"),
     ("post", "/playlists/create"),
     ("get", "/playlists/{playlist_id}/preview"),
+    ("post", "/playlists/{playlist_id}/preview-jobs"),
+    ("get", "/playlists/preview-jobs/{job_id}/result"),
     ("post", "/playlists/{playlist_id}/populate"),
     ("post", "/recommend"),
     ("get", "/recommend/presets"),

@@ -129,7 +129,7 @@ Recovery:
 3. If you change the API port under `dev.sh`, point the web proxy at it with
    `API_URL=http://127.0.0.1:<new>`.
 
-## Interrupted jobs (import / enrichment)
+## Interrupted jobs (import / enrichment / playlist preview)
 
 Symptom: the dashboard shows a failed/interrupted job, or a long job stopped partway (Ctrl-C,
 crash, or machine sleep).
@@ -141,14 +141,21 @@ Recovery:
   complete re-import.
 - **Enrichment** marks attempted tracks, so re-running with resume
   (`musicseed-cli enrich --source listenbrainz --resume`) skips already-attempted tracks.
+- **Playlist preview** shows a spinner while calculating and displays results without a refresh.
+  A page refresh reconnects to the same calculation. If the API restarts during work, use
+  **Retry calculation**; unfinished calculations restart from the beginning and do not change
+  Plex playlists. Completed preview results survive API restarts until their job is deleted.
 - **Cancel vs. delete.** Cancellation is cooperative and keeps the writer reserved until the
   target returns. Already-committed batches remain; active/cancel-requested rows cannot be deleted.
   Settings changes and new imports are rejected while that writer is active.
-- **Restart recovery.** On job-system startup/submission, pending/running/cancel-requested jobs
+- **Restart recovery.** On job-system startup/submission or a status poll, pending/running/cancel-requested jobs
   owned by dead processes become interrupted. Live owners are never forcibly displaced. The
   liveness check is PID-based and conservative. If a stale PID has been reused, do not kill an
   unrelated process to clear the claim; stop MusicSeed and inspect the job record before manual
   repair.
+- **Calculation cancellation** reserves its separate preview slot until the worker returns.
+  The UI waits before submitting replacement parameters; imports can still use the writer slot.
+  Settings changes wait for both kinds of active jobs.
 - **Import provenance.** Completion belongs to the source and library, not a successful job row.
   Deleting history cannot make setup incomplete again. Older installations without provenance
   should run an incremental import once; unknown coverage is not a verified complete import.

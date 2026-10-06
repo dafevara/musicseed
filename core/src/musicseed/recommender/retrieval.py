@@ -4,22 +4,28 @@ from __future__ import annotations
 
 import heapq
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Generic, Sequence, TypeVar
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from musicseed.db.models import Genre, Style, Track, TrackGenre, TrackStats, TrackStyle
+from musicseed.exceptions import CalculationCanceledError
 from musicseed.recommender.scoring import (
     ScoreBreakdown,
+    ScoreValues,
     SeedProfile,
     SonicCoverage,
     Weights,
-    has_usable_vector,
+    explain_score,
     popularity_value,
-    score_signals,
+    prepared_sonic_evidence,
+    score_values,
+    weight_sum,
 )
-from musicseed.sonic import SonicVectors
+from musicseed.sonic import SonicVectors, prepare_vector
 
 FEATURE_BATCH_SIZE = 500  # Also stays below older SQLite's 999 bind-variable limit.
 
@@ -39,7 +45,31 @@ class ScoredTrack:
         return self.score.total, self.votes, -self.id
 
 
-class ConstrainedTopK:
+@dataclass(frozen=True, slots=True)
+class _CandidateFacts:
+    styles: set[str]
+    genres: set[str]
+    popularity: float | None
+    year: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class _ScoredCandidate:
+    id: int
+    artist_id: int | None
+    score: ScoreValues
+    facts: _CandidateFacts
+    sonic_observed: bool
+
+    @property
+    def rank(self) -> tuple[float, int, int]:
+        return self.score.total, 0, -self.id
+
+
+Record = TypeVar("Record", ScoredTrack, _ScoredCandidate)
+
+
+class ConstrainedTopK(Generic[Record]):
     """Exact streaming top-k under a per-artist cap, with O(limit) retained scores.
 
     An incoming track displaces the worst from its artist if that group is full;
@@ -54,11 +84,11 @@ class ConstrainedTopK:
             raise ValueError("limit and artist_max must be greater than zero")
         self.limit = limit
         self.artist_max = artist_max
-        self.selected: dict[int, ScoredTrack] = {}
+        self.selected: dict[int, Record] = {}
         self.by_artist: dict[int | None, set[int]] = defaultdict(set)
         self.heap: list[tuple[tuple[float, int, int], int]] = []
 
-    def add(self, record: ScoredTrack) -> None:
+    def add(self, record: Record) -> None:
         """Consider one distinct candidate; evicted score objects are not retained."""
         group = self.by_artist.get(record.artist_id, set())
         victim = None
@@ -86,7 +116,7 @@ class ConstrainedTopK:
             self.heap = [(r.rank, r.id) for r in self.selected.values()]
             heapq.heapify(self.heap)
 
-    def results(self) -> list[ScoredTrack]:
+    def results(self) -> list[Record]:
         """Return the exact selected set in deterministic descending rank order."""
         return sorted(self.selected.values(), key=lambda r: r.rank, reverse=True)
 
@@ -103,17 +133,48 @@ def score_eligible_tracks(
     max_tracks_per_artist: int = 3,
     min_score: float | None = None,
     exclude_ids: set[int] | None = None,
+    on_progress: Callable[[int, int], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> tuple[list[ScoredTrack], SonicCoverage]:
-    """Filter years, exclude all seeds, score scalar batches and retain exact top-k.
+    """Score one profile using the shared batched candidate scan."""
+    selections, coverage = score_eligible_profiles(
+        session, [seed], vectors, limit=limit, weights=weights,
+        year_min=year_min, year_max=year_max,
+        max_tracks_per_artist=max_tracks_per_artist, min_score=min_score,
+        exclude_ids=exclude_ids, on_progress=on_progress, should_cancel=should_cancel,
+    )
+    return selections[0], coverage
 
-    No candidate budget truncates eligibility. SQL reads only scoring columns,
-    stats and tag names. Seeds are excluded before tags/scoring/selection, using
-    membership rather than an unbounded SQL IN list. The caller materializes
-    only the final selected tracks. No artist/album/mood/history graphs are read.
+
+def score_eligible_profiles(
+    session: Session,
+    seeds: Sequence[SeedProfile],
+    vectors: SonicVectors,
+    *,
+    limit: int,
+    weights: Weights,
+    year_min: int | None = None,
+    year_max: int | None = None,
+    max_tracks_per_artist: int = 3,
+    min_score: float | None = None,
+    exclude_ids: set[int] | None = None,
+    on_progress: Callable[[int, int], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
+) -> tuple[list[list[ScoredTrack]], SonicCoverage]:
+    """Read each candidate batch once and retain exact top-k for every profile.
+
+    All profile seeds are excluded before tag reads and per-profile selection.
+    Memory retains one metadata/tag batch and at most limit scores per profile.
     """
-    selected = ConstrainedTopK(limit, max_tracks_per_artist)
-    # Seeds are excluded by set membership, not an unbounded SQL IN list.
-    excluded = seed.track_ids | (exclude_ids or set())
+    profiles = [
+        (seed, prepare_vector(seed.embedding),
+         ConstrainedTopK[_ScoredCandidate](limit, max_tracks_per_artist))
+        for seed in seeds
+    ]
+    if not profiles:
+        return [], SonicCoverage(candidates=0, with_vector=0)
+    total_weight = weight_sum(weights)
+    excluded = set(exclude_ids or set()).union(*(seed.track_ids for seed in seeds))
     query = (
         select(
             Track.id,
@@ -131,12 +192,22 @@ def score_eligible_tracks(
         query = query.where(Track.year >= year_min)
     if year_max is not None:
         query = query.where(Track.year <= year_max)
+    total = processed = 0
+    if on_progress:
+        count_query = query.with_only_columns(func.count(Track.id)).order_by(None)
+        total = session.execute(count_query).scalar_one()
+        on_progress(0, total)
     count = with_vector = 0
     for batch in session.execute(
         query.execution_options(yield_per=FEATURE_BATCH_SIZE)
     ).partitions():
+        if should_cancel and should_cancel():
+            raise CalculationCanceledError("Calculation canceled.")
+        processed += len(batch)
         rows = [row for row in batch if row.id not in excluded]
         if not rows:
+            if on_progress:
+                on_progress(processed, total)
             continue
         ids = [row.id for row in rows]
         # Fetch tag names for the whole batch in two joins, then map them back per track.
@@ -152,20 +223,53 @@ def score_eligible_tracks(
             genres[track_id].add(name)
         for row in rows:
             # Score from scalar facts; the top-k keeps only the best under the artist cap.
-            vector = vectors.get(row.plex_id)
+            vector = vectors.get_prepared(row.plex_id)
             count += 1
-            with_vector += has_usable_vector(vector)
+            with_vector += vector is not None
             popularity = popularity_value(row.popularity_score, row.spotify_popularity)
-            score = score_signals(
-                candidate_styles=styles[row.id],
-                candidate_genres=genres[row.id],
-                play_count=row.play_count,
-                candidate_vector=vector,
-                candidate_popularity=popularity,
-                candidate_year=row.year,
-                seed=seed,
-                weights=weights,
+            track_id, artist_id, year, play_count = (
+                row.id, row.artist_id, row.year, row.play_count,
             )
-            if min_score is None or score.total >= min_score:
-                selected.add(ScoredTrack(row.id, row.artist_id, score))
-    return selected.results(), SonicCoverage(candidates=count, with_vector=with_vector)
+            candidate_styles, candidate_genres = styles[track_id], genres[track_id]
+            facts = _CandidateFacts(candidate_styles, candidate_genres, popularity, year)
+            for seed, seed_vector, selected in profiles:
+                sonic_evidence = prepared_sonic_evidence(vector, seed_vector)
+                score = score_values(
+                    candidate_styles=candidate_styles,
+                    candidate_genres=candidate_genres,
+                    play_count=play_count,
+                    candidate_vector=None,
+                    candidate_popularity=popularity,
+                    candidate_year=year,
+                    seed=seed,
+                    weights=weights,
+                    sonic_evidence=sonic_evidence,
+                    total_weight=total_weight,
+                )
+                if min_score is None or score.total >= min_score:
+                    selected.add(
+                        _ScoredCandidate(track_id, artist_id, score, facts, sonic_evidence[1]),
+                    )
+        if on_progress:
+            on_progress(processed, total)
+    if should_cancel and should_cancel():
+        raise CalculationCanceledError("Calculation canceled.")
+    return (
+        [
+            [
+                ScoredTrack(
+                    record.id, record.artist_id,
+                    explain_score(
+                        record.score, seed=seed,
+                        candidate_styles=record.facts.styles, candidate_genres=record.facts.genres,
+                        candidate_popularity=record.facts.popularity,
+                        candidate_year=record.facts.year,
+                        sonic_observed=record.sonic_observed,
+                    ),
+                )
+                for record in selected.results()
+            ]
+            for seed, _, selected in profiles
+        ],
+        SonicCoverage(candidates=count, with_vector=with_vector),
+    )

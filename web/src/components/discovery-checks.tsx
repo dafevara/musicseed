@@ -1,6 +1,31 @@
 import type { DiscoveryResult } from "@/lib/types";
 
-function StatusIcon({ ok }: { ok: boolean }) {
+type CheckState = "ok" | "problem" | "info";
+
+function StatusIcon({ state }: { state: CheckState }) {
+  if (state === "info") {
+    // A neutral note, not a pass/fail: optional work that can happen later.
+    return (
+      <>
+        <svg
+          className="discovery-check-icon text-[var(--muted)]"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 11.5v4.5" />
+          <path d="M12 7.75h.01" />
+        </svg>
+        <span className="sr-only">Note: </span>
+      </>
+    );
+  }
+  const ok = state === "ok";
   return (
     <>
       <svg
@@ -22,33 +47,49 @@ function StatusIcon({ ok }: { ok: boolean }) {
 
 function CheckRow({
   label,
-  ok,
+  state,
   detail,
   guidance,
 }: {
   label: string;
-  ok: boolean;
+  state: CheckState;
   detail?: string | null;
   guidance: string;
 }) {
-  const heading = <><StatusIcon ok={ok} /><strong>{label}</strong></>;
+  const heading = (<><StatusIcon state={state} /><strong>{label}</strong></>);
+
+  if (state === "ok") {
+    return (
+      <li>
+        <div className="discovery-check-heading">{heading}</div>
+      </li>
+    );
+  }
+
+  if (state === "info") {
+    return (
+      <li>
+        <div className="discovery-check-heading">{heading}</div>
+        <div className="discovery-check-note">
+          {detail && <p>{detail}</p>}
+          {guidance && <p>{guidance}</p>}
+        </div>
+      </li>
+    );
+  }
 
   return (
     <li>
-      {ok ? (
-        <div className="discovery-check-heading">{heading}</div>
-      ) : (
-        <details className="discovery-check-failed">
-          <summary className="discovery-check-heading">
-            {heading}
-            <span className="sr-only"> — show error details</span>
-          </summary>
-          <div className="discovery-check-explanation">
-            {detail && <p>{detail}</p>}
-            {guidance !== detail && <p>{guidance}</p>}
-          </div>
-        </details>
-      )}
+      <details className="discovery-check-failed">
+        <summary className="discovery-check-heading">
+          {heading}
+          <span className="sr-only"> — show error details</span>
+        </summary>
+        <div className="discovery-check-explanation">
+          {detail && <p>{detail}</p>}
+          {guidance !== detail && <p>{guidance}</p>}
+        </div>
+      </details>
     </li>
   );
 }
@@ -92,6 +133,7 @@ export function DiscoveryChecks({
 }) {
   const { musicseed_db, plex_library_db, plex_blobs_db, sonic_vectors, plex_server } = result;
   const dbOk = musicseed_db.reason === "ok" || musicseed_db.reason === "parent_missing";
+  const sonicCount = sonic_vectors.imported_count;
 
   return (
     <section className="panel">
@@ -104,30 +146,35 @@ export function DiscoveryChecks({
       <ul className="list-none m-0 p-0 grid gap-2.5">
         <CheckRow
           label="MusicSeed database"
-          ok={dbOk}
+          state={dbOk ? "ok" : "problem"}
           detail={musicseed_db.detail}
           guidance="Fix the permissions or choose a different location in Settings."
         />
         <CheckRow
           label="Plex library database"
-          ok={plex_library_db.ok}
+          state={plex_library_db.ok ? "ok" : "problem"}
           detail={plex_library_db.detail || plex_library_db.candidates[0]?.detail}
           guidance={dbGuidance(plex_library_db.candidates[0]?.reason || plex_library_db.reason)}
         />
         <CheckRow
           label="Plex blobs database"
-          ok={plex_blobs_db.ok}
+          state={plex_blobs_db.ok ? "ok" : "problem"}
           detail={plex_blobs_db.detail || plex_blobs_db.candidates[0]?.detail}
           guidance={`${dbGuidance(plex_blobs_db.candidates[0]?.reason || plex_blobs_db.reason)} Sonic vectors are imported into MusicSeed's local store, so the blobs database is only needed when importing them. It normally sits next to the library database with a .blobs.db suffix.`}
         />
         <CheckRow
-          label="Sonic vectors (local)"
-          ok={sonic_vectors.imported_count > 0}
-          guidance="No Plex sonic vectors have been imported. In Library → Coverage → Sonic vectors (local), choose Import vectors to enable the sonic similarity signal in recommendations."
+          label={
+            sonicCount > 0
+              ? `Sonic vectors (local) — ${sonicCount.toLocaleString()} imported`
+              : "Sonic vectors (local)"
+          }
+          // Optional, not a failure: nothing is imported on a first run.
+          state={sonicCount > 0 ? "ok" : "info"}
+          guidance="Sonic vectors can be imported later from Library → Coverage; recommendations work without them."
         />
         <CheckRow
           label="Plex server"
-          ok={plex_server.ok}
+          state={plex_server.ok ? "ok" : "problem"}
           detail={plex_server.detail}
           guidance={plexGuidance(plex_server.reason)}
         />

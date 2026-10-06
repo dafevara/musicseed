@@ -3,11 +3,11 @@
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, selectinload
 
-from musicseed.clients.plex import Playlist, PlexAPIError, PlexClient
+from musicseed.clients.plex import Playlist, PlexAPIError
 from musicseed.context import MusicSeedContext, get_context
 from musicseed.db.models import Track
 from musicseed.exceptions import ConfigurationError, NotFoundError
-from musicseed.services.plex_link import require_plex_token
+from musicseed.services.plex_link import plex_client
 from musicseed.services.schemas import ServiceTrack, to_service_track
 
 
@@ -53,11 +53,10 @@ def create_playlist_from_tracks(
     name = name.strip()
     if not name or not track_ids:
         raise ConfigurationError("A playlist name and approved tracks are required.")
-    token = require_plex_token(ctx.config)
     # Validate every id (and map to Plex) before any write; a stale id rejects the whole selection.
     with ctx.session() as session:
         tracks = resolve_track_selection(session, track_ids)
-    client = PlexClient(base_url=ctx.config.plex.url, token=token)
+    client = plex_client(ctx.config)
     target_plex_ids = [t.plex_id for t in tracks]
     # Reuse-or-conflict: only an exact match is safe to treat as already created.
     existing = client.find_playlist(name)

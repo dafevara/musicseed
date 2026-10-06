@@ -88,6 +88,9 @@ Service entry points:
   without recommending again; validates the entire selection before any Plex write.
 - `services/populate.py`: `list_plex_playlists`, `get_populate_recommendations`,
   `populate_playlist` — keyed by Plex playlist `rating_key`, not title.
+- `services/preview_jobs.py`: `start_preview`, `get_preview_result` — background playlist
+  previews with idempotent submission, scan progress, cooperative cancellation, and persisted
+  JSON results. Both average and frequency use the existing synchronous scoring pipeline.
 - `services/plex_analysis.py`: `get_sonic_status`, `probe_sonic_trigger`,
   `probe_butler_trigger`, `refresh_album`, `refresh_sonic_analysis` — inspect Plex sonic
   analysis coverage over the HTTP API (`musicAnalysisVersion`) and trigger it on demand via
@@ -102,6 +105,8 @@ Service entry points:
   `use_context` so work, callbacks, cancellation and job writes cannot switch databases.
   `pending`, `running`, and `cancel_requested` all reserve the writer. Dead-owner rows become
   `interrupted`; terminal results from targets are deferred until the target returns.
+  Playlist preview jobs reserve a separate slot (one per database), permitting one calculation
+  alongside a writer. Completed result payloads are deferred ORM fields, excluded from polling.
 - `services/import_state.py`: source/library-specific completion and phase checkpoints,
   independent of deletable job history. Matching aggregate counts alone do not verify an import.
 
@@ -163,11 +168,13 @@ Service entry points:
   (used only by `import_plex_sonic`); `sonic_vectors_from_mapping` rebuilds the in-memory
   L2-normalized `SonicVectors` matrix (keyed by `plex_id`) from the local `track_vectors` table.
   `get_sonic_vectors()` / `reset_sonic_vectors()` are thin wrappers over the default context.
-- `recommender/`: `scoring.py` (`Weights`, `ScoreBreakdown`, `SeedProfile`, shared `score_signals`
-  and ORM adapter `calculate_score`); `retrieval.py` (`score_eligible_tracks`, `ConstrainedTopK`)
+- `recommender/`: `scoring.py` (`Weights`, `ScoreBreakdown`, `SeedProfile`, shared `score_values`,
+  deferred `explain_score`, `score_signals` and ORM adapter `calculate_score`);
+  `retrieval.py` (`score_eligible_tracks`, `score_eligible_profiles`, `ConstrainedTopK`)
   streams eligible scalar facts and retains exact constrained top-k scores. `playlist.py`
   (`Recommendation`, `recommend_tracks`, `recommend_from_profile`, `resolve_seed_tracks`) loads
-  ORM graphs only for seeds/selected tracks; ID lookup lists are bounded. `populate.py`
+  ORM scoring metadata for seeds and artist/album relationships for final selections only;
+  ID lookup lists are bounded. `populate.py`
   (`PopulateMethod = "average" | "frequency"`, `populate_playlist_recommendations`) reuses this
   pipeline. `candidates.py` / `build_candidate_pool` is an offline historical reference, not a
   production fallback. See `docs/resolvers/retrieval-decision.md` for measurements and limits.
@@ -190,8 +197,8 @@ Service entry points:
 - **Retrieval is exact and deterministic.** Score all year-eligible non-seeds; no source budgets.
   Retain artist-constrained top-k using score, frequency vote count where relevant, then local ID.
   Normal/average sources say `eligible`; sonic coverage covers all eligible candidates before
-  score/artist constraints. Frequency excludes the whole playlist before voting and scans once
-  per distinct seed, so prefer average for large playlists. Component math is shared and unchanged.
+  score/artist constraints. Frequency excludes the whole playlist before voting, reads candidate batches once,
+  and scores each candidate against every distinct seed, so prefer average for large playlists. Component math is shared and unchanged.
 - **Recommendation signals are exactly six**: sonic, popularity, style, genre, era, novelty. There
   is no "mood" signal (it was removed). `Weights`/`ScoreBreakdown` are frozen Pydantic models.
 - **`rich` is a real core dependency** — the import/enrich pipelines render progress with it.

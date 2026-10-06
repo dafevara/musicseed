@@ -24,6 +24,10 @@ plex:
   # Omit to auto-detect (macOS + Linux Plex data dirs). Override if discovery misses.
   db_path: >-
     ~/Library/Application Support/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db
+  # A plain http:// connection to a *remote* (non-local) Plex host sends the token
+  # in cleartext, so it is refused unless this is set to true. Prefer https:// or a
+  # VPN/tunnel. Local and home-LAN http:// keep working without this flag.
+  allow_cleartext_remote: false
 
 # Optional. Leave empty (or omit) if you only use ListenBrainz enrichment.
 spotify:
@@ -56,3 +60,20 @@ recommendation:
     genre: 0.15
     era: 0.05
     novelty: 0.10
+
+# Browser protections for the local API. Loopback and private (home-LAN)
+# addresses are always allowed; add a home-network DNS name here if you use
+# one. ``csrf_secret`` is generated automatically on first use — leave empty.
+security:
+  allowed_hosts: []
+  csrf_secret: ""
+
+# Bounds on expensive work. Raise these deliberately for very large libraries;
+# they keep a single request from forcing unbounded memory, CPU, or disk use.
+limits:
+  max_request_body_bytes: 1048576
+  max_seeds: 50
+  max_selection_tracks: 500
+  max_search_results: 50
+  max_recommendations: 200
+  max_snapshot_bytes: 21474836480

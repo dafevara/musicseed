@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Callable
 from typing import Literal, Sequence
 
 from pydantic import BaseModel
@@ -14,6 +15,7 @@ from musicseed.recommender.retrieval import (
     FEATURE_BATCH_SIZE,
     ConstrainedTopK,
     ScoredTrack,
+    score_eligible_profiles,
     score_eligible_tracks,
 )
 from musicseed.recommender.scoring import (
@@ -67,7 +69,6 @@ def _track_load_options():
     return (
         selectinload(Track.artist),
         selectinload(Track.album),
-        selectinload(Track.moods),
         selectinload(Track.styles),
         selectinload(Track.genres),
         selectinload(Track.stats),
@@ -186,6 +187,8 @@ def recommend_from_profile(
     max_tracks_per_artist: int = 3,
     min_score: float | None = None,
     exclude_ids: set[int] | None = None,
+    on_progress: Callable[[int, int], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> tuple[list[Recommendation], SonicCoverage]:
     """Score eligible scalar facts and materialize only the selected ORM tracks."""
     selected, coverage = score_eligible_tracks(
@@ -198,8 +201,23 @@ def recommend_from_profile(
         year_max=year_max,
         max_tracks_per_artist=max_tracks_per_artist,
         min_score=min_score,
-        exclude_ids=exclude_ids,
+        exclude_ids=exclude_ids, on_progress=on_progress, should_cancel=should_cancel,
     )
+    return _materialize_recommendations(session, selected), coverage
+
+
+def _materialize_recommendations(
+    session: Session, selected: Sequence[ScoredTrack],
+) -> list[Recommendation]:
+    tracks = _load_selected_tracks(session, selected)
+    return [
+        Recommendation(track=tracks[r.id], score=r.score, sources=["eligible"]) for r in selected
+    ]
+
+
+def _load_selected_tracks(
+    session: Session, selected: Sequence[ScoredTrack],
+) -> dict[int, Track]:
     # Scalar scan done; now materialize full ORM graphs only for the selected ids.
     ids = [record.id for record in selected]
     tracks: dict[int, Track] = {}
@@ -207,13 +225,11 @@ def recommend_from_profile(
         tracks.update(
             (track.id, track)
             for track in session.query(Track)
-            .options(*_track_load_options())
+            .options(selectinload(Track.artist), selectinload(Track.album))
             .filter(Track.id.in_(ids[start : start + FEATURE_BATCH_SIZE]))
             .all()
         )
-    return [
-        Recommendation(track=tracks[r.id], score=r.score, sources=["eligible"]) for r in selected
-    ], coverage
+    return tracks
 
 
 def recommend_frequency(
@@ -229,13 +245,15 @@ def recommend_frequency(
     min_score: float | None = None,
     vectors: SonicVectors,
     exclude_ids: set[int] | None = None,
+    on_progress: Callable[[int, int], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> tuple[list[Recommendation], SonicCoverage]:
     """Recommend tracks voted for by multiple individual seed tracks.
 
     Each seed is used as its own single-track profile to score all eligible
     candidates; every seed (and any ``exclude_ids``) is excluded up front, and
-    one vector-cache snapshot is reused across seeds. This costs one scalar
-    scan per seed; prefer average mode for large seed sets. A candidate's
+    one vector-cache snapshot is reused across seeds. Candidate batches are read once
+    and scored against every seed; prefer average mode for large seed sets. A candidate's
     score is the average of its per-seed scores across every seed that
     recommended it (its "votes"); results are ranked by that average score,
     with vote count as a tiebreaker, so ``limit`` cuts at the highest-scoring
@@ -252,55 +270,52 @@ def recommend_frequency(
         max_tracks_per_artist: artist diversity cap applied during selection.
         min_score: drop recommendations with a total score below this value.
         vectors: Plex sonic vectors to score against.
+        on_progress: optional completed/total library-row callback at batch boundaries.
+        should_cancel: optional cancellation check at batch boundaries.
         exclude_ids: additional track ids to exclude before per-seed budgets;
             seed track ids are always excluded.
 
     Returns:
         Aggregated recommendations, best first, and the sonic coverage of the
-        candidate pool (identical for every per-seed scan).
+        candidate pool shared by all profiles.
     """
     if per_seed_limit <= 0:
         raise ValueError("per_seed_limit must be greater than zero")
     if not seed_tracks:
         return [], SonicCoverage(candidates=0, with_vector=0)
-    # Exclude every seed (and caller ids) up front; each scan is a clean single-track profile.
+    # Exclude every seed (and caller ids) before the shared scan and per-seed budgets.
     excluded = set(exclude_ids or set()) | {track.id for track in seed_tracks}
     selected = ConstrainedTopK(limit, max_tracks_per_artist)
-    votes: dict[int, list[tuple[int, ScoreBreakdown, Track]]] = defaultdict(list)
-    coverage = SonicCoverage(candidates=0, with_vector=0)
-
-    # One scalar scan per seed; the vector snapshot is reused across all of them.
-    for seed_track in seed_tracks:
-        recs, seed_coverage = recommend_from_profile(
-            session,
-            build_seed_profile([seed_track], vectors),
-            vectors,
-            limit=per_seed_limit,
-            weights=weights,
-            year_min=year_min,
-            year_max=year_max,
-            max_tracks_per_artist=max_tracks_per_artist,
-            exclude_ids=excluded,
-        )
-        coverage = SonicCoverage(
-            candidates=max(coverage.candidates, seed_coverage.candidates),
-            with_vector=max(coverage.with_vector, seed_coverage.with_vector),
-        )
-        for rec in recs:
-            votes[rec.track.id].append((seed_track.id, rec.score, rec.track))
+    votes: dict[int, list[tuple[int, ScoredTrack]]] = defaultdict(list)
+    selections, coverage = score_eligible_profiles(
+        session,
+        [build_seed_profile([seed], vectors) for seed in seed_tracks],
+        vectors,
+        limit=per_seed_limit,
+        weights=weights,
+        year_min=year_min,
+        year_max=year_max,
+        max_tracks_per_artist=max_tracks_per_artist,
+        exclude_ids=excluded, on_progress=on_progress, should_cancel=should_cancel,
+    )
+    for seed_track, records in zip(seed_tracks, selections, strict=True):
+        for record in records:
+            votes[record.id].append((seed_track.id, record))
 
     # A candidate's score is the mean of its per-seed scores; vote count is the tiebreaker.
     for track_id, entries in votes.items():
-        score = _average_score([score for _, score, _ in entries])
+        score = _average_score([record.score for _, record in entries])
         if min_score is None or score.total >= min_score:
-            selected.add(ScoredTrack(track_id, entries[0][2].artist_id, score, len(entries)))
+            selected.add(ScoredTrack(track_id, entries[0][1].artist_id, score, len(entries)))
+    final = selected.results()
+    tracks = _load_selected_tracks(session, final)
     return [
         Recommendation(
-            track=votes[record.id][0][2],
+            track=tracks[record.id],
             score=record.score,
-            sources=[str(seed_id) for seed_id, _, _ in votes[record.id]],
+            sources=[str(seed_id) for seed_id, _ in votes[record.id]],
         )
-        for record in selected.results()
+        for record in final
     ], coverage
 
 
@@ -318,6 +333,8 @@ def recommend_tracks(
     max_tracks_per_artist: int = 3,
     min_score: float | None = None,
     vectors: SonicVectors | None = None,
+    on_progress: Callable[[int, int], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> tuple[list[Track], list[Recommendation], SonicCoverage]:
     """Score every eligible non-seed track and return the exact constrained top-k.
 
@@ -344,6 +361,8 @@ def recommend_tracks(
         min_score: drop recommendations with a total score below this value.
         vectors: Plex sonic vectors to score against; defaults to the default
             context's cached vectors.
+        on_progress: optional completed/total library-row callback at batch boundaries.
+        should_cancel: optional cancellation check at batch boundaries.
 
     Returns:
         ``(seed_tracks, selected, sonic_coverage)`` where ``sonic_coverage``
@@ -358,6 +377,11 @@ def recommend_tracks(
         raise ValueError("limit must be greater than zero")
     if max_tracks_per_artist <= 0:
         raise ValueError("max_tracks_per_artist must be greater than zero")
+
+    if method not in ("average", "frequency"):
+        raise ValueError(f"Unknown recommendation method: {method}")
+    if method == "frequency" and per_seed_limit <= 0:
+        raise ValueError("per_seed_limit must be greater than zero")
 
     weights = weights or Weights()
     if vectors is None:
@@ -375,11 +399,9 @@ def recommend_tracks(
             year_max=year_max,
             max_tracks_per_artist=max_tracks_per_artist,
             min_score=min_score,
-            vectors=vectors,
+            vectors=vectors, on_progress=on_progress, should_cancel=should_cancel,
         )
         return seed_tracks, selected, coverage
-    if method != "average":
-        raise ValueError(f"Unknown recommendation method: {method}")
     # "average" collapses the seeds into one profile and scores in a single scan.
     seed_profile = build_seed_profile(seed_tracks, vectors)
     selected, coverage = recommend_from_profile(
@@ -391,6 +413,6 @@ def recommend_tracks(
         year_min=year_min,
         year_max=year_max,
         max_tracks_per_artist=max_tracks_per_artist,
-        min_score=min_score,
+        min_score=min_score, on_progress=on_progress, should_cancel=should_cancel,
     )
     return seed_tracks, selected, coverage

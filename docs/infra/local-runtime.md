@@ -203,9 +203,14 @@ server. See [HTTP API modes](../api-reference/http-api.md#server-modes-and-opena
 
 ### Import state and recovery
 
-- Import/enrichment services and API background jobs share **one writer per MusicSeed database**.
+- Import/enrichment services and API import/enrichment jobs share **one writer per MusicSeed database**.
   A SQLite transaction checks and claims the writer atomically. Pending jobs and cancellation
   requests still reserve it; completion is published after the worker target returns.
+- Playlist population previews use a separate calculation slot, with at most one active preview
+  per database. The UI starts a job, polls small progress responses, and fetches the persisted
+  result after success. Average and frequency both show a spinner and update automatically.
+  Parameter changes stop the previous job before starting its replacement. Refreshing the page
+  reconnects to the same job from session storage. See [background previews](../api-reference/http-api.md#background-playlist-previews).
 - Each job captures a deep copy of its runtime configuration. Work, progress callbacks, and job
   state writes use that context even if the process default later changes. Settings rejects
   changes while jobs are active; it saves a copy before replacing the default context.
@@ -231,12 +236,15 @@ server. See [HTTP API modes](../api-reference/http-api.md#server-modes-and-opena
 
 ### Ports
 
-`musicseed` listens on `127.0.0.1:8789` (JSON at `/api`, UI at `/`). `musicseed --no-ui`
-serves unprefixed JSON. Contributor `dev.sh` starts that unprefixed API, Next.js on
-`127.0.0.1:3000`, and MCP streamable HTTP on `127.0.0.1:8790`. It reads `API_PORT`, `WEB_PORT`,
-`API_URL`, and `MCP_PORT`; when changing `API_PORT`, also set `API_URL` for the Next.js proxy.
-The script binds services to loopback. See the [MCP reference](../mcp-reference.md) for stdio
-and standalone transports.
+`musicseed` listens on `127.0.0.1:8789` (JSON at `/api`, UI at `/`) — this machine only.
+Use `musicseed --lan` (or `--host 0.0.0.0`) to bind every interface so other devices on the
+home network can reach the UI; the command prints exactly who can reach it and warns that
+reachable clients can exercise MusicSeed's permissions (Plex, enrichment, playlists). Only
+expose it on a network you trust. `musicseed --no-ui` serves unprefixed JSON. Contributor
+`dev.sh` starts that unprefixed API, Next.js on `127.0.0.1:3000`, and MCP streamable HTTP on
+`127.0.0.1:8790`. It reads `API_PORT`, `WEB_PORT`, `API_URL`, and `MCP_PORT`; when changing
+`API_PORT`, also set `API_URL` for the Next.js proxy. The script binds services to loopback.
+See the [MCP reference](../mcp-reference.md) for stdio and standalone transports.
 
 ### Offline behavior
 

@@ -1,5 +1,7 @@
 """Core services run against an explicitly supplied context (MUS-77)."""
 
+import stat
+
 from musicseed.config import Config
 from musicseed.context import MusicSeedContext
 from musicseed.services.library import get_status, initialize_database
@@ -10,6 +12,12 @@ def _context_for(db_path) -> MusicSeedContext:
     return MusicSeedContext(
         Config.model_validate({"database": {"path": str(db_path)}})
     )
+
+
+def test_database_file_is_created_owner_only(tmp_path):
+    db_path = tmp_path / "musicseed.db"
+    initialize_database(context=_context_for(db_path))
+    assert stat.S_IMODE(db_path.stat().st_mode) == 0o600
 
 
 def test_services_accept_an_explicit_context(tmp_path):

@@ -17,6 +17,12 @@ The default `stdio` transport is launched by an MCP host; it uses stdin/stdout f
 `sse` and `streamable-http` are optional listening transports, defaulting to `127.0.0.1:8790`.
 `scripts/dev.sh` starts the streamable HTTP server alongside the API and Next.js.
 
+Listening HTTP transports bind loopback by default, which gets the SDK's built-in DNS-rebinding
+protection. Binding a non-loopback host (LAN) enforces `security.allowed_hosts` instead, so only
+hosts/origins you named can connect. As with the web API, any client that can reach an exposed
+MCP HTTP endpoint can exercise the tools it exposes (playlist create/populate) — only expose it
+on a network you trust, and put authentication in front of it for public or untrusted networks.
+
 The server uses core's YAML config lookup and the same local SQLite database as the CLI/API.
 It does not expose setup, import, enrichment, or sonic-analysis mutation tools; complete setup
 through the web UI or CLI. Logs go to MusicSeed's standard log directory and stderr; stdout

@@ -1,7 +1,9 @@
 name: Release
 
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
 
@@ -14,11 +16,16 @@ permissions:
 
 jobs:
   release:
+    # A release is only cut after CI passes on main (or via an explicit manual
+    # dispatch). This keeps an untested commit from ever becoming a release.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
+          # For a workflow_run event, check out the exact commit CI validated.
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || '' }}
       - name: Next tag
         id: ver
         run: |
@@ -75,11 +82,11 @@ jobs:
           else
             git log --pretty=format:"- %s (%h)" >> notes.md
           fi
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         if: steps.ver.outputs.skip != 'true'
         with:
           tag_name: ${{ steps.ver.outputs.tag }}
-          target_commitish: ${{ github.sha }}
+          target_commitish: ${{ github.event.workflow_run.head_sha || github.sha }}
           generate_release_notes: false
           body_path: notes.md
           files: |

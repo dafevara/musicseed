@@ -203,6 +203,7 @@ function JobRow({
     job.kind === "import" ? "Library sync"
     : job.kind === "enrich:spotify" ? "Spotify enrichment"
     : job.kind === "enrich:listenbrainz" ? "ListenBrainz enrichment"
+    : job.kind === "playlist_preview" ? "Playlist recommendations"
     : "Enrichment";
 
   return (
