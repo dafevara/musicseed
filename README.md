@@ -69,6 +69,10 @@ See the [MCP setup guide](mcp/README.md), [tool reference](docs/mcp-reference.md
 
 ## Requirements
 
+For a single-image container installation, see [Docker setup](docs/infra/docker.md).
+It includes the web UI, API, CLI, and MCP; only Docker is needed on the host. The following
+requirements apply to installation from source.
+
 - **macOS or Linux.** Windows is untested.
 - **Python 3.12+** with `venv`. The installer bootstraps `pip` if needed.
 - **Node.js and npm** for the standard installer to build the web UI. Runtime is Python only;

@@ -4,6 +4,10 @@ MusicSeed runs locally from source. Infrastructure should remain boring and insp
 something fails, see [`troubleshooting.md`](troubleshooting.md) for concrete checks and recovery
 actions.
 
+The optional [Docker installation](docker.md) packages all surfaces in one Alpine image.
+Node builds the static UI in a separate stage; the runtime is Python only, with one volume
+for configuration, library state, logs, and remote Plex snapshots.
+
 ## Runtime Pieces
 
 - Python 3.12+ packages under `core/src/musicseed` (library), `cli/src/musicseed_cli` (CLI), and
