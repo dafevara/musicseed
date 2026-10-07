@@ -1,0 +1,14 @@
+services:
+  musicseed:
+    image: musicseed:local
+    build:
+      context: .
+    init: true
+    ports:
+      - "127.0.0.1:8789:8789"
+    volumes:
+      - musicseed-data:/data
+    stop_grace_period: 30s
+
+volumes:
+  musicseed-data:

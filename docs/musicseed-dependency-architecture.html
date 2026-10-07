@@ -242,7 +242,7 @@ so publishing MusicSeed as open source means a new user needs as little as possi
   API orchestration layer — the browser UI reaches it over HTTP (directly, or through the development proxy), while the
   CLI and the MCP server call core services directly (MCP is an agent surface for
   playlist create/populate). Removed in the dependency reduction: PostgreSQL server,
-  Docker, pgvector, psycopg, essentia-tensorflow, Jinja/HTMX server rendering, and all
+  the Postgres Docker stack, pgvector, psycopg, essentia-tensorflow, Jinja/HTMX server rendering, and all
   audio-file reads.
 </figcaption>
 </figure>
@@ -263,7 +263,7 @@ so publishing MusicSeed as open source means a new user needs as little as possi
   <div class="card">
     <h4>Extra database processes</h4>
     <p class="num">0</p>
-    <p>No database server or container runtime. The product runs a local API/UI server; MCP can run as a subprocess or HTTP server.</p>
+    <p>No database server. The product runs a local API/UI server; MCP can run as a subprocess or HTTP server. Docker is an optional packaging route.</p>
   </div>
 </div>
 
@@ -302,7 +302,7 @@ so publishing MusicSeed as open source means a new user needs as little as possi
   <thead><tr><th>Component</th><th>Former role</th><th>Status</th></tr></thead>
   <tbody>
     <tr class="removed"><td>PostgreSQL 16 server</td><td>MusicSeed state database</td><td><span class="tag gone">removed · Phase 3</span></td></tr>
-    <tr class="removed"><td>Docker / docker-compose</td><td>Ran the Postgres container</td><td><span class="tag gone">removed · Phase 3</span></td></tr>
+    <tr><td>Docker / Docker Compose</td><td>Previously ran PostgreSQL; now optionally packages MusicSeed itself</td><td><span class="tag kept">optional · single Alpine image</span></td></tr>
     <tr class="removed"><td>pg_trgm extension</td><td>Trigram indexes (never queried)</td><td><span class="tag gone">removed · Phase 3</span></td></tr>
     <tr class="removed"><td>TensorFlow runtime</td><td>Pulled in by essentia; amd64-only</td><td><span class="tag gone">removed · Phase 1</span></td></tr>
     <tr class="removed"><td>Audio-file access</td><td>Reading music files to embed them</td><td><span class="tag gone">removed · Phase 1</span></td></tr>
@@ -455,6 +455,7 @@ is required.</p>
   <div class="card">
     <h4>Prerequisites</h4>
     <p>· Python 3.12+, SQLite 3, Node.js/npm (install only)</p>
+    <p>· Or Docker: one Alpine image with Python and the built UI, CLI, and MCP</p>
     <p>· Plex Media Server with a music library, sonically analyzed</p>
     <p>· Optional: Spotify API credentials (fallback enrichment only)</p>
   </div>
@@ -464,6 +465,10 @@ is required.</p>
     <p><code>musicseed</code> then open <code>http://127.0.0.1:8789</code></p>
     <p>The first-run wizard discovers Plex, initializes the database, and walks through
     import/enrichment. Node is not needed after install.</p>
+    <p>Container alternative: <code>docker compose up --build -d</code>.
+    The Python and npm dependency layers are cached independently; one volume preserves
+    settings, the library database, logs, and Plex snapshots. Node is used only in the
+    web build stage. See <a href="infra/docker/">Docker setup</a>.</p>
   </div>
 </div>
 

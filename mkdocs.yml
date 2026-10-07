@@ -59,6 +59,7 @@ nav:
       - Retrieval and schema decisions: resolvers/retrieval-decision.md
   - Infrastructure:
       - Local runtime: infra/local-runtime.md
+      - Docker setup: infra/docker.md
       - Troubleshooting: infra/troubleshooting.md
       - Documentation site: infra/documentation.md
   - CLI Reference:

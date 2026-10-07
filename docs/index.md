@@ -11,6 +11,7 @@ analysis vectors (imported from Plex into the local store), and play history.
 - [Recommendation resolvers](resolvers/recommendation-resolvers.md) — seed matching, candidate
   generation, scoring, and playlist selection.
 - [Local runtime](infra/local-runtime.md) — local services, config, logs, and verification.
+- [Docker setup](infra/docker.md) — one Alpine image, cached builds, and persistent state.
 - [Troubleshooting](infra/troubleshooting.md) — setup and job failure recovery.
 - [Harness engineering](harness-engineering.md) — harness strategy and maintenance loop.
 - [API Reference](api-reference/core-services.md) — auto-generated Python API docs for the core
